@@ -252,7 +252,20 @@ let
         isClean
         ;
     };
+
+  # recordedDeps (S2): first-class inspectable projection of the consumer's declared
+  # read-edges. Pure, zero memo cost (never runs through `get`). The DYNAMIC read-set
+  # (what a node actually self.get's) is only recoverable via evalDebug's fresh-self-
+  # per-get, which DEFEATS the memo (eval.nix:185-191/229) — there is no pure,
+  # memo-preserving way. gen-rebuild's adg edge set IS the accessor, so this is the
+  # right form for it. (Spec §5.P1, S2; Acar adg read-edge S4.4.)
+  recordedDeps = { declaredEdges }: id: declaredEdges id;
 in
 {
-  inherit eval evalDebug evalWarm;
+  inherit
+    eval
+    evalDebug
+    evalWarm
+    recordedDeps
+    ;
 }
