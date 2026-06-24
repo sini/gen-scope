@@ -21,12 +21,12 @@ let
     lib.fix (
       self:
       let
-        # ONE per-attribute evaluator, shared by rootEval + wrapChild._eval.
-        # children/derived-children: ALWAYS recompute the structure (descendant
+        # One per-attribute evaluator, shared by rootEval + wrapChild._eval.
+        # children/derived-children always recompute the structure (descendant
         # _eval caches are built by recursing through wrapChild). A clean node's
-        # leaf attr present in priorResults is served WITHOUT forcing fn (warm,
-        # relocatable). Else: cold demand. Defaults (isClean=_:false) ⇒ warm branch
-        # never fires ⇒ eval is byte-identical. (Spec §5.P1.)
+        # leaf attr present in priorResults is served without forcing fn (warm,
+        # relocatable); otherwise cold demand. With the defaults (isClean = _: false)
+        # the warm branch never fires, so eval stays byte-identical.
         evalAttr =
           nodeId: attrName: fn:
           if attrName == "children" || attrName == "derived-children" then
@@ -231,10 +231,12 @@ let
     in
     mkSelf { } [ ];
 
-  # evalWarm: relocatable warm-cache eval. Same interface as `eval`; a clean node's
-  # leaf attr present in priorResults is served WITHOUT forcing its compute fn.
-  # children/derived-children are never warm-served. Thin wrapper over `eval`
-  # (single code path; eval with defaults is the warm-off case). (Spec §5.P1, S1.)
+  # Relocatable warm-cache evaluator. Same interface as `eval`; a clean node's
+  # leaf attr present in priorResults is served without forcing its compute fn,
+  # while children/derived-children are never warm-served (structure always
+  # recomputed, so dirty descendants stay reachable). Thin wrapper over `eval` —
+  # a single code path, with `eval`'s defaults being the warm-off case.
+  # (Informed by Acar's self-adjusting computation: reusing clean prior results.)
   evalWarm =
     {
       roots,
@@ -253,12 +255,12 @@ let
         ;
     };
 
-  # recordedDeps (S2): first-class inspectable projection of the consumer's declared
-  # read-edges. Pure, zero memo cost (never runs through `get`). The DYNAMIC read-set
-  # (what a node actually self.get's) is only recoverable via evalDebug's fresh-self-
-  # per-get, which DEFEATS the memo (eval.nix:185-191/229) — there is no pure,
-  # memo-preserving way. gen-rebuild's adg edge set IS the accessor, so this is the
-  # right form for it. (Spec §5.P1, S2; Acar adg read-edge S4.4.)
+  # First-class inspectable projection of the consumer's declared read-edges. Pure,
+  # zero memo cost (never runs through `get`). The dynamic read-set — the attributes
+  # a node actually self.get's — is only recoverable via evalDebug's fresh-self-per-get,
+  # which defeats the memo; there is no pure, memo-preserving way to capture it, so the
+  # declared edges are the inspectable contract. (Acar's self-adjusting computation:
+  # the read edges of a dynamic dependence graph.)
   recordedDeps = { declaredEdges }: id: declaredEdges id;
 in
 {
