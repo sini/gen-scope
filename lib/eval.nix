@@ -15,41 +15,37 @@ let
       roots,
       attributes,
       parseParent ? null,
+      priorResults ? { },
+      isClean ? (_: false),
     }:
     lib.fix (
       self:
       let
-        # Wrap a child node with a lazy attribute cache (_eval).
-        # The cache propagates recursively: _eval.children wraps grandchildren.
+        # ONE per-attribute evaluator, shared by rootEval + wrapChild._eval.
+        # children/derived-children: ALWAYS recompute the structure (descendant
+        # _eval caches are built by recursing through wrapChild). A clean node's
+        # leaf attr present in priorResults is served WITHOUT forcing fn (warm,
+        # relocatable). Else: cold demand. Defaults (isClean=_:false) ⇒ warm branch
+        # never fires ⇒ eval is byte-identical. (Spec §5.P1.)
+        evalAttr =
+          nodeId: attrName: fn:
+          if attrName == "children" || attrName == "derived-children" then
+            let
+              raw = fn self nodeId;
+            in
+            builtins.mapAttrs (_: wrapChild) raw
+          else if isClean nodeId && (priorResults.${nodeId} or { }) ? ${attrName} then
+            priorResults.${nodeId}.${attrName}
+          else
+            fn self nodeId;
         wrapChild =
           childNode:
           childNode
           // {
-            _eval = builtins.mapAttrs (
-              attrName: fn:
-              if attrName == "children" || attrName == "derived-children" then
-                let
-                  raw = fn self childNode.id;
-                in
-                builtins.mapAttrs (_: wrapChild) raw
-              else
-                fn self childNode.id
-            ) attributes;
+            _eval = builtins.mapAttrs (attrName: fn: evalAttr childNode.id attrName fn) attributes;
           };
-
-        # Root memoization: each root gets a lazy attrset of its attribute computations.
         rootEval = lib.mapAttrs (
-          id: _:
-          builtins.mapAttrs (
-            attrName: fn:
-            if attrName == "children" || attrName == "derived-children" then
-              let
-                raw = fn self id;
-              in
-              builtins.mapAttrs (_: wrapChild) raw
-            else
-              fn self id
-          ) attributes
+          id: _: builtins.mapAttrs (attrName: fn: evalAttr id attrName fn) attributes
         ) roots;
 
         # Resolve a node by ID.
