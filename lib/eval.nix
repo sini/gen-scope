@@ -230,7 +230,29 @@ let
       };
     in
     mkSelf { } [ ];
+
+  # evalWarm: relocatable warm-cache eval. Same interface as `eval`; a clean node's
+  # leaf attr present in priorResults is served WITHOUT forcing its compute fn.
+  # children/derived-children are never warm-served. Thin wrapper over `eval`
+  # (single code path; eval with defaults is the warm-off case). (Spec §5.P1, S1.)
+  evalWarm =
+    {
+      roots,
+      attributes,
+      parseParent ? null,
+      priorResults,
+      isClean,
+    }:
+    eval {
+      inherit
+        roots
+        attributes
+        parseParent
+        priorResults
+        isClean
+        ;
+    };
 in
 {
-  inherit eval evalDebug;
+  inherit eval evalDebug evalWarm;
 }

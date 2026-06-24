@@ -314,4 +314,271 @@ in
       ];
     };
   };
+
+  # appended inside the same `{ ... }` the module returns, as a sibling of flake.tests."eval"
+  flake.tests."eval-warm" =
+    let
+      mkRoots =
+        decls:
+        lib.mapAttrs (id: d: {
+          inherit id;
+          type = "t";
+          parent = null;
+          decls = d;
+        }) decls;
+      poison = {
+        children = self: id: { };
+        boom = self: id: throw "boom-${id}";
+        val = self: id: (self.node id).decls.v or 0;
+      };
+    in
+    {
+      # clean + prior present ⇒ warm-served, fn NEVER forced (poison doesn't throw)
+      test-warm-serves-clean-no-force = {
+        expr =
+          (genScope.evalWarm {
+            roots = mkRoots {
+              n = {
+                v = 5;
+              };
+            };
+            attributes = poison;
+            priorResults = {
+              n = {
+                boom = "cached";
+              };
+            };
+            isClean = _: true;
+          }).get
+            "n"
+            "boom";
+        expected = "cached";
+      };
+      # dirty ⇒ recompute ⇒ poison fn runs ⇒ throws
+      test-dirty-recomputes = {
+        expr =
+          (builtins.tryEval (
+            (genScope.evalWarm {
+              roots = mkRoots {
+                n = {
+                  v = 5;
+                };
+              };
+              attributes = poison;
+              priorResults = {
+                n = {
+                  boom = "cached";
+                };
+              };
+              isClean = _: false;
+            }).get
+              "n"
+              "boom"
+          )).success;
+        expected = false;
+      };
+      # clean but attr absent from priorResults ⇒ falls through to fn ⇒ throws
+      test-warm-missing-attr-falls-through = {
+        expr =
+          (builtins.tryEval (
+            (genScope.evalWarm {
+              roots = mkRoots {
+                n = {
+                  v = 5;
+                };
+              };
+              attributes = poison;
+              priorResults = {
+                n = { };
+              };
+              isClean = _: true;
+            }).get
+              "n"
+              "boom"
+          )).success;
+        expected = false;
+      };
+      # warm value is served verbatim (not the fresh computation)
+      test-warm-serves-prior-value = {
+        expr =
+          (genScope.evalWarm {
+            roots = mkRoots {
+              n = {
+                v = 5;
+              };
+            };
+            attributes = poison;
+            priorResults = {
+              n = {
+                val = 99;
+              };
+            };
+            isClean = _: true;
+          }).get
+            "n"
+            "val";
+        expected = 99;
+      };
+      # a dirty node reads a clean dep's WARM value
+      test-dirty-reads-clean-dep = {
+        expr =
+          (genScope.evalWarm {
+            roots = mkRoots {
+              a = {
+                base = 10;
+              };
+              b = {
+                base = 0;
+              };
+            };
+            attributes = {
+              children = self: id: { };
+              val = self: id: if id == "b" then (self.get "a" "val") + 1 else (self.node id).decls.base;
+            };
+            priorResults = {
+              a = {
+                val = 99;
+              };
+            };
+            isClean = id: id == "a";
+          }).get
+            "b"
+            "val";
+        expected = 100;
+      };
+      # children NEVER warm-served (stale prior children ignored; fresh structure used)
+      test-children-always-recomputed = {
+        expr =
+          let
+            attrs = {
+              children =
+                self: id:
+                if id == "p" then
+                  {
+                    c = {
+                      id = "c";
+                      type = "t";
+                      parent = "p";
+                      decls = { };
+                    };
+                  }
+                else
+                  { };
+              label = self: id: "fresh-${id}";
+            };
+            w = genScope.evalWarm {
+              roots = mkRoots { p = { }; };
+              attributes = attrs;
+              priorResults = {
+                p = {
+                  children = {
+                    BOGUS = { };
+                  };
+                };
+              };
+              isClean = _: true;
+            };
+          in
+          builtins.attrNames (w.get "p" "children");
+        expected = [ "c" ];
+      };
+      # a dirty GRANDCHILD is reachable through freshly-recomputed children
+      test-dirty-grandchild-reachable = {
+        expr =
+          let
+            attrs = {
+              children =
+                self: id:
+                if id == "p" then
+                  {
+                    c = {
+                      id = "c";
+                      type = "t";
+                      parent = "p";
+                      decls = { };
+                    };
+                  }
+                else if id == "c" then
+                  {
+                    g = {
+                      id = "g";
+                      type = "t";
+                      parent = "c";
+                      decls = { };
+                    };
+                  }
+                else
+                  { };
+              label = self: id: "fresh-${id}";
+            };
+            w = genScope.evalWarm {
+              roots = mkRoots { p = { }; };
+              attributes = attrs;
+              priorResults = {
+                g = {
+                  label = "stale-g";
+                };
+              };
+              isClean = id: id != "g"; # g dirty, p/c clean
+            };
+          in
+          w.get "g" "label";
+        expected = "fresh-g"; # g recomputed (dirty) AND reachable (children recomputed, never warm)
+      };
+      # per-(node,attr) granularity: clean node, attr a warm / attr b cold
+      test-mixed-warm-cold = {
+        expr =
+          let
+            w = genScope.evalWarm {
+              roots = mkRoots { n = { }; };
+              attributes = {
+                children = self: id: { };
+                a = self: id: "fresh-a";
+                b = self: id: "fresh-b";
+              };
+              priorResults = {
+                n = {
+                  a = "cached-a";
+                };
+              }; # has a, not b
+              isClean = _: true;
+            };
+          in
+          [
+            (w.get "n" "a")
+            (w.get "n" "b")
+          ];
+        expected = [
+          "cached-a"
+          "fresh-b"
+        ];
+      };
+      # evalWarm with warm-off defaults == eval
+      test-evalWarm-defaults-equal-eval = {
+        expr =
+          (genScope.evalWarm {
+            roots = mkRoots {
+              n = {
+                v = 7;
+              };
+            };
+            attributes = poison;
+            priorResults = { };
+            isClean = _: false;
+          }).get
+            "n"
+            "val";
+        expected =
+          (genScope.eval {
+            roots = mkRoots {
+              n = {
+                v = 7;
+              };
+            };
+            attributes = poison;
+          }).get
+            "n"
+            "val";
+      };
+    };
 }
