@@ -19,6 +19,8 @@ gen-scope is generic. It has no knowledge of NixOS, aspects, policies, or system
 - [API Reference](#api-reference)
   - [eval](#eval)
   - [evalDebug](#evaldebug)
+  - [evalWarm](#evalwarm)
+  - [recordedDeps](#recordeddeps)
   - [buildNodes](#buildnodes)
   - [Algebraic Graph Construction](#algebraic-graph-construction)
   - [Attribute Combinators](#attribute-combinators)
@@ -221,6 +223,40 @@ Returns `{ node, get, allNodes, allNodesWhere, subtreeOf, nodesOfType }`:
 
 Same interface as `eval`. Provides structured cycle traces instead of Nix's opaque "infinite recursion." Trade-off: defeats memoization. Use for diagnosing cycles only.
 
+### `evalWarm`
+
+```nix
+evalWarm {
+  roots;               # { id = { id, type, parent, decls }; }
+  attributes;          # { attrName = self: id: value; }
+  parseParent ? null;  # id → parentId | null
+  priorResults;        # { id = { attrName = cachedValue; }; }
+  isClean;             # id → bool
+}
+```
+
+Warm-cache variant of `eval` for incremental re-evaluation. A leaf attribute of a **clean** node (`isClean id == true`) whose value is present in `priorResults` is served from the cache **without forcing its compute function**; everything else evaluates cold. `children`/`derived-children` are **never** served warm — tree structure is always recomputed, so a dirty descendant stays reachable through freshly-materialized parents. Returns the same shape as `eval`.
+
+With `eval`'s defaults (`priorResults = {}`, `isClean = _: false`) the warm branch never fires, so `eval` and warm-off `evalWarm` are byte-identical — they share a single code path.
+
+```nix
+result = engine.evalWarm {
+  inherit roots attributes;
+  priorResults = { "host:web" = { region = "us-east"; }; };  # from a prior eval
+  isClean = id: id != "host:db";                              # only db changed
+};
+result.get "host:web" "region"   # "us-east" — served warm, compute fn not forced
+result.get "host:db"  "region"   # recomputed (db is dirty)
+```
+
+### `recordedDeps`
+
+```nix
+recordedDeps { declaredEdges } id   # → [id]
+```
+
+First-class projection of a consumer's **declared** read-edges: it simply applies `declaredEdges id`. Pure and memo-free — it never runs through `get`. The *dynamic* read-set (the attributes a node actually `self.get`s) is only recoverable via `evalDebug`'s fresh-`self`-per-`get`, which defeats memoization; there is no pure, memo-preserving way to capture it, so the declared edges are the inspectable contract. Useful for incremental consumers that need an explicit dependency edge set (e.g. driving a rebuild).
+
 ### `buildNodes`
 
 ```nix
@@ -317,9 +353,11 @@ collectionAttr { traverse; extract; combine ? a: b: a ++ b; filter ? _: true; } 
 
 Traverse modes: `"imports"`, `"children"`, `"siblings"`, `"ancestors"`, `"neron"`, `"label:<name>"`, or custom function.
 
-**`"neron"` traverse mode** — Specificity-ordered collection following D > I > P (declaration, import, parent) priority. Unlike `query`, which returns a single shadowed result, `"neron"` returns all contributions from reachable scopes in specificity order, suitable for fold-based composition (e.g., collecting all modules, merging config fragments).
+**`"neron"` traverse mode** — Specificity-ordered collection following D over I over P (local shadows import shadows parent) priority. Unlike `query`, which returns a single shadowed result, `"neron"` returns all contributions from reachable scopes in specificity order, suitable for fold-based composition (e.g., collecting all modules, merging config fragments).
 
 Properties: cycle-safe via seen-set tracking, diamond-safe deduplication (each scope visited at most once), recursive parent resolution. Traversal order: self, then unseen imports, then parent — mirroring the Neron (2015) resolution calculus but collecting rather than shadowing.
+
+The neron traversal order (self → imports → parent, imports in declaration order) is a public, stable contract: collection determinism for ordered-list channels rests on this pin plus a left fold, so changing the traversal order is a breaking change.
 
 ```nix
 # Collect all config fragments from local scope, imports, and ancestors
@@ -409,7 +447,7 @@ just ci eval         # run eval suite
 just ci eval.test-basic-root-attribute  # specific test
 ```
 
-Requires nix-unit. 152 tests across 10 suites.
+Requires nix-unit. 163 tests across 19 suites (12 test files).
 
 ## Theoretical Foundations
 
@@ -425,3 +463,4 @@ Requires nix-unit. 152 tests across 10 suites.
 | Radul & Sussman (2009) "Art of the propagator" | **Informed by** | Monotonic convergence concept for `circular` attribute iteration; cells accepting information from multiple sources as design influence on scope graph merging |
 | Van Wyk et al. (2010) "Silver: extensible AG" | **Informed by** | Forwarding concept (productions defining default attribute values via translation); collection attributes with fold operators as design influence on `collectionAttr` |
 | Mokhov et al. (2018) "Build systems a la carte" | **Informed by** | Demand-driven evaluation as suspending scheduler (§4.1); Nix's lazy evaluation recognized as the scheduling mechanism — we do not build a scheduler, Nix is the scheduler |
+| Acar et al. (2006) "Adaptive functional programming" | **Informed by** | Warm-cache incremental re-evaluation (`evalWarm`): reusing clean prior results and recomputing only dirty nodes; `recordedDeps` as the declared read-edge projection of a dynamic dependence graph |
