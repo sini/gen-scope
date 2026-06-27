@@ -10,7 +10,7 @@
     { gen-scope, nixpkgs, ... }:
     let
       lib = nixpkgs.lib;
-      genScope = gen-scope { inherit lib; };
+      genScope = gen-scope.lib;
     in
     {
 

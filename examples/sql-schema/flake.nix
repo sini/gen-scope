@@ -24,7 +24,7 @@
     }:
     let
       lib = nixpkgs.lib;
-      genScope = gen-scope { inherit lib; };
+      genScope = gen-scope.lib;
       genAlgebra = gen-algebra { inherit lib; };
       genSelect = gen-select.lib;
       genDerive = gen-derive.lib;

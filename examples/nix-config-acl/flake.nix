@@ -8,7 +8,7 @@
     { gen-scope, nixpkgs, ... }:
     let
       lib = nixpkgs.lib;
-      genScope = gen-scope { inherit lib; };
+      genScope = gen-scope.lib;
       groups = import ./data/groups.nix;
       environments = import ./data/environments.nix;
       hosts = import ./data/hosts.nix;

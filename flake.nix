@@ -1,6 +1,9 @@
 {
   description = "gen-scope: demand-driven attribute grammar evaluator over algebraic scope graphs";
-  outputs = _: {
-    __functor = _: import ./.;
-  };
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  outputs =
+    { nixpkgs, ... }:
+    {
+      lib = import ./lib { lib = nixpkgs.lib; };
+    };
 }

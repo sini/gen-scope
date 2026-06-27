@@ -20,7 +20,7 @@
     }:
     let
       lib = nixpkgs.lib;
-      genScope = gen-scope { inherit lib; };
+      genScope = gen-scope.lib;
       genAlgebra = gen-algebra { inherit lib; };
       genSchema = import "${gen-schema}/nix/lib" {
         inherit lib;

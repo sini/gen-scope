@@ -10,7 +10,7 @@
     { gen-scope, nixpkgs, ... }:
     let
       lib = nixpkgs.lib;
-      genScope = gen-scope { inherit lib; };
+      genScope = gen-scope.lib;
       inherit (import ./graph.nix { inherit genScope lib; }) roots;
       attributes = import ./attributes.nix { inherit genScope lib roots; };
       result = genScope.eval { inherit roots attributes; };

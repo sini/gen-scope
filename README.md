@@ -68,7 +68,7 @@ Nix attrset VALUES are lazy but KEYS are eager. Function application is never me
 {
   inputs.gen-scope.url = "github:sini/gen-scope";
   outputs = { gen-scope, nixpkgs, ... }:
-    let engine = gen-scope { lib = nixpkgs.lib; };
+    let engine = gen-scope.lib;
     in { /* ... */ };
 }
 
