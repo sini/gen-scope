@@ -5,7 +5,7 @@
 # Edge declarations stored in decls.__edges for consumers to use in attribute definitions.
 { prelude }:
 let
-  graph = import ./graph.nix { };
+  graph = import ./graph.nix;
 
   buildNodes =
     {
