@@ -1,24 +1,23 @@
 {
   "nodes": {
-    "nixpkgs": {
+    "gen-prelude": {
       "locked": {
-        "lastModified": 1782467914,
-        "narHash": "sha256-pGvFkM8N0xEkIIXDe5YYfbEAvHrk4IxBrjB/x8OomhE=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "e73de5be04e0eff4190a1432b946d469c794e7b4",
+        "lastModified": 1782520960,
+        "narHash": "sha256-5WfLlS6dk7dzhsnnDYRsHZEaS+lFFj3tohqyKzO5HdM=",
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "rev": "7f9475ae42daa70884b9ebde28be496d34ad2023",
         "type": "github"
       },
       "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
+        "owner": "sini",
+        "repo": "gen-prelude",
         "type": "github"
       }
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "gen-prelude": "gen-prelude"
       }
     }
   },

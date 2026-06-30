@@ -5,10 +5,10 @@
 #
 # Key design: import edges are COMPUTED ATTRIBUTES (self.get id "imports"),
 # not structural fields. This allows dynamic import resolution.
-{ lib }:
+{ prelude }:
 let
   # Shadow: merge two declaration sets, inner shadows outer (Neron §5 Def. 1).
-  shadow = inner: outer: inner // lib.filterAttrs (k: _: !(inner ? ${k})) outer;
+  shadow = inner: outer: inner // prelude.filterAttrs (k: _: !(inner ? ${k})) outer;
 
   # Resolve with specificity ordering D < I < P (Neron Fig. 2).
   resolve =
@@ -51,7 +51,7 @@ let
         seen: importId:
         let
           v = dataFilter (self.node importId);
-          direct = lib.optional (v != null) v;
+          direct = prelude.optional (v != null) v;
           transitive =
             if transitiveImports then
               let
@@ -61,19 +61,19 @@ let
                   ${importId} = true;
                 };
               in
-              lib.concatMap (collectFromImport nextSeen) nextUnseen
+              prelude.concatMap (collectFromImport nextSeen) nextUnseen
             else
               [ ];
         in
         direct ++ transitive;
       imported =
         let
-          results = lib.concatMap (collectFromImport (_seen // { ${id} = true; })) unseenImports;
+          results = prelude.concatMap (collectFromImport (_seen // { ${id} = true; })) unseenImports;
         in
         if results == [ ] then
           null
         else if builtins.isAttrs (builtins.head results) then
-          lib.foldl' (acc: v: shadow v acc) { } results
+          prelude.foldl' (acc: v: shadow v acc) { } results
         else
           builtins.head results;
       inherited =
@@ -124,7 +124,7 @@ let
         seen: importId:
         let
           v = dataFilter (self.node importId);
-          direct = lib.optional (v != null) v;
+          direct = prelude.optional (v != null) v;
           transitive =
             if transitiveImports then
               let
@@ -134,12 +134,12 @@ let
                   ${importId} = true;
                 };
               in
-              lib.concatMap (collectFromImportAll nextSeen) nextUnseen
+              prelude.concatMap (collectFromImportAll nextSeen) nextUnseen
             else
               [ ];
         in
         direct ++ transitive;
-      importResults = lib.concatMap (collectFromImportAll (_seen // { ${id} = true; })) unseenImports;
+      importResults = prelude.concatMap (collectFromImportAll (_seen // { ${id} = true; })) unseenImports;
       parentResults =
         if node.parent != null then
           queryAll {
@@ -156,7 +156,7 @@ let
         else
           [ ];
     in
-    (lib.optional (local != null) local) ++ importResults ++ parentResults;
+    (prelude.optional (local != null) local) ++ importResults ++ parentResults;
 
   # Ambiguity detection (van Antwerpen §2.3).
   ambiguous =
@@ -314,8 +314,8 @@ let
               [ nid ] ++ unseenImports ++ parentContribs;
           in
           neronCollect { } id
-        else if lib.hasPrefix "label:" traverse then
-          self.get id "edges-${lib.removePrefix "label:" traverse}"
+        else if prelude.hasPrefix "label:" traverse then
+          self.get id "edges-${prelude.removePrefix "label:" traverse}"
         else
           throw "gen-scope: collectionAttr: unknown traverse '${traverse}'";
       filtered = builtins.filter (tid: filter (self.node tid)) targets;
@@ -337,7 +337,7 @@ let
   # Import-scoped collection: demand-driven (Neron §2.4, rule I).
   collectImports =
     extract: self: id:
-    lib.concatMap (importId: extract self importId) (self.get id "imports");
+    prelude.concatMap (importId: extract self importId) (self.get id "imports");
 
   # Global collection (WARNING: forces full tree via allNodes — Tier 2).
   collect =
@@ -345,7 +345,7 @@ let
       filter ? _: true,
     }:
     extract: self:
-    lib.concatMap (
+    prelude.concatMap (
       id:
       let
         node = self.node id;
@@ -366,7 +366,7 @@ let
   # Collect data from nodes reachable via a custom edge label.
   collectByLabel =
     label: extract: self: id:
-    lib.concatMap (targetId: extract self targetId) (followEdge label self id);
+    prelude.concatMap (targetId: extract self targetId) (followEdge label self id);
 
   # Structural subtyping (van Antwerpen §2.3).
   subtypeOf =

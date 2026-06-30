@@ -8,7 +8,7 @@
 # to get O(1) attribute access is an attrset entry. We co-locate the memoization
 # cache (_eval) ON each node when it is materialized by its parent's `children`
 # or `derived-children` attribute.
-{ lib }:
+{ prelude }:
 let
   eval =
     {
@@ -18,7 +18,7 @@ let
       priorResults ? { },
       isClean ? (_: false),
     }:
-    lib.fix (
+    prelude.fix (
       self:
       let
         # One per-attribute evaluator, shared by rootEval + wrapChild._eval.
@@ -44,7 +44,7 @@ let
           // {
             _eval = builtins.mapAttrs (attrName: fn: evalAttr childNode.id attrName fn) attributes;
           };
-        rootEval = lib.mapAttrs (
+        rootEval = prelude.mapAttrs (
           id: _: builtins.mapAttrs (attrName: fn: evalAttr id attrName fn) attributes
         ) roots;
 
@@ -88,10 +88,10 @@ let
               if all ? ${id} then
                 all.${id}
               else
-                lib.foldl' (acc: childId: if acc != null then acc else walkChildren childId) null (
+                prelude.foldl' (acc: childId: if acc != null then acc else walkChildren childId) null (
                   builtins.attrNames all
                 );
-            found = lib.foldl' (acc: rootId: if acc != null then acc else walkChildren rootId) null (
+            found = prelude.foldl' (acc: rootId: if acc != null then acc else walkChildren rootId) null (
               builtins.attrNames roots
             );
           in
@@ -130,11 +130,11 @@ let
               value = self.node id;
             }
           ]
-          ++ lib.concatMap self._walkFrom (builtins.attrNames all);
+          ++ prelude.concatMap self._walkFrom (builtins.attrNames all);
 
         # Full tree materialization. Forces all children attributes recursively.
         # O(n) — each node computed once. Use for gen-graph global ops, diagrams.
-        allNodes = lib.listToAttrs (lib.concatMap self._walkFrom (builtins.attrNames roots));
+        allNodes = prelude.listToAttrs (prelude.concatMap self._walkFrom (builtins.attrNames roots));
 
         # Selective materialization: forces only nodes matching a predicate.
         # Predicate receives structural node data. Descends into ALL children
@@ -150,7 +150,7 @@ let
                 children = if attributes ? "children" then self.get id "children" else { };
                 derived = if attributes ? "derived-children" then self.get id "derived-children" else { };
                 all = children // derived;
-                childResults = lib.concatMap walkFrom (builtins.attrNames all);
+                childResults = prelude.concatMap walkFrom (builtins.attrNames all);
               in
               (
                 if pred node then
@@ -165,11 +165,11 @@ let
               )
               ++ childResults;
           in
-          lib.listToAttrs (lib.concatMap walkFrom (builtins.attrNames roots));
+          prelude.listToAttrs (prelude.concatMap walkFrom (builtins.attrNames roots));
 
         # Subtree materialization: forces only the subtree rooted at a given node.
         # O(subtree size). Does not touch nodes outside the subtree.
-        subtreeOf = rootId: lib.listToAttrs (self._walkFrom rootId);
+        subtreeOf = rootId: prelude.listToAttrs (self._walkFrom rootId);
 
         # Type-targeted materialization: all nodes of a given type.
         # Walks full tree but only includes matching types.

@@ -3,7 +3,7 @@
 # Output shape: { id = { id, type, parent, decls }; }
 # No pre-indexed edges — relationships are computed via attributes.
 # Edge declarations stored in decls.__edges for consumers to use in attribute definitions.
-{ lib }:
+{ prelude }:
 let
   graph = import ./graph.nix;
 
@@ -19,8 +19,10 @@ let
     let
       # Merge all edge graphs for vertex collection
       allEdgeGraphs =
-        (lib.optionalAttrs (parentGraph.vertices != [ ] || parentGraph.edges != [ ]) { P = parentGraph; })
-        // (lib.optionalAttrs (importGraph.vertices != [ ] || importGraph.edges != [ ]) {
+        (prelude.optionalAttrs (parentGraph.vertices != [ ] || parentGraph.edges != [ ]) {
+          P = parentGraph;
+        })
+        // (prelude.optionalAttrs (importGraph.vertices != [ ] || importGraph.edges != [ ]) {
           I = importGraph;
         })
         // edgeGraphs;
@@ -28,7 +30,7 @@ let
       # Collect all vertices: from edge graphs + decls + types keys (O(n) dedup via attrset)
       allVertices = builtins.attrNames (
         builtins.listToAttrs (
-          lib.concatMap (
+          prelude.concatMap (
             label:
             map (v: {
               name = v;
@@ -53,7 +55,7 @@ let
       parentIndex =
         let
           grouped = builtins.groupBy (e: e.from) (allEdgeGraphs.P.edges or [ ]);
-          validated = lib.mapAttrs (
+          validated = prelude.mapAttrs (
             from: edges:
             if builtins.length edges > 1 then
               throw "gen-scope: node '${from}' has ${toString (builtins.length edges)} parent edges (P must be a partial function, Neron §2.2). If this node should exist under multiple parents, use distinct IDs (e.g., '${from}@parent1', '${from}@parent2')."
@@ -65,7 +67,7 @@ let
 
       # Pre-index all non-P edges by source, grouped by label.
       # Uses groupBy (O(E)) instead of foldl'+// (O(E²)).
-      edgeIndex = lib.mapAttrs (
+      edgeIndex = prelude.mapAttrs (
         _label: g:
         let
           grouped = builtins.groupBy (e: e.from) g.edges;
@@ -74,13 +76,13 @@ let
       ) (builtins.removeAttrs allEdgeGraphs [ "P" ]);
     in
     builtins.seq parentIndex (
-      lib.genAttrs allVertices (id: {
+      prelude.genAttrs allVertices (id: {
         inherit id;
         type = types.${id} or null;
         parent = parentIndex.${id} or null;
         decls = (decls.${id} or { }) // {
           # Store edge declarations for consumers to build computed attributes from
-          __edges = lib.mapAttrs (label: idx: idx.${id} or [ ]) edgeIndex;
+          __edges = prelude.mapAttrs (label: idx: idx.${id} or [ ]) edgeIndex;
         };
       })
     );

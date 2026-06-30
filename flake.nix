@@ -1,9 +1,16 @@
 {
   description = "gen-scope: demand-driven attribute grammar evaluator over algebraic scope graphs";
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  # gen-scope is nixpkgs-lib-free: the library depends only on gen-prelude (pure,
+  # zero-input). The HOAG evaluator is pure list/attr combinators + builtins — no
+  # module system, no nixpkgs.lib.
+  inputs = {
+    gen-prelude.url = "github:sini/gen-prelude";
+  };
+
   outputs =
-    { nixpkgs, ... }:
+    { gen-prelude, ... }:
     {
-      lib = import ./lib { lib = nixpkgs.lib; };
+      lib = import ./lib { prelude = gen-prelude.lib; };
     };
 }

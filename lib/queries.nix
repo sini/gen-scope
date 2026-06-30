@@ -2,7 +2,7 @@
 #
 # parent is structural (on the node). children, ancestors, descendants,
 # siblings are derived via computed attributes (self.get id "children").
-{ lib }:
+{ prelude }:
 let
   parent = self: id: (self.node id).parent;
 
@@ -45,7 +45,7 @@ let
         let
           cids = builtins.attrNames (self.get nid "children");
         in
-        lib.concatMap (
+        prelude.concatMap (
           cid: if visited ? ${cid} then [ ] else [ cid ] ++ go (visited // { ${cid} = true; }) cid
         ) cids;
     in
