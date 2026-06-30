@@ -5,6 +5,9 @@
 # Connect distributes over overlay; cross-product edges.
 # Vertices may contain duplicates; dedup is deferred to buildNodes where
 # it is cheap via genAttrs (exploits Mokhov's algebraic idempotence: x + x = x).
+#
+# Depends on nothing (pure builtins) — needs no prelude input.
+{ }:
 let
   empty = {
     vertices = [ ];
