@@ -10,10 +10,11 @@ gen-scope is generic. It has no knowledge of NixOS, aspects, policies, or system
 
 ## Table of Contents
 
-- [Core Insight](#core-insight)
-- [Terminology](#terminology)
+- [Overview](#overview)
 - [Gen Ecosystem](#gen-ecosystem)
 - [Usage](#usage)
+- [Core Insight](#core-insight)
+- [Terminology](#terminology)
 - [Example](#example)
 - [HOAG: Dynamic Tree Expansion](#hoag-dynamic-tree-expansion)
 - [API Reference](#api-reference)
@@ -29,24 +30,19 @@ gen-scope is generic. It has no knowledge of NixOS, aspects, policies, or system
 - [Testing](#testing)
 - [Theoretical Foundations](#theoretical-foundations)
 
-## Core Insight
+## Overview
 
-Nix attrset VALUES are lazy but KEYS are eager. Function application is never memoized. The only way to get O(1) attribute access is an attrset entry.
+gen-scope evaluates **attributes** over a tree of **nodes**. You supply two things: a set of root nodes (minimal descriptors `{ id, type, parent, decls }`) and a set of attribute definitions — each a function `self: id: value` that computes one attribute of one node, free to read other attributes through the `self` accessor. `eval` returns an **accessor record** whose fields destructure the evaluated tree:
 
-**The solution:** Co-locate the memoization cache (`_eval`) ON each node. When a parent's `children` attribute materializes child nodes, each child is wrapped with `_eval` — a lazy attrset of that child's attribute computations. The cache is distributed across the tree, not centralized.
+| Accessor | Reads | Returns |
+|----------|-------|---------|
+| `result.node id` | structural data | the node descriptor `{ id, type, parent, decls }` |
+| `result.get id attrName` | a computed attribute | the demand-driven, memoized attribute value |
+| `result.allNodes` / `allNodesWhere` / `subtreeOf` / `nodesOfType` | the whole tree | flat materializations (Tier 2) |
 
-## Terminology
+Evaluation is **demand-driven**: an attribute computes only when `get` reads it, and each result is memoized on a co-located `_eval` cache carried by its own node (see [Core Insight](#core-insight)). Two access tiers matter for cost — **Tier 1** navigation (`node`, `get`) is O(1)/O(depth); **Tier 2** materialization (`allNodes`) forces the full tree at O(n).
 
-| Term | Definition |
-|------|-----------|
-| Nodes | Minimal descriptors: `{ id, type, parent, decls }` |
-| Roots | Entry-point nodes (from `buildNodes` or hand-written) |
-| Children | Synthesized nodes produced by the `children` attribute |
-| Derived Children | Synthesized nodes from `derived-children` (can read sibling attrs) |
-| Attributes | Computed values on nodes — demand-driven, memoized via `_eval` |
-| Combinators | Attribute constructors: `inherit'`, `circular`, `paramAttr`, `collectionAttr`, `query` |
-| Tier 1 | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth) |
-| Tier 2 | Materialization: `self.allNodes` — O(n), forces full tree |
+The tree is not fixed. The `children` and `derived-children` attributes **synthesize new nodes on demand** (the HOAG half — [HOAG: Dynamic Tree Expansion](#hoag-dynamic-tree-expansion)), and cross-node references travel along **import edges** resolved with scope-graph queries (`query`/`queryAll`/`queryReverse`, the RAG half). The convergence of mutually-recursive attributes is driven by `circular` (fixed-point iteration, Sloane 2010 §2.2) — the loop primitive consumers such as [gen-resolve](https://github.com/sini/gen-resolve) build their fold on top of.
 
 ## Gen Ecosystem
 
@@ -56,7 +52,7 @@ Nix attrset VALUES are lazy but KEYS are eager. Function application is never me
 | [gen-algebra](https://github.com/sini/gen-algebra) | Pure primitives (record, search monad, either, intensional identity) |
 | [gen-schema](https://github.com/sini/gen-schema) | Typed registries (kinds, instances, collections, refs) |
 | [gen-aspects](https://github.com/sini/gen-aspects) | Aspect type system (traits, classification, dispatch) |
-| [gen-scope](https://github.com/sini/gen-scope) | HOAG scope-graph evaluator (demand-driven, \_eval memoization, circular attributes) |
+| [gen-scope](https://github.com/sini/gen-scope) | **This lib** — HOAG scope-graph evaluator (demand-driven, \_eval memoization, circular attributes) |
 | [gen-graph](https://github.com/sini/gen-graph) | Accessor-based graph query combinators (traversal, condensation, phaseOrder) |
 | [gen-select](https://github.com/sini/gen-select) | Selector algebra (pattern matching over graph positions) |
 | [gen-bind](https://github.com/sini/gen-bind) | Module binding (inject external args into NixOS modules) |
@@ -82,6 +78,25 @@ gen-scope is **Class B**: nixpkgs-lib-free, depending only on [gen-prelude](http
 let engine = import ./gen-scope { };
 in { /* ... */ }
 ```
+
+## Core Insight
+
+Nix attrset VALUES are lazy but KEYS are eager. Function application is never memoized. The only way to get O(1) attribute access is an attrset entry.
+
+**The solution:** Co-locate the memoization cache (`_eval`) ON each node. When a parent's `children` attribute materializes child nodes, each child is wrapped with `_eval` — a lazy attrset of that child's attribute computations. The cache is distributed across the tree, not centralized.
+
+## Terminology
+
+| Term | Definition |
+|------|-----------|
+| Nodes | Minimal descriptors: `{ id, type, parent, decls }` |
+| Roots | Entry-point nodes (from `buildNodes` or hand-written) |
+| Children | Synthesized nodes produced by the `children` attribute |
+| Derived Children | Synthesized nodes from `derived-children` (can read sibling attrs) |
+| Attributes | Computed values on nodes — demand-driven, memoized via `_eval` |
+| Combinators | Attribute constructors: `inherit'`, `circular`, `paramAttr`, `collectionAttr`, `query` |
+| Tier 1 | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth) |
+| Tier 2 | Materialization: `self.allNodes` — O(n), forces full tree |
 
 ## Example
 
@@ -392,6 +407,21 @@ queryAll { dataFilter; transitiveImports ? false; } self id
 
 All reachable results without shadowing (Neron 2015 §2.3, rule R). For ambiguity detection.
 
+#### `queryReverse`
+
+```nix
+queryReverse { dataFilter; transitive ? false; } self id   # → [value]
+```
+
+Reverse reference attribute — the dual of `queryAll`. Where `queryAll` walks import edges **forward** (the scopes `id` imports), `queryReverse` gathers `dataFilter` over every node that **imports** `id` (the reverse of the `imports` relation — a `neededBy`-style query, Hedin & Magnusson 2003 inter-type declarations). A node cannot see its importers locally, so this forces the full node set via `allNodes` (Tier 2, like `collect`). Gather-all, no shadowing; **direct** importers by default — set `transitive = true` to walk the reverse-import closure (cycle-safe via a seen-set).
+
+```nix
+# Which nodes depend on "lib:core"?
+dependents = engine.queryReverse {
+  dataFilter = n: if (n.decls.__edges.I or []) != [] then n.id else null;
+} self "lib:core";
+```
+
 #### `paramAttr`
 
 ```nix
@@ -447,13 +477,13 @@ Thin wrappers over `self.node` and `self.get`:
 ## Testing
 
 ```bash
-cd ci
-just ci              # run all tests
-just ci eval         # run eval suite
-just ci eval.test-basic-root-attribute  # specific test
+nix flake check ./ci                       # build + run the full suite
+cd ci && just ci                           # run all tests (nix-unit)
+cd ci && just ci eval                       # run one suite
+cd ci && just ci eval.test-basic-root-attribute  # run one test
 ```
 
-Requires nix-unit. 167 tests across 20 suites (13 test files).
+Requires nix-unit. **167 tests across 20 suites** (13 test files): `eval`, `eval-debug`, `eval-warm`, `build-nodes`, `graph`, `hoag`, `circular`, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `recorded-deps`, and `purity`. The `purity` suite asserts the evaluator never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant.
 
 ## Theoretical Foundations
 
