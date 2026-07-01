@@ -1,6 +1,6 @@
 # Nest Traits
 
-Nest's CSS-inspired traits model rebuilt on scope-engine, gen-schema, gen-aspects, and gen-graph. Demonstrates that nest's evaluation engine decomposes cleanly into independent libraries, each handling one concern.
+Nest's CSS-inspired traits model rebuilt on gen-scope, gen-schema, gen-aspects, and gen-graph. Demonstrates that nest's evaluation engine decomposes cleanly into independent libraries, each handling one concern.
 
 ## What it demonstrates
 
@@ -47,7 +47,7 @@ Each library handles one concern:
 |---|---|---|
 | **Type definitions** | gen-schema | Trait sidecars (`needs`, `neededBy`, `synth`, `class`), node instance registry, ref validation, refinement contracts |
 | **Rule content** | gen-aspects | Class-separated `deferredModule` output via `aspectsType`, `is` selector injected via `aspectModules` |
-| **Graph evaluation** | scope-engine | DOM hierarchy as parent edges, structural queries (`childrenIds`, `ancestors`, `siblings`), `buildNodes` for graph construction |
+| **Graph evaluation** | gen-scope | DOM hierarchy as parent edges, structural queries (`childrenIds`, `ancestors`, `siblings`), `buildNodes` for graph construction |
 | **Graph queries** | gen-graph | Monotonic query combinators over scope graphs: `select`, `reachableFrom`, `dependents`, `cycles`, `leaves` |
 
 Template-local code provides the CSS selector engine and the 5-phase evaluation pipeline.
@@ -102,17 +102,17 @@ Selectors can be trait references, programmatic constructors, or CSS strings —
 ## File structure
 
 ```
-templates/nest-traits/
-├── flake.nix              # inputs: scope-engine, gen-schema, gen-aspects, gen, gen-graph, nixpkgs
+examples/nest-traits/
+├── flake.nix              # inputs: gen-scope, gen-schema, gen-aspects, gen-algebra, gen-graph, nixpkgs
 ├── lib/
 │   ├── default.nix        # public API: evalNest, selectors, walkDom, trait helpers
 │   ├── engine.nix         # 5-phase evaluation pipeline
 │   ├── selectors.nix      # CSS selector matching (matchesOne, mkCtx, mkCtxFromGraph)
 │   ├── css.nix            # CSS string parser (parseCssSel, parseCompound)
-│   ├── dom.nix            # DOM traversal (walkDom) + scope-engine graph (buildDomGraph)
+│   ├── dom.nix            # DOM traversal (walkDom) + gen-scope graph (buildDomGraph)
 │   ├── traits.nix         # trait expansion (expandTraits, expandNeededBy, applySynth)
 │   └── setup.nix          # gen-schema/gen-aspects integration helpers
-└── tests.nix              # 88 tests across 9 suites
+└── tests.nix              # 94 tests across 10 suites
 ```
 
 ## Defining traits
@@ -181,20 +181,20 @@ Class-keyed values are collected as lists (not deep-merged) to preserve NixOS mo
 
 ## Tests
 
-86+ tests across 9 suites:
+94 tests across 10 suites:
 
 | Suite | Tests | What it covers |
 |---|---|---|
 | `smoke` | 2 | Library loads, exports present |
 | `css` | 12 | CSS string parser: all token types, combinators, compound selectors |
-| `dom` | 9 | DOM walk, namespace inheritance, overrides, nesting, scope-engine graph |
+| `dom` | 9 | DOM walk, namespace inheritance, overrides, nesting, gen-scope graph |
 | `selectors` | 17 | All 12 selector handlers, CSS integration, `callWithArgs` |
 | `traits` | 8 | Needs BFS, diamond dedup, circular safety, neededBy OR dispatch, needs-as-function |
-| `engine-tests` | 10 | Full pipeline: basic output, byClass, rule matching, needs/neededBy in pipeline, list collection, `:has` selector, child bubbling, rule synth |
+| `genScope-tests` | 10 | Full pipeline: basic output, byClass, rule matching, needs/neededBy in pipeline, list collection, `:has` selector, child bubbling, rule synth |
 | `demo` | 9 | Fleet scenario: lb + web nodes + users, cross-node select, sudo via `:has(admin)`, neededBy monitoring |
 | `edge-cases` | 5 | Empty DOM, marker-only traits, CSS selectors in rules, deep nesting, multiple same-level nodes |
 | `setup-tests` | 13 | traitKind, mkRulesType, evalNestModules, schema integration, refinement contracts, mkFieldValidator |
-| `graph-queries` | 8 | gen-graph queries: node selection, edge counting, import-graph reachability, cycle detection |
+| `graph-queries` | 9 | gen-graph accessor queries: `fromRegistry` adapter, node selection, leaves/cycles, materialized parent edges, import-graph reachability + dependents |
 
 ```bash
 nix run github:nix-community/nix-unit -- --flake .#tests
@@ -202,20 +202,20 @@ nix run github:nix-community/nix-unit -- --flake .#tests
 
 ## Relationship to nest
 
-This template is a proof-of-concept that nest's evaluation engine can be decomposed into gen-schema + gen-aspects + scope-engine. The `evalNest` API accepts a `{ traits, rules, ...dom }` shape, and the selector engine is a direct port.
+This template is a proof-of-concept that nest's evaluation engine can be decomposed into gen-schema + gen-aspects + gen-scope. The `evalNest` API accepts a `{ traits, rules, ...dom }` shape, and the selector engine is a direct port.
 
 Key differences from nest:
 
 - **`synth` is a list** (nest uses a single function) — enables multi-module composition
 - **`neededBy` entries are OR-dispatched** — each selector is independent, `++` merge across modules composes correctly
-- **Structural queries use scope-engine** — `buildDomGraph` creates a pre-indexed node map, `mkCtxFromGraph` uses `childrenIds`/`ancestors`/`siblings` for O(1) lookups
+- **Structural queries use gen-scope** — `buildDomGraph` creates a pre-indexed node map, `mkCtxFromGraph` uses `childrenIds`/`ancestors`/`siblings` for O(1) lookups
 - **gen-schema integration** — `setup.nix` provides `mkTraitSchema` and `evalNestModules` for module-system-based trait/rule definitions with sidecar extraction and validation
 - **gen-aspects integration** — `mkRulesType` creates an `aspectsType` with class-separated `deferredModule` output and `is` injected via `aspectModules`
 
 ## References
 
 - [nest](https://github.com/denful/nest) — the original CSS-inspired infrastructure framework
-- [scope-engine](https://github.com/sini/scope-engine) — demand-driven HOAG evaluator over algebraic scope graphs
+- [gen-scope](https://github.com/sini/gen-scope) — demand-driven HOAG evaluator over algebraic scope graphs
 - [gen-schema](https://github.com/sini/gen-schema) — typed record registries with sidecars, refs, and validation
 - [gen-aspects](https://github.com/sini/gen-aspects) — aspect-oriented composition types (Palmer flat dispatch)
 - [gen-graph](https://github.com/sini/gen-graph) — monotonic query combinators over scope graphs

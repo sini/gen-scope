@@ -63,8 +63,8 @@ let
   };
 
   # Dispatch rules for a server: gen-scope.circular drives repeated gen-dispatch.dispatch
-  # passes to a fixpoint; return the merged NixOS config. (Byte-identical to the retired
-  # gen-dispatch.fixpoint — see gen-resolve/spike/gen-derive-loop-step/.)
+  # passes to convergence (Kleene ascent), then return the merged NixOS config. The
+  # loop⊥step split (circular loop + dispatchStep) replaces the retired monolithic fixpoint.
   buildHostConfig =
     fleet: rules: serverName:
     let

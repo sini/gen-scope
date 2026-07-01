@@ -1,6 +1,6 @@
 # Infrastructure Schema Demo
 
-Flagship integration demo for the [gen ecosystem](https://github.com/sini/gen): all 8 libraries composing to model, validate, query, derive, bind, and graph a multi-datacenter infrastructure fleet. A SQL engine queries live data. A rule engine dispatches NixOS configuration via stratified fixpoint. A DDL generator produces migration-ordered SQL. Cross-model synthesis computes ACL permissions and network reachability.
+Flagship integration demo for the [gen ecosystem](https://github.com/sini/gen): all 8 libraries composing to model, validate, query, dispatch, bind, and graph a multi-datacenter infrastructure fleet. A SQL engine queries live data. A rule engine dispatches NixOS configuration via a loop⊥step split (gen-scope.circular convergence loop driving gen-dispatch steps over gen-graph phase ordering). A DDL generator produces migration-ordered SQL. Cross-model synthesis computes ACL permissions and network reachability.
 
 This is the SQL counterpart of the [nest-traits](../nest-traits/) CSS selector demo. Where nest uses CSS selectors to query a DOM, this demo uses SQL queries to query an infrastructure graph.
 
@@ -10,10 +10,10 @@ This is the SQL counterpart of the [nest-traits](../nest-traits/) CSS selector d
 |---|---|
 | [gen-algebra](https://github.com/sini/gen-algebra) | Identity hashing, validators, ref types for schema internals |
 | [gen-schema](https://github.com/sini/gen-schema) | 21 kinds with parent topology, FK refs, refinement contracts, row-polymorphic validators |
-| [gen-scope](https://github.com/sini/gen-scope) | `buildNodes` for kind-level and instance-level graph construction |
-| [gen-graph](https://github.com/sini/gen-graph) | Reachability, cycle detection, migration ordering, impact analysis, ACL transitive walks |
+| [gen-scope](https://github.com/sini/gen-scope) | `buildNodes` for kind/instance graph construction; `circular` Kleene-ascent convergence loop for rule dispatch |
+| [gen-graph](https://github.com/sini/gen-graph) | Reachability, cycle detection, migration ordering, impact analysis, ACL transitive walks; `phaseOrder` for dispatch phase ordering |
 | [gen-select](https://github.com/sini/gen-select) | WHERE clause compilation: SQL AST nodes become compositional selectors (`and`, `when`, `star`) |
-| [gen-derive](https://github.com/sini/gen-derive) | Rule dispatch: `mkRule` with selector conditions, phased actions, fixpoint convergence |
+| [gen-dispatch](https://github.com/sini/gen-dispatch) | Rule dispatch STEP: `mkRule` with selector conditions, phased actions, `dispatchStep`/`dispatchInit` to pair with the convergence loop |
 | [gen-bind](https://github.com/sini/gen-bind) | NixOS module wrapping with contracts, provenance, and signature introspection |
 | nixpkgs `lib` | `evalModules` for schema evaluation, general utilities |
 
@@ -35,10 +35,10 @@ gen-schema: evalModules validates refs, refinements, row validators
   |       |       `sel.and`, `sel.when`, `sel.star` compose predicates
   |       |       `sel.matches` evaluates against row context
   |       |
-  |       +--> gen-derive: mkRule + fixpoint dispatch
+  |       +--> gen-dispatch: mkRule + dispatchStep, gen-scope.circular loop, gen-graph.phaseOrder
   |               condition = gen-select selector
   |               produce = phased action list (enrich | nixos)
-  |               fixpoint: enrich actions feed back into context
+  |               convergence loop: enrich actions feed back into context
   |
   +--> gen-bind: wrap server module with contracts + provenance
   |       bindings = { fleet, serverName, server }
@@ -117,25 +117,25 @@ sql.query "SELECT hostname, cores FROM servers WHERE cores > 4 AND ram_gb >= 16"
 
 ## Rule Dispatch
 
-Rules use gen-derive's `mkRule` with gen-select selectors as conditions. Two action phases:
+Rules use gen-dispatch's `mkRule` with gen-select selectors as conditions. Phase ordering comes from `gen-graph.phaseOrder`; under multi-phase dispatch every rule declares its `phase`. Two action phases:
 
 | Phase | Actions | Purpose |
 |---|---|---|
-| `structural` | `enrich` | Feed data back into context (fixpoint converges) |
+| `structural` | `enrich` | Feed data back into context (the loop converges) |
 | `config` | `nixos` | Collect NixOS module fragments |
 
 ```nix
 # Web servers get nginx
-genDerive.mkRule {
+genDispatch.mkRule {
   condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or []));
   produce = _id: _ctx: [ (fx.nixos { services.nginx.enable = true; }) ];
   identity = "web-nginx";
 }
 ```
 
-### Fixpoint Convergence
+### Convergence Loop
 
-Pass 1 enriches web servers with `has-nginx = true`. Pass 2 fires only on enriched context, adding nginx monitoring. gen-derive's `fixpoint` iterates until no new rules fire.
+Pass 1 enriches web servers with `has-nginx = true`. Pass 2 fires only on enriched context, adding nginx monitoring. `gen-scope.circular` drives repeated `gen-dispatch.dispatch` passes (via `dispatchStep`/`dispatchInit`), iterating to a fixpoint by Kleene ascent until no new rules fire.
 
 ```nix
 # Pass 1: enrichment
@@ -166,7 +166,7 @@ genBind.wrap {
 
 The wrapped result exposes `{ module, wrapped, signature, advertisedArgs }`. `signature.bound` shows which args were injected. Contract violations throw at bind time, not at NixOS eval time.
 
-Per-server config queries infrastructure relationships (services, ports, interfaces, users, firewall rules, schedules) and produces a NixOS module attrset. The base module + gen-derive rule output are deep-merged via `lib.recursiveUpdate`.
+Per-server config queries infrastructure relationships (services, ports, interfaces, users, firewall rules, schedules) and produces a NixOS module attrset. The base module + gen-dispatch rule output are deep-merged via `lib.recursiveUpdate`.
 
 ## Graph Queries
 
@@ -227,10 +227,10 @@ prodSelector = sel.when (_id: ctx: (ctx.data _id).type == "server");
 matching = builtins.filter (id: sel.matches prodSelector id ctx) serverNodes;
 ```
 
-**gen-select --> gen-derive**: selector condition dispatches rule, produces actions
+**gen-select --> gen-dispatch**: selector condition dispatches rule, produces actions
 
 ```nix
-testRule = genDerive.mkRule {
+testRule = genDispatch.mkRule {
   condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or []));
   produce = _id: _ctx: [{ __action = "tagged"; value = true; }];
   identity = "bridge-test";
@@ -246,13 +246,13 @@ genGraph.reachableFrom kindNodes "server"
 
 ## Test Suites
 
-17 suites, 170 tests:
+17 suites, 167 tests:
 
 | Suite | Tests | Covers |
 |---|---|---|
 | `smoke` | 2 | Fleet loads, basic structure |
 | `schema` | 12 | Kind count, parent topology, ref fields |
-| `fleet-eval` | 24 | Ref resolution, self-refs, setOf, nullable refs |
+| `fleet-eval` | 23 | Ref resolution, self-refs, setOf, nullable refs |
 | `refinement` | 7 | CIDR, env tier, VLAN ID, MAC, TCP port validation |
 | `graph` | 9 | Kind/instance graphs, cycles, reachability, dependents |
 | `sql-parser` | 15 | Tokenizer, SELECT/FROM/JOIN/WHERE, aliases, IN/IS NULL |
@@ -261,12 +261,12 @@ genGraph.reachableFrom kindNodes "server"
 | `acl` | 8 | Direct/transitive scope, effective access |
 | `reachability` | 4 | Firewall intersection, self-subnet, deny rules |
 | `bind` | 5 | gen-bind wrapping, signatures, contracts |
-| `nixos` | 22 | Config generation, user provisioning, config-path queries |
-| `config-queries` | 18 | SQL against rendered NixOS configs |
-| `rules` | 11 | gen-derive dispatch, SQL WHERE conditions, base merge |
-| `fixpoint` | 4 | Enrichment feedback, multi-pass convergence |
+| `nixos` | 21 | Config generation, user provisioning, config-path queries |
+| `config-queries` | 17 | SQL against rendered NixOS configs |
+| `rules` | 11 | gen-dispatch dispatch, SQL WHERE conditions, base merge |
+| `convergence` | 4 | Enrichment feedback, multi-pass loop convergence |
 | `integration` | 5 | Full pipeline, cross-model queries |
-| `bridge` | 3 | Cross-library: select-->graph, select-->derive, schema-->graph |
+| `bridge` | 3 | Cross-library: select-->graph, select-->dispatch, schema-->graph |
 
 ## Running
 
@@ -296,8 +296,8 @@ examples/sql-schema/
     acl.nix           # ACL synthesis via gen-graph transitive walks
     reachability.nix  # network reachability synthesis
     nixos.nix         # NixOS config generator via gen-bind wrapping
-    rules.nix         # gen-derive stratified dispatch with gen-select conditions
-  tests.nix           # 170 tests across 17 suites
+    rules.nix         # gen-dispatch step + gen-scope.circular loop + gen-graph phase order
+  tests.nix           # 167 tests across 17 suites
   README.md
 ```
 
@@ -308,7 +308,7 @@ examples/sql-schema/
 - [gen-graph](https://github.com/sini/gen-graph) -- accessor-based graph query combinators
 - [gen-scope](https://github.com/sini/gen-scope) -- demand-driven HOAG evaluator
 - [gen-select](https://github.com/sini/gen-select) -- compositional selector algebra
-- [gen-derive](https://github.com/sini/gen-derive) -- stratified rule dispatch with fixpoint convergence
+- [gen-dispatch](https://github.com/sini/gen-dispatch) -- rule dispatch step, paired with gen-scope.circular for convergence
 - [gen-bind](https://github.com/sini/gen-bind) -- module binding with contracts and provenance
 - [gen-algebra](https://github.com/sini/gen-algebra) -- search monad, intensional functions, record algebra
 - [nest-traits](../nest-traits/) -- the CSS selector equivalent of this SQL demo

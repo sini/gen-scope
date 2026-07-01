@@ -27,13 +27,15 @@ Role hierarchy:           Users:                Resources:
 | Scoped relations | van Antwerpen 2018 §2.1 | Deny rules as named relations on user nodes |
 | `nodesByType` | -- | Query all users, roles, resources independently |
 | `ancestors` / `childrenIds` | -- | Resource tree structure for documents |
+| `collectByType` | -- | Gather all roles via typed collection |
+| `collectByLabel` | -- | Gather a user's assigned roles via A edges |
 
 ## Tests
 
-25 tests covering: role hierarchy resolution (viewer/editor/admin/auditor permission chains), user effective permissions (multi-role union), permission checks (positive/negative), deny overrides (blocked actions on specific resources), resource hierarchy (inherited sensitivity), structural queries, and typed queries.
+27 tests covering: role hierarchy resolution (viewer/editor/admin/auditor permission chains), user effective permissions (multi-role union), permission checks (positive/negative), deny overrides (blocked actions on specific resources), resource hierarchy (inherited sensitivity), structural queries, and typed/labelled collection.
 
 ```bash
-nix eval --override-input scope-engine ../.. .#tests
+nix eval .#tests
 ```
 
 ## References

@@ -863,9 +863,10 @@
           ) result "classB";
           # -> [ "method-foo" ]
 
-          # Edge data from decls.__edges
+          # Edge data from decls.__edges (every declared label is present,
+          # empty for labels this node has no edges on)
           all-edges = (result.node "extRecord").decls.__edges;
-          # -> { R = [ "baseRecord" ]; }
+          # -> { R = [ "baseRecord" ]; E = [ ]; }
         };
 
       # ===================================================================

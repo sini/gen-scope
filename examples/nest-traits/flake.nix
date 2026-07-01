@@ -21,15 +21,13 @@
     let
       lib = nixpkgs.lib;
       genScope = gen-scope.lib;
-      genAlgebra = gen-algebra { inherit lib; };
-      genSchema = import "${gen-schema}/nix/lib" {
+      genAlgebra = gen-algebra.lib;
+      genSchema = import "${gen-schema}/lib" {
         inherit lib;
-        inputs = {
-          gen = genAlgebra;
-        };
+        algebra = genAlgebra;
       };
-      aspects = gen-aspects { inherit lib; };
-      genGraph = gen-graph { inherit lib; };
+      aspects = gen-aspects.lib;
+      genGraph = gen-graph.lib;
       nest = import ./lib {
         inherit
           lib

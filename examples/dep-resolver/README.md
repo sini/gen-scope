@@ -24,17 +24,17 @@ workspace
 | HOAG synthesis | Vogt 1989 | Synthesize resolved manifest node with computed deps |
 | Custom edge labels (D) | van Antwerpen 2018 §2.1 | devDependency separation from runtime imports |
 | `collect` (global) | -- | Version conflict detection across all nodes |
-| `evalDebug` | spec OQ #2 | Cycle-safe evaluation with structured traces |
+| `evalDebug` | -- | Cycle-safe evaluation with structured traces |
 | Synthesized attributes | Knuth 1968 | depDepth, depCount, allDeps roll up bottom-up |
 | `siblings` | -- | Detect that lib-json@1.5 and lib-json@2.0 are siblings |
 | `nodesByType` | -- | Query all libs, find synthesized manifest |
 
 ## Tests
 
-20 tests covering: direct/transitive dependency resolution, available API collection, dep depth/count computation, devDependency separation, HOAG manifest synthesis, version conflict detection, typed queries, structural queries, and evalDebug compatibility.
+20 outputs covering: direct/transitive dependency resolution, available API collection, dep depth/count computation, devDependency separation, HOAG manifest synthesis, version conflict detection, typed queries, structural queries, and evalDebug compatibility.
 
 ```bash
-nix eval --override-input scope-engine ../.. .#tests
+nix eval .#tests
 ```
 
 ## References

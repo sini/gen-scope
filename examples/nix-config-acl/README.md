@@ -99,7 +99,7 @@ system ∩ gates    = [] → enable = false
 - Host ancestry and environment children
 
 ```bash
-nix eval --override-input scope-engine ../.. .#tests
+nix eval .#tests
 ```
 
 ## References

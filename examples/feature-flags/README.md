@@ -37,7 +37,7 @@ global                    dark-mode=false, new-editor=false, ai-assist=false, ma
 27 tests covering: flag resolution at all hierarchy levels, user opt-out override, flag dependencies (ai-assist requires new-editor), effective flag merging, override counting, HOAG rollout synthesis, circular convergence, typed queries, and structural ancestor verification.
 
 ```bash
-nix eval --override-input scope-engine ../.. .#tests
+nix eval .#tests
 ```
 
 ## References

@@ -266,7 +266,6 @@ in
   # Rule-based host configuration (gen-dispatch)
   inherit (rulesLib)
     fx
-    phases
     match
     mkServerContext
     extract

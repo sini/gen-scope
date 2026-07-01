@@ -1495,10 +1495,9 @@ in
       };
     };
 
-  # Convergence oracle: the byte-identical proof that the loop⊥step split preserves
-  # behavior — gen-scope.circular ∘ gen-dispatch.dispatch reproduces the retired
-  # gen-dispatch.fixpoint exactly (web servers enriched with has-nginx, then the
-  # nginx-monitoring rule fires on the enriched context).
+  # Convergence oracle: the loop⊥step split converges to a fixpoint via Kleene ascent —
+  # gen-scope.circular drives repeated gen-dispatch.dispatch passes (web servers enriched
+  # with has-nginx, then the nginx-monitoring rule fires on the enriched context).
   convergence =
     let
       configs = sql.hostConfigs;

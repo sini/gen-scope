@@ -1653,19 +1653,52 @@
         };
       };
       nodes = buildDomGraph domNodes;
+
+      # gen-graph's current API is accessor-based: queries take a graph descriptor
+      # { nodes, edges, nodeData, parent } rather than a scope-engine node map.
+      # `fromRegistry` adapts a scope-engine node map (id -> { decls, id, parent,
+      # type }) into that accessor. `edges` reads import edges (I-label) that
+      # gen-scope stores under decls.__edges.I; `parent` reads the P-edge target.
+      importEdgesOf = _id: entry: entry.decls.__edges.I or [ ];
+      parentOf = _id: entry: entry.parent;
+      domGraph = genGraph.fromRegistry {
+        registry = nodes;
+        edges = importEdgesOf;
+        parent = parentOf;
+      };
+      mkImportGraph =
+        nodeMap:
+        genGraph.fromRegistry {
+          registry = nodeMap;
+          edges = importEdgesOf;
+        };
+      importNodes = genScope.buildNodes {
+        importGraph = genScope.overlays [
+          (genScope.vertices [
+            "lb"
+            "web-1"
+            "web-2"
+          ])
+          (genScope.edge "lb" "web-1")
+          (genScope.edge "lb" "web-2")
+        ];
+      };
+      importGraph = mkImportGraph importNodes;
     in
     {
       test-node-count = {
-        expr = genGraph.sizeNodes nodes;
+        expr = builtins.length domGraph.nodes;
         expected = 3;
       };
 
       test-select-web-nodes = {
         expr =
           let
-            webNodes = genGraph.select nodes (node: builtins.any (t: t.name == "web") (node.decls.is or [ ]));
+            webNodes = genGraph.select domGraph (
+              node: builtins.any (t: t.name == "web") (node.decls.is or [ ])
+            );
           in
-          builtins.sort builtins.lessThan (builtins.attrNames webNodes);
+          builtins.sort builtins.lessThan webNodes;
         expected = [
           "prod.web-1"
           "prod.web-2"
@@ -1673,16 +1706,12 @@
       };
 
       test-select-lb-node = {
-        expr =
-          let
-            lbNodes = genGraph.select nodes (node: builtins.any (t: t.name == "lb") (node.decls.is or [ ]));
-          in
-          builtins.attrNames lbNodes;
+        expr = genGraph.select domGraph (node: builtins.any (t: t.name == "lb") (node.decls.is or [ ]));
         expected = [ "prod.lb" ];
       };
 
       test-all-nodes-are-leaves = {
-        expr = builtins.sort builtins.lessThan (genGraph.leaves nodes);
+        expr = genGraph.leaves domGraph;
         expected = [
           "prod.lb"
           "prod.web-1"
@@ -1691,7 +1720,7 @@
       };
 
       test-no-cycles = {
-        expr = genGraph.cycles nodes;
+        expr = genGraph.cycles domGraph;
         expected = [ ];
       };
 
@@ -1713,39 +1742,24 @@
                 };
               };
             };
-            nestedGraph = buildDomGraph nestedNodes;
-            edgeSet = genGraph.fromEdges nestedGraph;
-            pEdges = genGraph.selectEdges edgeSet (e: e.label == "P");
+            nestedGraph = genGraph.fromRegistry {
+              registry = buildDomGraph nestedNodes;
+              edges = importEdgesOf;
+              parent = parentOf;
+            };
+            parentEdges = genGraph.materializeParents nestedGraph;
           in
-          genGraph.sizeEdges pEdges;
+          builtins.length (builtins.attrNames parentEdges);
         expected = 1;
       };
 
       test-flat-dom-no-parent-edges = {
-        expr =
-          let
-            edgeSet = genGraph.fromEdges nodes;
-          in
-          genGraph.sizeEdges edgeSet;
+        expr = builtins.length (builtins.attrNames (genGraph.materializeParents domGraph));
         expected = 0;
       };
 
       test-import-graph-reachable = {
-        expr =
-          let
-            importNodes = genScope.buildNodes {
-              importGraph = genScope.overlays [
-                (genScope.vertices [
-                  "lb"
-                  "web-1"
-                  "web-2"
-                ])
-                (genScope.edge "lb" "web-1")
-                (genScope.edge "lb" "web-2")
-              ];
-            };
-          in
-          builtins.sort builtins.lessThan (genGraph.reachableFrom importNodes "lb");
+        expr = builtins.sort builtins.lessThan (genGraph.reachableFrom importGraph "lb");
         expected = [
           "web-1"
           "web-2"
@@ -1753,21 +1767,7 @@
       };
 
       test-import-graph-dependents = {
-        expr =
-          let
-            importNodes = genScope.buildNodes {
-              importGraph = genScope.overlays [
-                (genScope.vertices [
-                  "lb"
-                  "web-1"
-                  "web-2"
-                ])
-                (genScope.edge "lb" "web-1")
-                (genScope.edge "lb" "web-2")
-              ];
-            };
-          in
-          genGraph.dependents importNodes "web-1";
+        expr = genGraph.dependents importGraph "web-1";
         expected = [ "lb" ];
       };
     };

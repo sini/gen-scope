@@ -36,7 +36,7 @@ distance(p3, origin)  -- OK: Point3D <: Point2D
 23 tests covering: structural subtyping (positive/negative), record field extension via R edges, class inheritance via E edges, scoped type/value namespaces, HOAG generic instantiation, typed queries, and ambiguity detection.
 
 ```bash
-nix eval --override-input scope-engine ../.. .#tests
+nix eval .#tests
 ```
 
 ## References
