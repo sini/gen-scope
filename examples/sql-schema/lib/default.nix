@@ -1,9 +1,10 @@
 {
   lib,
   genSchema,
+  genScope,
   genGraph,
   genSelect,
-  genDerive,
+  genDispatch,
   genBind,
 }:
 let
@@ -97,38 +98,47 @@ let
     inherit lib genBind;
   };
 
-  # Rule-based host configuration (gen-derive stratified dispatch)
+  # Rule-based host configuration (gen-dispatch dispatch STEP + gen-scope.circular loop)
   rulesLib = import ./rules.nix {
-    inherit lib genDerive genSelect;
+    inherit
+      lib
+      genScope
+      genGraph
+      genDispatch
+      genSelect
+      ;
   };
 
   sel = genSelect;
 
-  # Default demo rules — gen-derive mkRule with gen-select selectors
+  # Default demo rules — gen-dispatch mkRule with gen-select selectors
   demoRules = [
     # All servers get SSH (unconditional)
-    (genDerive.mkRule {
+    (genDispatch.mkRule {
       condition = sel.star;
       produce = _id: _ctx: [ (rulesLib.fx.nixos { services.openssh.enable = true; }) ];
       identity = "ssh-everywhere";
+      phase = "config";
     })
 
     # Web-tagged servers get nginx
-    (genDerive.mkRule {
+    (genDispatch.mkRule {
       condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ]));
       produce = _id: _ctx: [ (rulesLib.fx.nixos { services.nginx.enable = true; }) ];
       identity = "web-nginx";
+      phase = "config";
     })
 
     # Database-tagged servers get postgresql
-    (genDerive.mkRule {
+    (genDispatch.mkRule {
       condition = sel.when (_id: ctx: builtins.elem "database" ((ctx.data _id).tags or [ ]));
       produce = _id: _ctx: [ (rulesLib.fx.nixos { services.postgresql.enable = true; }) ];
       identity = "db-postgresql";
+      phase = "config";
     })
 
     # ACME certs: servers with exposed port 443
-    (genDerive.mkRule {
+    (genDispatch.mkRule {
       condition = sel.when (
         id: _ctx:
         let
@@ -138,10 +148,11 @@ let
       );
       produce = _id: _ctx: [ (rulesLib.fx.nixos { security.acme.acceptTerms = true; }) ];
       identity = "acme-certs";
+      phase = "config";
     })
 
     # Admin-role users on server get sudo
-    (genDerive.mkRule {
+    (genDispatch.mkRule {
       condition = sel.when (
         id: _ctx:
         let
@@ -153,20 +164,22 @@ let
       );
       produce = _id: _ctx: [ (rulesLib.fx.nixos { security.sudo.enable = true; }) ];
       identity = "admin-sudo";
+      phase = "config";
     })
 
     # Prod servers get monitoring
-    (genDerive.mkRule {
+    (genDispatch.mkRule {
       condition = sel.when (_id: ctx: (ctx.data _id).environment == "prod");
       produce = _id: _ctx: [
         (rulesLib.fx.nixos { services.prometheus.exporters.node.enable = true; })
       ];
       identity = "prod-monitoring";
+      phase = "config";
     })
 
     # --- Fixpoint convergence demo ---
     # Pass 1: web servers get enrichment flag
-    (genDerive.mkRule {
+    (genDispatch.mkRule {
       condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ]));
       produce = _id: _ctx: [
         (rulesLib.fx.enrich {
@@ -175,19 +188,21 @@ let
         })
       ];
       identity = "nginx-enrichment";
+      phase = "structural";
     })
 
     # Pass 2: fires only after enrichment adds has-nginx to context
-    (genDerive.mkRule {
+    (genDispatch.mkRule {
       condition = sel.when (_id: ctx: (ctx.data _id).has-nginx or false);
       produce = _id: _ctx: [
         (rulesLib.fx.nixos { services.prometheus.exporters.nginx.enable = true; })
       ];
       identity = "nginx-monitoring";
+      phase = "config";
     })
   ];
 
-  # Host configs: base modules (from nixos.nix) + gen-derive rule output
+  # Host configs: base modules (from nixos.nix) + gen-dispatch rule output
   hostConfigs = lib.mapAttrs (
     name: _:
     let
@@ -248,7 +263,7 @@ in
   nixosConfigs = nixosLib.evalAllConfigs rawFleet;
   nixosQueries = nixosLib.queries;
 
-  # Rule-based host configuration (gen-derive)
+  # Rule-based host configuration (gen-dispatch)
   inherit (rulesLib)
     fx
     phases
@@ -259,7 +274,7 @@ in
     buildAllHostConfigs
     ;
   inherit
-    genDerive
+    genDispatch
     genSelect
     genBind
     genGraph

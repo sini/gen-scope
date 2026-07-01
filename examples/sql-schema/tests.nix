@@ -1495,13 +1495,15 @@ in
       };
     };
 
-  fixpoint =
+  # Convergence oracle: the byte-identical proof that the loop⊥step split preserves
+  # behavior — gen-scope.circular ∘ gen-dispatch.dispatch reproduces the retired
+  # gen-dispatch.fixpoint exactly (web servers enriched with has-nginx, then the
+  # nginx-monitoring rule fires on the enriched context).
+  convergence =
     let
       configs = sql.hostConfigs;
     in
     {
-      # Fixpoint convergence: web servers get enriched with has-nginx,
-      # then nginx-monitoring rule fires on the enriched context
       test-web-has-nginx-monitoring = {
         expr = configs.web-1.services.prometheus.exporters.nginx.enable or false;
         expected = true;
@@ -1582,7 +1584,7 @@ in
   # ─── Cross-library bridge demos ─────────────────────────────────
   # Showcases all 8 gen-* libraries in cross-library pipeline queries:
   #   gen-algebra, gen-schema, gen-scope, gen-graph,
-  #   gen-select, gen-derive, gen-bind, nixpkgs lib
+  #   gen-select, gen-dispatch, gen-bind, nixpkgs lib
 
   bridge =
     let
@@ -1614,12 +1616,12 @@ in
         ];
       };
 
-      # Pipeline 2: gen-select selector → gen-derive dispatch → action
+      # Pipeline 2: gen-select selector → gen-dispatch dispatch → action
       test-selector-derive-dispatch = {
         expr =
           let
-            inherit (sql.genDerive) mkRule dispatch entryAnywhere;
-            match = sql.genDerive.adapters.select.mkMatch sel;
+            inherit (sql.genDispatch) mkRule dispatch;
+            match = sql.genDispatch.adapters.select.mkMatch sel;
             testRule = mkRule {
               condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ]));
               produce = _id: _ctx: [
@@ -1643,9 +1645,7 @@ in
               context = serverCtx;
               inherit match;
               classify = _: "default";
-              phases = {
-                default = entryAnywhere { };
-              };
+              phaseOrder = [ "default" ];
             };
           in
           builtins.length (result.actions.default or [ ]) > 0;

@@ -1,12 +1,12 @@
 {
-  description = "Infrastructure schema demo — all 8 gen libraries: schema, scope, graph, select, derive, bind, algebra";
+  description = "Infrastructure schema demo — all 8 gen libraries: schema, scope, graph, select, dispatch, bind, algebra";
   inputs = {
     gen-scope.url = "github:sini/gen-scope";
     gen-schema.url = "github:sini/gen-schema";
     gen-graph.url = "github:sini/gen-graph";
     gen-algebra.url = "github:sini/gen-algebra";
     gen-select.url = "github:sini/gen-select";
-    gen-derive.url = "github:sini/gen-derive";
+    gen-dispatch.url = "github:sini/gen-dispatch";
     gen-bind.url = "github:sini/gen-bind";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
@@ -17,7 +17,7 @@
       gen-graph,
       gen-algebra,
       gen-select,
-      gen-derive,
+      gen-dispatch,
       gen-bind,
       nixpkgs,
       ...
@@ -27,7 +27,7 @@
       genScope = gen-scope.lib;
       genAlgebra = gen-algebra { inherit lib; };
       genSelect = gen-select.lib;
-      genDerive = gen-derive.lib;
+      genDispatch = gen-dispatch.lib;
       genBind = gen-bind.lib;
       genSchema = import "${gen-schema}/nix/lib" {
         inherit lib;
@@ -35,14 +35,15 @@
           gen = genAlgebra;
         };
       };
-      genGraph = gen-graph { inherit lib; };
+      genGraph = gen-graph.lib;
       sql = import ./lib {
         inherit
           lib
           genSchema
+          genScope
           genGraph
           genSelect
-          genDerive
+          genDispatch
           genBind
           ;
       };
