@@ -1,6 +1,11 @@
 { lib, genScope, ... }:
 let
-  inherit (genScope) query queryAll ambiguous;
+  inherit (genScope)
+    query
+    queryAll
+    queryReverse
+    ambiguous
+    ;
 
   # Graph: a imports b, b imports c. Parent: a → root.
   roots = genScope.buildNodes {
@@ -91,6 +96,44 @@ let
       };
     };
   };
+
+  # Reverse (neededBy): b and c import a; d imports b.
+  revRoots = genScope.buildNodes {
+    parentGraph = genScope.empty;
+    importGraph = genScope.overlays [
+      (genScope.edge "b" "a")
+      (genScope.edge "c" "a")
+      (genScope.edge "d" "b")
+    ];
+    decls = {
+      a = { };
+      b = {
+        tag = "B";
+      };
+      c = {
+        tag = "C";
+      };
+      d = {
+        tag = "D";
+      };
+    };
+    types = { };
+  };
+
+  revResult = genScope.eval {
+    roots = revRoots;
+    attributes = {
+      children = self: id: { };
+      imports = self: id: (self.node id).decls.__edges.I or [ ];
+      needed-by = queryReverse {
+        dataFilter = node: node.decls.tag or null;
+      };
+      needed-by-trans = queryReverse {
+        dataFilter = node: node.decls.tag or null;
+        transitive = true;
+      };
+    };
+  };
 in
 {
   flake.tests."query" = {
@@ -136,6 +179,31 @@ in
     test-ambiguity-detected = {
       expr = ambResult.get "x" "is-ambiguous";
       expected = true;
+    };
+
+    # queryReverse (neededBy): a is imported by b and c (direct reverse gather)
+    test-queryReverse-direct-importers = {
+      expr = builtins.sort builtins.lessThan (revResult.get "a" "needed-by");
+      expected = [
+        "B"
+        "C"
+      ];
+    };
+
+    # transitive: b,c import a; d imports b -> {B,C,D}
+    test-queryReverse-transitive = {
+      expr = builtins.sort builtins.lessThan (revResult.get "a" "needed-by-trans");
+      expected = [
+        "B"
+        "C"
+        "D"
+      ];
+    };
+
+    # a leaf that nobody imports has an empty reverse set
+    test-queryReverse-no-importers = {
+      expr = revResult.get "d" "needed-by";
+      expected = [ ];
     };
 
     test-ambiguity-not-when-single = {

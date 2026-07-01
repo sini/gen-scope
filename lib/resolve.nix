@@ -158,6 +158,44 @@ let
     in
     (prelude.optional (local != null) local) ++ importResults ++ parentResults;
 
+  # Reverse reference attribute — `neededBy` (Hedin & Magnusson 2003, inter-type
+  # declarations): gather `dataFilter` over every node that IMPORTS `id` (the reverse of
+  # the `includes`/imports relation). A node does not know its importers locally, so this
+  # forces the full node set via `allNodes` (Tier 2, like `collect`). Gather-all, no
+  # shadowing; DIRECT importers by default — set `transitive = true` to walk the
+  # reverse-import closure. Dual of `queryAll` (which walks imports forward).
+  queryReverse =
+    {
+      dataFilter,
+      transitive ? false,
+      _seen ? { },
+    }:
+    self: id:
+    let
+      allIds = builtins.attrNames self.allNodes;
+      importersOf = nid: builtins.filter (other: builtins.elem nid (self.get other "imports")) allIds;
+      collectFrom =
+        seen: importerId:
+        let
+          v = dataFilter (self.node importerId);
+          direct = prelude.optional (v != null) v;
+          trans =
+            if transitive then
+              let
+                nextSeen = seen // {
+                  ${importerId} = true;
+                };
+                nextUnseen = builtins.filter (i: !(nextSeen ? ${i})) (importersOf importerId);
+              in
+              prelude.concatMap (collectFrom nextSeen) nextUnseen
+            else
+              [ ];
+        in
+        direct ++ trans;
+      directImporters = builtins.filter (i: !(_seen ? ${i})) (importersOf id);
+    in
+    prelude.concatMap (collectFrom (_seen // { ${id} = true; })) directImporters;
+
   # Ambiguity detection (van Antwerpen §2.3).
   ambiguous =
     args: self: id:
@@ -388,6 +426,7 @@ in
     resolve
     query
     queryAll
+    queryReverse
     ambiguous
     visibleFrom
     inherit'
