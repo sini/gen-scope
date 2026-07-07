@@ -1644,7 +1644,7 @@ in
               context = serverCtx;
               inherit match;
               classify = _: "default";
-              phaseOrder = [ "default" ];
+              groupOrder = [ "default" ];
             };
           in
           builtins.length (result.actions.default or [ ]) > 0;

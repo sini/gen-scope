@@ -1,6 +1,6 @@
 # Infrastructure Schema Demo
 
-Flagship integration demo for the [gen ecosystem](https://github.com/sini/gen): all 8 libraries composing to model, validate, query, dispatch, bind, and graph a multi-datacenter infrastructure fleet. A SQL engine queries live data. A rule engine dispatches NixOS configuration via a loop⊥step split (gen-scope.circular convergence loop driving gen-dispatch steps over gen-graph phase ordering). A DDL generator produces migration-ordered SQL. Cross-model synthesis computes ACL permissions and network reachability.
+Flagship integration demo for the [gen ecosystem](https://github.com/sini/gen): all 8 libraries composing to model, validate, query, dispatch, bind, and graph a multi-datacenter infrastructure fleet. A SQL engine queries live data. A rule engine dispatches NixOS configuration via a loop⊥step split (gen-scope.circular convergence loop driving gen-dispatch steps over gen-graph group ordering). A DDL generator produces migration-ordered SQL. Cross-model synthesis computes ACL permissions and network reachability.
 
 This is the SQL counterpart of the [nest-traits](../nest-traits/) CSS selector demo. Where nest uses CSS selectors to query a DOM, this demo uses SQL queries to query an infrastructure graph.
 
@@ -11,9 +11,9 @@ This is the SQL counterpart of the [nest-traits](../nest-traits/) CSS selector d
 | [gen-algebra](https://github.com/sini/gen-algebra) | Identity hashing, validators, ref types for schema internals |
 | [gen-schema](https://github.com/sini/gen-schema) | 21 kinds with parent topology, FK refs, refinement contracts, row-polymorphic validators |
 | [gen-scope](https://github.com/sini/gen-scope) | `buildNodes` for kind/instance graph construction; `circular` Kleene-ascent convergence loop for rule dispatch |
-| [gen-graph](https://github.com/sini/gen-graph) | Reachability, cycle detection, migration ordering, impact analysis, ACL transitive walks; `phaseOrder` for dispatch phase ordering |
+| [gen-graph](https://github.com/sini/gen-graph) | Reachability, cycle detection, migration ordering, impact analysis, ACL transitive walks; `phaseOrder` for dispatch group ordering |
 | [gen-select](https://github.com/sini/gen-select) | WHERE clause compilation: SQL AST nodes become compositional selectors (`and`, `when`, `star`) |
-| [gen-dispatch](https://github.com/sini/gen-dispatch) | Rule dispatch STEP: `mkRule` with selector conditions, phased actions, `dispatchStep`/`dispatchInit` to pair with the convergence loop |
+| [gen-dispatch](https://github.com/sini/gen-dispatch) | Rule dispatch STEP (rule evaluation only): `mkRule` with selector conditions, grouped actions; a pure `dispatch` the convergence loop iterates by threading domain state |
 | [gen-bind](https://github.com/sini/gen-bind) | NixOS module wrapping with contracts, provenance, and signature introspection |
 | nixpkgs `lib` | `evalModules` for schema evaluation, general utilities |
 
@@ -35,9 +35,9 @@ gen-schema: evalModules validates refs, refinements, row validators
   |       |       `sel.and`, `sel.when`, `sel.star` compose predicates
   |       |       `sel.matches` evaluates against row context
   |       |
-  |       +--> gen-dispatch: mkRule + dispatchStep, gen-scope.circular loop, gen-graph.phaseOrder
+  |       +--> gen-dispatch: mkRule + one-shot dispatch, gen-scope.circular loop, gen-graph.phaseOrder
   |               condition = gen-select selector
-  |               produce = phased action list (enrich | nixos)
+  |               produce = grouped action list (enrich | nixos)
   |               convergence loop: enrich actions feed back into context
   |
   +--> gen-bind: wrap server module with contracts + provenance
@@ -117,9 +117,9 @@ sql.query "SELECT hostname, cores FROM servers WHERE cores > 4 AND ram_gb >= 16"
 
 ## Rule Dispatch
 
-Rules use gen-dispatch's `mkRule` with gen-select selectors as conditions. Phase ordering comes from `gen-graph.phaseOrder`; under multi-phase dispatch every rule declares its `phase`. Two action phases:
+Rules use gen-dispatch's `mkRule` with gen-select selectors as conditions. Group ordering comes from `gen-graph.phaseOrder` (consumed as `groupOrder`); under multi-group dispatch every rule declares its `group`. Two action groups:
 
-| Phase | Actions | Purpose |
+| Group | Actions | Purpose |
 |---|---|---|
 | `structural` | `enrich` | Feed data back into context (the loop converges) |
 | `config` | `nixos` | Collect NixOS module fragments |
@@ -135,7 +135,7 @@ genDispatch.mkRule {
 
 ### Convergence Loop
 
-Pass 1 enriches web servers with `has-nginx = true`. Pass 2 fires only on enriched context, adding nginx monitoring. `gen-scope.circular` drives repeated `gen-dispatch.dispatch` passes (via `dispatchStep`/`dispatchInit`), iterating to a fixpoint by Kleene ascent until no new rules fire.
+Pass 1 enriches web servers with `has-nginx = true`. Pass 2 fires only on enriched context, adding nginx monitoring. `gen-dispatch.dispatch` is a pure step, so `gen-scope.circular` iterates it by threading the plain domain state (the accessor context): each pass is one one-shot dispatch whose output context is the next iterate, converging by Kleene ascent when the server's data row stabilizes. The NixOS actions are then read off the converged context by one post-convergence dispatch — a function of the fixpoint, not the iteration path (recompute-at-fixpoint = confluence).
 
 ```nix
 # Pass 1: enrichment

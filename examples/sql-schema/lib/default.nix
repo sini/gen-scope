@@ -118,7 +118,7 @@ let
       condition = sel.star;
       produce = _id: _ctx: [ (rulesLib.fx.nixos { services.openssh.enable = true; }) ];
       identity = "ssh-everywhere";
-      phase = "config";
+      group = "config";
     })
 
     # Web-tagged servers get nginx
@@ -126,7 +126,7 @@ let
       condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ]));
       produce = _id: _ctx: [ (rulesLib.fx.nixos { services.nginx.enable = true; }) ];
       identity = "web-nginx";
-      phase = "config";
+      group = "config";
     })
 
     # Database-tagged servers get postgresql
@@ -134,7 +134,7 @@ let
       condition = sel.when (_id: ctx: builtins.elem "database" ((ctx.data _id).tags or [ ]));
       produce = _id: _ctx: [ (rulesLib.fx.nixos { services.postgresql.enable = true; }) ];
       identity = "db-postgresql";
-      phase = "config";
+      group = "config";
     })
 
     # ACME certs: servers with exposed port 443
@@ -148,7 +148,7 @@ let
       );
       produce = _id: _ctx: [ (rulesLib.fx.nixos { security.acme.acceptTerms = true; }) ];
       identity = "acme-certs";
-      phase = "config";
+      group = "config";
     })
 
     # Admin-role users on server get sudo
@@ -164,7 +164,7 @@ let
       );
       produce = _id: _ctx: [ (rulesLib.fx.nixos { security.sudo.enable = true; }) ];
       identity = "admin-sudo";
-      phase = "config";
+      group = "config";
     })
 
     # Prod servers get monitoring
@@ -174,7 +174,7 @@ let
         (rulesLib.fx.nixos { services.prometheus.exporters.node.enable = true; })
       ];
       identity = "prod-monitoring";
-      phase = "config";
+      group = "config";
     })
 
     # --- Fixpoint convergence demo ---
@@ -188,7 +188,7 @@ let
         })
       ];
       identity = "nginx-enrichment";
-      phase = "structural";
+      group = "structural";
     })
 
     # Pass 2: fires only after enrichment adds has-nginx to context
@@ -198,7 +198,7 @@ let
         (rulesLib.fx.nixos { services.prometheus.exporters.nginx.enable = true; })
       ];
       identity = "nginx-monitoring";
-      phase = "config";
+      group = "config";
     })
   ];
 
