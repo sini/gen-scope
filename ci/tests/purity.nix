@@ -5,7 +5,7 @@
 #
 # Scope: lib/**.nix + the root flake.nix + default.nix (the library + its flake). NOT ci/ —
 # the test harness legitimately uses nixpkgs.lib (including, here, to do this scan).
-{ lib, ... }:
+{ genPrelude, lib, ... }:
 let
   libDir = ../../lib;
 
@@ -46,7 +46,8 @@ let
   ];
 
   violations = lib.concatMap (
-    src: map (tok: "${src.name}: '${tok}'") (lib.filter (tok: lib.hasInfix tok src.code) forbidden)
+    src:
+    map (tok: "${src.name}: '${tok}'") (lib.filter (tok: genPrelude.hasInfix tok src.code) forbidden)
   ) sources;
 in
 {
