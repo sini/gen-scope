@@ -97,7 +97,7 @@ Nix attrset VALUES are lazy but KEYS are eager. Function application is never me
 | Children | Synthesized nodes produced by the `children` attribute |
 | Derived Children | Synthesized nodes from `derived-children` (can read sibling attrs) |
 | Attributes | Computed values on nodes — demand-driven, memoized via `_eval` |
-| Combinators | Attribute constructors: `inherit'`, `circular`, `paramAttr`, `collectionAttr`, `query` |
+| Combinators | Attribute constructors: `inherit'`, `inheritAll`, `inheritSet`, `circular`, `paramAttr`, `collectionAttr`, `query` |
 | Tier 1 | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth) |
 | Tier 2 | Materialization: `self.allNodes` — O(n), forces full tree |
 
@@ -359,7 +359,15 @@ Walks parent chain until `resolve node` returns non-null. Cycle-safe via `_visit
 inheritAll { extract; combine ? a: b: a ++ b; } self id
 ```
 
-Accumulates values along entire parent chain.
+Accumulates values along entire parent chain (ordered-list discipline — keeps duplicates, order-dependent).
+
+#### `inheritSet`
+
+```nix
+inheritSet { extract; eq ? a: b: a == b; } self id
+```
+
+Set-discipline sibling of `inheritAll`: a node's value = its own contribution ∪ every ancestor's, walking up the P-edge parent chain, **deduplicated** (`eq`, default `==`). Idempotent union — membership is the semantics, order/multiplicity carry none — so a value several ancestors contribute appears once and the set stays bounded along a deep chain. Use for an inherited control-fact set (e.g. suppressed-policy names) that a consumer tests by membership; use `inheritAll` when order and duplicates matter. Delegates the (cycle-safe, demand-driven) parent walk to `inheritAll`.
 
 #### `circular`
 
@@ -486,7 +494,7 @@ cd ci && just ci eval                       # run one suite
 cd ci && just ci eval.test-basic-root-attribute  # run one test
 ```
 
-Requires nix-unit. **167 tests across 20 suites** (13 test files): `eval`, `eval-debug`, `eval-warm`, `build-nodes`, `graph`, `hoag`, `circular`, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `recorded-deps`, and `purity`. The `purity` suite asserts the evaluator never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant.
+Requires nix-unit. **174 tests across 20 suites** (13 test files): `eval`, `eval-debug`, `eval-warm`, `build-nodes`, `graph`, `hoag`, `circular`, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `recorded-deps`, and `purity`. The `purity` suite asserts the evaluator never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant.
 
 ## Theoretical Foundations
 

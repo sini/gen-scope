@@ -260,6 +260,39 @@ let
       in
       combine localResults parentResults;
 
+  # Inherited SET accumulator: the set-discipline sibling of `inheritAll`. A node's
+  # value = its own contribution ∪ every ancestor's, walking UP the P-edge parent chain,
+  # deduplicated. Where `inheritAll` is an ORDERED-LIST discipline (`combine = ++`,
+  # keeps duplicates and depends on traversal order), `inheritSet` is a SET discipline:
+  # an idempotent union, so a value contributed by several ancestors appears once and
+  # the accumulated set stays bounded by the DISTINCT contributions along a deep chain
+  # (a control-fact set — e.g. suppressed-policy names — tested by membership, where
+  # order and multiplicity carry no meaning). This is the idempotent-`combine` case the
+  # collection-attribute note distinguishes (Sloane 2010 §7; Van Wyk 2010 fold
+  # operators): a semilattice merge whose result is order-independent, in contrast to
+  # the ordered-list `++`. Nearest-first order is retained for a deterministic
+  # rendering, but membership is the semantics.
+  #
+  # Delegates the parent walk (and thus cycle-safety) to `inheritAll`, then folds out
+  # duplicates by `eq` (default structural `==`, matching the optional-`eq` idiom of
+  # `circular`/`subtypeOf`). Demand-driven: only the queried node's parent chain is
+  # forced. Extract contract is `inheritAll`'s: `node -> [value] | value | null`.
+  #
+  # A typed inherited-attribute channel for a control fact: a consumer rides a
+  # first-class `suppressedPolicies :: [Name]` attribute (self ∪ ancestors) rather than
+  # smuggling the set as a reserved decls key through the generic context inheritance.
+  inheritSet =
+    {
+      extract,
+      eq ? (a: b: a == b),
+      _visited ? { },
+    }:
+    self: id:
+    let
+      all = inheritAll { inherit extract _visited; } self id;
+    in
+    builtins.foldl' (acc: x: if builtins.any (y: eq y x) acc then acc else acc ++ [ x ]) [ ] all;
+
   # Parameterized attribute (Sloane 2010 §3, JastAdd).
   paramAttr =
     f: self: id: param:
@@ -431,6 +464,7 @@ in
     visibleFrom
     inherit'
     inheritAll
+    inheritSet
     paramAttr
     circular
     collectionAttr
