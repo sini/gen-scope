@@ -164,6 +164,32 @@ let
   # forces the full node set via `allNodes` (Tier 2, like `collect`). Gather-all, no
   # shadowing; DIRECT importers by default — set `transitive = true` to walk the
   # reverse-import closure. Dual of `queryAll` (which walks imports forward).
+  #
+  # ORDER — reverse-walk DISCOVERY order. The result is emitted in the order the reverse
+  # walk reaches its contributors: a pre-order depth-first traversal of the reverse-import
+  # relation rooted at `id`, in which a node's importers are enumerated in MATERIALIZATION
+  # order (`self.allNodeIds` — root order, then pre-order through children; see eval.nix).
+  # The duality is what fixes the choice. `queryAll`'s answer order is its traversal order,
+  # taken from each node's DECLARED `imports` list; a dual whose order came instead from
+  # the codepoint key order of the node set would not be the dual of a traversal-ordered
+  # read, and the reverse relation carries no declared list of its own to walk. Attribute
+  # grammars answer this the same way: a reverse reference attribute is a survey of the
+  # tree, and its contributions combine in a traversal order of the tree (Hedin & Magnusson
+  # 2003; Sloane 2010 §7 collection attributes).
+  #
+  # This library does NOT sort and does NOT deduplicate the answer. A node reachable along
+  # two reverse paths contributes twice, because a reverse gather counts contributions. A
+  # caller that needs a stable total order regardless of walk shape — or a set — sorts or
+  # deduplicates at its own call site and says so there.
+  #
+  # Where the tree settles no order, the tie-break is `allNodeIds`' and is declared with it:
+  # root and sibling ties break on `attrNames`, i.e. BYTEWISE CODEPOINT order, and a
+  # `derived-children` node interleaves with its `children` siblings under the same rule.
+  # That tie-break is a residue, not a law of attrsets — the algebraic graph layer carries a
+  # declaration-ordered vertex list and `lib/build-nodes.nix` collapses it through
+  # `listToAttrs`/`attrNames` before `eval` is handed `roots`. On a FLAT graph (every node a
+  # root, no children) the walk therefore coincides with codepoint order; on a nested one it
+  # does not, and subtree contiguity is what the reader sees.
   queryReverse =
     {
       dataFilter,
@@ -172,7 +198,7 @@ let
     }:
     self: id:
     let
-      allIds = builtins.attrNames self.allNodes;
+      allIds = self.allNodeIds;
       importersOf = nid: builtins.filter (other: builtins.elem nid (self.get other "imports")) allIds;
       collectFrom =
         seen: importerId:

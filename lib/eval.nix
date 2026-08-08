@@ -96,6 +96,11 @@ let
             );
           in
           if found != null then found else throw "gen-scope: node '${id}' not reachable from roots";
+
+        # The materialization walk itself, before it is collapsed into an attrset. Both
+        # `allNodes` and `allNodeIds` are projections of this ONE list, so a consumer that
+        # wants the node set AND its order pays for a single walk.
+        walkEntries = prelude.concatMap self._walkFrom (builtins.attrNames roots);
       in
       {
         node = resolveNode;
@@ -134,7 +139,63 @@ let
 
         # Full tree materialization. Forces all children attributes recursively.
         # O(n) — each node computed once. Use for gen-graph global ops, diagrams.
-        allNodes = prelude.listToAttrs (prelude.concatMap self._walkFrom (builtins.attrNames roots));
+        # An attrset is a SET: `attrNames` on it answers in bytewise codepoint order, and the
+        # order the walk found the nodes in is not recoverable from this value. Consumers
+        # that need that order read `allNodeIds`.
+        allNodes = prelude.listToAttrs walkEntries;
+
+        # The SAME node set as `allNodes`, as an ORDERED list of ids in MATERIALIZATION
+        # order: root order, then pre-order depth-first through `children` /
+        # `derived-children`, so a subtree is contiguous and a parent precedes its
+        # descendants. This is the survey order an attribute-grammar collection or reverse
+        # reference attribute is defined over (Hedin & Magnusson 2003 inter-type
+        # declarations; Sloane 2010 §7 collection attributes) — contributions combine in a
+        # traversal order of the tree, not in a codepoint order of node names.
+        #
+        # Two tie-breaks, declared because a declared order is the whole point:
+        #
+        # 1. Root and sibling ties break on `attrNames`, which is BYTEWISE CODEPOINT order,
+        #    not dictionary order — `attrNames { z; A; a; _b; "1"; }` is
+        #    `[ "1" "A" "_b" "a" "z" ]`, uppercase before underscore before lowercase. This
+        #    is NOT because an attrset "carries no order". The algebraic graph layer carries
+        #    a declaration-ordered vertex LIST (`lib/graph.nix`, where `overlay` and
+        #    `connect` concatenate), and `lib/build-nodes.nix` collapses that list through
+        #    `listToAttrs` and back out through `attrNames` — the same construction this
+        #    walk exists to stop doing — so `eval` receives `roots` already set-shaped and
+        #    the declared order is gone before anything here runs. The codepoint tie-break
+        #    is that collapse's residue. Recovering the declared order is a change to the
+        #    constructor, not to this walk.
+        #
+        # 2. A `derived-children` node INTERLEAVES with its `children` siblings rather than
+        #    following them: `_walkFrom` descends `children // derived` as ONE attrset, so a
+        #    derived id sorts into the sibling run under the same codepoint rule and nothing
+        #    in this list marks it as derived.
+        #
+        # Repeats are dropped FIRST-OCCURRENCE-WINS, the same rule `listToAttrs` applies to
+        # `allNodes`, so `allNodeIds` is exactly `attrNames allNodes` as a set. A node
+        # reached both as a root and as another root's child is common (`buildNodes` makes
+        # every vertex a root), so the walk really does repeat. The dedup is index-based —
+        # one `listToAttrs` recording first positions, one pass reading them back — because
+        # a fold carrying a `seen` attrset copies that attrset per node (quadratic) and
+        # recurses once per node (Nix's call-depth ceiling), and this is an O(n) surface.
+        allNodeIds =
+          let
+            names = map (e: e.name) walkEntries;
+            n = builtins.length names;
+            firstAt = prelude.listToAttrs (
+              prelude.genList (i: {
+                name = builtins.elemAt names i;
+                value = i;
+              }) n
+            );
+          in
+          prelude.concatMap (
+            i:
+            let
+              nodeId = builtins.elemAt names i;
+            in
+            prelude.optional (firstAt.${nodeId} == i) nodeId
+          ) (prelude.genList (i: i) n);
 
         # Selective materialization: forces only nodes matching a predicate.
         # Predicate receives structural node data. Descends into ALL children
@@ -227,6 +288,8 @@ let
             )) id;
 
         allNodes = throw "gen-scope: evalDebug does not support allNodes (use eval for materialization)";
+
+        allNodeIds = throw "gen-scope: evalDebug does not support allNodeIds (use eval for materialization)";
       };
     in
     mkSelf { } [ ];

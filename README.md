@@ -230,18 +230,30 @@ eval {
 }
 ```
 
-Returns `{ node, get, allNodes, allNodesWhere, subtreeOf, nodesOfType }`:
+Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfType }`:
 
 | Function | Cost | Description |
 |----------|------|-------------|
 | `result.node id` | O(1) root, O(depth) synth | Resolve node structural data |
 | `result.get id attrName` | O(1) amortized | Demand-driven attribute access (memoized) |
 | `result.allNodes` | O(n) | Tier 2: flat map of all reachable nodes |
+| `result.allNodeIds` | O(n) | Tier 2: the same node set as an **ordered** id list — see [Materialization order](#materialization-order) |
 | `result.allNodesWhere pred` | O(n) | Tier 2: selective materialization filtered by predicate on node data |
 | `result.subtreeOf rootId` | O(subtree) | Tier 2: materialize only the subtree rooted at a given node |
 | `result.nodesOfType type` | O(n) | Tier 2: all nodes matching a given type string |
 
 **Special attributes:** `children` and `derived-children` are auto-wrapped — their results are node attrsets where each child receives a co-located `_eval` cache.
+
+#### Materialization order
+
+`allNodes` is an attrset, and an attrset is a set: `builtins.attrNames` on it answers in bytewise codepoint order, and the order the walk found the nodes in is not recoverable from that value. `allNodeIds` is the same node set with that order kept:
+
+- **root order, then pre-order depth-first** through `children` / `derived-children`, so a subtree is contiguous and a parent precedes its descendants;
+- **root and sibling tie-break — bytewise codepoint order,** which is `attrNames`' order and not dictionary order: `attrNames { z; A; a; _b; "1"; }` is `[ "1" "A" "_b" "a" "z" ]`, uppercase before underscore before lowercase. This is **not** because an attrset "carries no order". The algebraic graph layer carries a declaration-ordered vertex *list* (`lib/graph.nix` — `overlay` and `connect` concatenate), and `lib/build-nodes.nix` collapses it through `listToAttrs` and back out through `attrNames`, the same construction `allNodeIds` exists to stop doing, so `eval` is handed `roots` already set-shaped. The codepoint tie-break is that collapse's residue; recovering the declared order is a change to the constructor, not to this walk. On a flat graph — every node a root with no children, which is what `buildNodes` alone produces — the walk order therefore *is* the codepoint order;
+- **`derived-children` interleave:** a derived node does **not** follow its `children` siblings. `_walkFrom` descends `children // derived` as one attrset, so a derived id sorts *into* the sibling run under the same codepoint rule, and nothing in the list marks it as derived. Measured on a root with children `b`, `z` and derived child `aa`: `allNodeIds` is `[ "r" "aa" "b" "z" ]`;
+- **repeats dropped first-occurrence-wins**, the same rule `listToAttrs` applies to `allNodes`, so `sort lessThan result.allNodeIds == attrNames result.allNodes`. A node reached both as a root and as another root's child is the ordinary case, so the walk really does repeat.
+
+This is the survey order an attribute-grammar collection or reverse reference attribute is defined over (Hedin & Magnusson 2003; Sloane 2010 §7): contributions combine in a traversal order of the tree, not in a codepoint order of node names. `queryReverse` reads it for exactly that reason.
 
 ### `evalDebug`
 
@@ -426,6 +438,10 @@ queryReverse { dataFilter; transitive ? false; } self id   # → [value]
 
 Reverse reference attribute — the dual of `queryAll`. Where `queryAll` walks import edges **forward** (the scopes `id` imports), `queryReverse` gathers `dataFilter` over every node that **imports** `id` (the reverse of the `imports` relation — a `neededBy`-style query, Hedin & Magnusson 2003 inter-type declarations). A node cannot see its importers locally, so this forces the full node set via `allNodes` (Tier 2, like `collect`). Gather-all, no shadowing; **direct** importers by default — set `transitive = true` to walk the reverse-import closure (cycle-safe via a seen-set).
 
+**Answer order — reverse-walk discovery order.** The result is emitted in the order the reverse walk reaches its contributors: a pre-order depth-first traversal of the reverse-import relation rooted at `id`, in which a node's importers are enumerated in [materialization order](#materialization-order) (`allNodeIds`), not in the codepoint key order of `attrNames allNodes`. The duality fixes the choice — `queryAll`'s answer order is its traversal order, taken from each node's declared `imports` list, and the reverse relation carries no declared list of its own to walk, so the tree's own traversal supplies it (Hedin & Magnusson 2003; Sloane 2010 §7 collection attributes).
+
+This library **does not sort and does not deduplicate** the answer. A node reachable along two reverse paths contributes twice, because a reverse gather counts contributions. A caller that needs a stable total order regardless of walk shape — or a set — sorts or deduplicates at its own call site and says so there.
+
 ```nix
 # Which nodes depend on "lib:core"?
 dependents = engine.queryReverse {
@@ -482,6 +498,7 @@ Thin wrappers over `self.node` and `self.get`:
 | `self.node synthId` (with parseParent) | O(depth) | Via parent's memoized children |
 | `self.node synthId` (generic fallback) | O(n) | Via memoized children along path |
 | `self.allNodes` | O(n) | Each node computed once |
+| `self.allNodeIds` | O(n) | Shares `allNodes`' walk — asking for both costs one walk |
 
 **`parseParent` is mandatory at scale.** Without it, node resolution walks from ALL roots per unknown node. For 500 roots x 1500 synthesized nodes = 750,000 root checks. With `parseParent`: 1500 x O(1) = 1500.
 

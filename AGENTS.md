@@ -64,11 +64,20 @@ Vertices are collected from every edge graph plus the `decls` and `types` key se
 | Export | Signature |
 |---|---|
 | `eval` | `{ roots, attributes, parseParent ? null, priorResults ? {}, isClean ? (_: false) } -> accessorRecord` |
-| `evalDebug` | `{ roots, attributes, parseParent ? null } -> { node; get; allNodes; }` — shadow-stack cycle tracing; defeats memoization |
+| `evalDebug` | `{ roots, attributes, parseParent ? null } -> { node; get; allNodes; allNodeIds; }` — shadow-stack cycle tracing; defeats memoization. Both materializers are named throws |
 | `evalWarm` | `{ roots, attributes, parseParent ? null, priorResults, isClean } -> accessorRecord` — thin wrapper over `eval`, same code path |
 | `recordedDeps` | `{ declaredEdges } -> id -> [id]` |
 
-`accessorRecord` keys, observed: `node`, `get`, `allNodes`, `allNodesWhere`, `subtreeOf`, `nodesOfType`, `_walkFrom`. Tier 1 is `node id` / `get id attrName`; the rest are Tier 2 materializers that force the tree.
+`accessorRecord` keys, observed: `node`, `get`, `allNodes`, `allNodeIds`, `allNodesWhere`, `subtreeOf`, `nodesOfType`, `_walkFrom`. Tier 1 is `node id` / `get id attrName`; the rest are Tier 2 materializers that force the tree.
+
+`allNodes` and `allNodeIds` are two projections of ONE walk (`walkEntries` in `lib/eval.nix`), so asking for both costs one traversal. They carry the same node set; they differ in what survives of the walk. `allNodes` is an attrset, so `attrNames` on it answers in codepoint order and the traversal order is gone. `allNodeIds` keeps it: **root order, then pre-order depth-first through `children` / `derived-children`** (subtree contiguous, parent before descendants), repeats dropped **first-occurrence-wins** so `sort lessThan allNodeIds == attrNames allNodes`.
+
+Two tie-breaks, both declared:
+
+- **root and sibling ties break on `attrNames` = BYTEWISE CODEPOINT order**, not dictionary order — `attrNames { z; A; a; _b; "1"; }` ⇒ `[ "1" "A" "_b" "a" "z" ]`. ★ This is NOT "attrsets carry no order": `lib/graph.nix` carries a declaration-ordered vertex LIST (`overlay`/`connect` concatenate) and `lib/build-nodes.nix` collapses it `list -> listToAttrs -> attrNames` — the same construction `allNodeIds` exists to stop doing — so `eval` is handed `roots` already set-shaped. Measured: declared `[ "z" "y" "b" "a" ]` ⇒ `buildNodes` keys `[ "a" "b" "y" "z" ]`. The tie-break is that collapse's residue; recovering the declared order is a constructor change, not a walk change. Consequence: on a flat graph (every node a root, no children — what `buildNodes` alone yields) the two orders COINCIDE and a fixture of that shape cannot tell them apart.
+- **a `derived-children` node INTERLEAVES with its `children` siblings**, it does not follow them: `_walkFrom` descends `children // derived` as ONE attrset. Measured, root with children `b`,`z` + derived `aa` ⇒ `allNodeIds` = `[ "r" "aa" "b" "z" ]`. Nothing in the list marks a node as derived.
+
+Tests: `test-allNodeIds-dedups-repeat-visit`, `test-allNodeIds-is-allNodes-key-set` (`ci/tests/eval.nix`).
 
 **Declared-reads surface** (the `readsAttrs` analogue). gen-scope has no `readsAttrs`; `git grep -n readsAttrs` over tracked files ⇒ no hits, and the same predicate hits `gen-resolve/lib` (see negative space). The only declared-reads construct here is `recordedDeps`, whose body is `{ declaredEdges }: id: declaredEdges id`. What it governs, enumerated:
 
@@ -88,7 +97,7 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 | `resolve` | `{ local ? null, imported ? null, inherited ? null, localShadowsImport ? true, importShadowsParent ? true } -> value \| null` |
 | `query` | `{ dataFilter, localShadowsImport ? true, importShadowsParent ? true, transitiveImports ? false } -> self -> id -> value \| null` |
 | `queryAll` | `{ dataFilter, transitiveImports ? false } -> self -> id -> [value]` (no shadowing) |
-| `queryReverse` | `{ dataFilter, transitive ? false } -> self -> id -> [value]` — walks the *reverse* import relation; Tier 2 (forces `allNodes`) |
+| `queryReverse` | `{ dataFilter, transitive ? false } -> self -> id -> [value]` — walks the *reverse* import relation; Tier 2 (forces `allNodes`). Answers in **reverse-walk discovery order**: pre-order DFS over the reverse relation, importers enumerated in `allNodeIds` (materialization) order, NOT `attrNames`. No sort, no dedup — a node on two reverse paths contributes twice |
 | `ambiguous` | `queryAllArgs -> self -> id -> bool` |
 | `visibleFrom` | `dataFilter -> self -> id -> value \| null` |
 | `inherit'` | `{ resolve } -> self -> id -> value \| null` (first non-null up the parent chain) |
@@ -139,6 +148,7 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 | Follow a custom labelled edge | declare an `edges-<label>` attribute, then `followEdge` / `collectByLabel` |
 | Navigate the tree | `parent` / `children` / `ancestors` / `siblings` / `descendants` |
 | Materialize nodes | `result.allNodes` / `allNodesWhere pred` / `subtreeOf id` / `nodesOfType t` |
+| Enumerate nodes in WALK order rather than codepoint order | `result.allNodeIds` (same set as `allNodes`, order kept) |
 
 ## Measured traps
 

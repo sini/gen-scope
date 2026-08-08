@@ -105,5 +105,16 @@ in
       expr = (debugResult.node "a").id;
       expected = "a";
     };
+
+    # evalDebug materializes nothing, so the ordered enumeration refuses BY NAME alongside
+    # `allNodes`. Without the entry a caller would meet an `attribute missing` error that
+    # tryEval cannot catch and that names neither the record nor the reason.
+    test-allNodeIds-refuses = {
+      expr = builtins.tryEval debugResult.allNodeIds;
+      expected = {
+        success = false;
+        value = false;
+      };
+    };
   };
 }

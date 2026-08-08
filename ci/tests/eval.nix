@@ -123,6 +123,30 @@ in
       ];
     };
 
+    # `allNodeIds` is `allNodes`' key set in MATERIALIZATION order. Here the walk reaches
+    # `child` twice — once as a root in its own right, once by descending from `parent` —
+    # and the repeat is dropped first-occurrence-wins, the same rule `listToAttrs` applies
+    # when it builds `allNodes`. `buildNodes` makes every vertex a root, so this repeat is
+    # the ordinary case rather than a contrived one.
+    test-allNodeIds-dedups-repeat-visit = {
+      expr = result.allNodeIds;
+      expected = [
+        "child"
+        "parent"
+      ];
+    };
+
+    # The set invariant that lets a consumer swap one enumeration for the other.
+    test-allNodeIds-is-allNodes-key-set = {
+      expr = builtins.sort builtins.lessThan result.allNodeIds == builtins.attrNames result.allNodes;
+      expected = true;
+    };
+
+    test-single-root-allNodeIds = {
+      expr = singleResult.allNodeIds;
+      expected = [ "solo" ];
+    };
+
     test-single-root-value = {
       expr = singleResult.get "solo" "value";
       expected = 42;
