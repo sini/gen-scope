@@ -4,6 +4,8 @@
 
 Demand-driven higher-order attribute-grammar evaluator over algebraic scope graphs: you supply root node descriptors (`{ id, type, parent, decls }`) and attribute definitions (`self: id: value`), and `eval` returns an accessor record (`node` / `get` / four materializers) whose attributes compute lazily and memoize on an `_eval` cache co-located on each node.
 
+**A SECOND, INDEPENDENT CONCERN LIVES HERE**: the **well-founded engine**, which computes the meaning of a rule program with negation — `mkProgram` in, a three-valued model out, with `UNDEFINED` a named verdict for contested atoms. It shares the substrate and nothing else: no node, no attribute, no scope graph. If a task mentions atoms, rules, negation, strata or a fixpoint over a policy program, it is the engine; if it mentions nodes, attributes or scopes, it is the evaluator.
+
 ## Not this library's job
 
 Quoted text is the owner's own `flake.nix` `description` field, verbatim. Grep counts below are `grep -rEl '<pattern>' --include='*.nix' <dir> | wc -l` — files with a match — run from `/home/sini/Documents/repos/sini`. In the patterns, `\|` is markdown table escaping for the ERE alternation `|`. Rows carrying no grep cite attribution from the sibling description alone: the predicates tried for `gen-dispatch` matched nothing in its own `lib/`, so no absence is claimed against it.
@@ -28,9 +30,9 @@ Quoted text is the owner's own `flake.nix` `description` field, verbatim. Grep c
 
 ## Exports
 
-Entry: `inputs.gen-scope.lib` (flake). Root `default.nix` is a function `{ prelude ? <derived from flake.lock>, ... }` — callable as `import ./gen-scope { }`, which content-addresses gen-prelude out of the pinned lock and needs no `<nixpkgs>`.
+Entry: `inputs.gen-scope.lib` (flake). Root `default.nix` is a function `{ prelude ? <derived from flake.lock>, graph ? <derived from flake.lock>, ... }` — callable as `import ./gen-scope { }`, which content-addresses gen-prelude and gen-graph out of the pinned lock and needs no `<nixpkgs>`.
 
-`lib/default.nix` is one flat merge — `graph // buildNodes // queries // resolve // structural // interface // eval`. All 63 exports sit at top level; there is no nested namespace and no key is shadowed (see traps).
+`lib/default.nix` is one flat merge — `algebraicGraph // buildNodes // queries // resolve // structural // interface // eval // program // leastModel // wellFounded // acceptance // engine`. All 80 exports sit at top level; there is no nested namespace and no key is shadowed (see traps). ★ In that merge `algebraicGraph` is this library's OWN `lib/graph.nix`; the parameter named `graph` is the **gen-graph library**, and the two are different things — root `default.nix` is now `{ prelude ? <derived>, graph ? <derived>, ... }` and both are content-addressed out of the pinned lock.
 
 **Algebraic graph construction** — `lib/graph.nix`. A graph value is `{ vertices = [id]; edges = [{ from; to; }]; }`.
 
@@ -146,6 +148,53 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 
 **Attribute-name contract** (consumed, not exported). `children` and `derived-children` are reserved attribute *names* that the evaluator special-cases; `imports` and `edges-<label>` are the names the resolution combinators read. None of the four is supplied for you — the consumer declares them all in `attributes`.
 
+**The well-founded engine — the program** — `lib/program.nix`
+
+| Export | Signature |
+|---|---|
+| `mkRule` | `{ head, pos ? [], neg ? [] } -> rule` — the pattern refuses an unknown field BY NAME, and that refusal is NOT catchable (see traps) |
+| `mkProgram` | `{ rules } -> { rules; atoms; bodyArity; unaryBodies; dependency; signs; }` |
+
+`atoms` is the Herbrand base, CLOSED (every atom the rules mention, head or not) and in DECLARATION order. `bodyArity` is the greatest **positive** body arity and `unaryBodies` is `bodyArity <= 1` — the routing discriminator, computed once. `dependency` is `{ nodes; edges; }`, the UNSIGNED accessor the partition door is handed; `signs` is `atom -> { positive; negative; }`, the labelled view read beside it, total on every string.
+
+**The least model of a definite program** — `lib/least-model.nix`
+
+| Export | Signature |
+|---|---|
+| `leastModel` | `program -> { derived; converged; work; }` — the DOOR; routes on `armFor` |
+| `leastModelUnary` | same, `genericClosure`; **refuses conjunctive input by name**. `work = { arm = "unary"; }` — no round count, because the done-set is C++-side |
+| `leastModelRounds` | same, round loop; `work = { arm = "conjunctive"; rounds; }` |
+| `armFor` / `armNames` | `program -> "unary" \| "conjunctive"` / the closed enumeration |
+| `forceFields` | `acc -> null` — `seq` over every value in a record; the R-loop forcing discipline, exported so a consumer's own fold can use it |
+
+**The well-founded model** — `lib/well-founded.nix`
+
+| Export | Signature |
+|---|---|
+| `reduct` | `program -> guess -> { atoms; unaryBodies; rules; }` — Gelfond–Lifschitz; the result is DEFINITE |
+| `wellFoundedModel` | `program -> { trueAtoms; undefinedAtoms; falseAtoms; verdict; outerRounds; converged; arm; }` |
+| `verdictNames` | `[ "true" "undefined" "false" ]` — the closed vocabulary |
+
+`verdict` is TOTAL on every string: an atom no rule mentions answers `"false"`, never an absence. Atom lists come back in the program's DECLARATION order, not codepoint order.
+
+**Benchmark acceptance** — `lib/acceptance.nix`
+
+| Export | Signature |
+|---|---|
+| `verifiedDepth` | `{ depth; derivation; fixtures; environment; reDerivationOwedOn; }` — never a bare number |
+| `acceptanceSignal` | `{ baseline, reading } -> { signal; reason; }`; `baseline = null` answers `"unbaselined"` |
+| `signalNames` | `[ "unbaselined" "voided" "fired" "steady" ]` |
+
+**The engine's front door** — `lib/engine.nix`
+
+| Export | Signature |
+|---|---|
+| `solve` | `program -> wellFoundedModel // { condensationDepth; provenance; }` |
+| `provenanceFor` | `depth -> [ entry ]` — empty inside `verifiedDepth.depth`, one entry past it |
+| `foldContributions` | `{ model, contributions, op, init } -> { value; admitted; contested; }` |
+
+`solve` consumes gen-graph's `condensation` door for the depth and **never partitions itself**. The depth is demand-driven: a caller that never reads `provenance` never pays for the condensation.
+
 ## Entry points by task
 
 | Task | Reach for |
@@ -167,6 +216,12 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 | Navigate the tree | `parent` / `children` / `ancestors` / `siblings` / `descendants` |
 | Materialize nodes | `result.allNodes` / `allNodesWhere pred` / `subtreeOf id` / `nodesOfType t` |
 | Enumerate nodes in WALK order rather than codepoint order | `result.allNodeIds` (same set as `allNodes`, order kept) |
+| Give a rule program with negation a meaning | `wellFoundedModel (mkProgram { rules; })` — read `verdict`, which is total |
+| Get the meaning AND the out-of-verified-range warning | `solve (mkProgram { rules; })` — `provenance` is `[ ]` inside the bound |
+| Ask which engine arm a program routes to | `armFor program` (never a mode you pass) |
+| Combine contributions gated on a model | `foldContributions { model; contributions; op; init; }` — declaration order, `contested` named |
+| Write your own round loop over a record accumulator | `prelude.iterateBounded forceFields step init bound` |
+| Compare a fresh acceptance reading against the recorded one | `acceptanceSignal { baseline; reading; }` — it SIGNALS; it executes nothing |
 
 ## Measured traps
 
@@ -195,7 +250,12 @@ Each row verified in this run against `s = import ./. { }`. Shared fixtures: `ro
 | `overlay` does not dedup vertices — dedup is deferred to `buildNodes` | `lib/graph.nix` header comment; `(s.overlay (s.vertex "a") (s.vertex "a")).vertices` ⇒ `[ "a" "a" ]`, while `attrNames (buildNodes { parentGraph = <that>; })` ⇒ `[ "a" ]` |
 | `collectionAttr`'s `traverse` is a string-dispatched enum; an unknown value throws at *use*, not at construction | `collectionAttr` in `lib/resolve.nix`; `traverse = "parents"` ⇒ threw `gen-scope: collectionAttr: unknown traverse 'parents'`. Positive control `traverse = "ancestors"` ⇒ `[ "a" "root" ]` |
 | `collect` / `collectByType` end at `self` — they take **no** `id` argument, unlike every other combinator | `collect` in `lib/resolve.nix`; on a one-node fixture (`roots = { n = …; }`), `s.collect { } (_self: id: [ id ]) <record>` ⇒ `[ "n" ]` — three arguments, not four |
-| The five source modules merge flat with **no** shadowing, so the two name collisions with other concepts are real exports: `resolve` here is the Neron specificity function (unrelated to the sibling library gen-resolve), and `vertices` is the constructor `[id] -> graph` while `g.vertices` is a field | `lib/default.nix` is `graph // buildNodes // queries // resolve // eval`; per-module export counts `{ graph = 21; build-nodes = 1; queries = 9; resolve = 19; eval = 4; }` sum to 54, equal to the merged `attrNames` count — so no key is overwritten |
+| The source modules merge flat with **no** shadowing, so the name collisions with other concepts are real exports: `resolve` here is the Neron specificity function (unrelated to the sibling library gen-resolve), and `vertices` is the constructor `[id] -> graph` while `g.vertices` is a field | `lib/default.nix` merges twelve modules; `nix eval --json .#lib --apply 'builtins.attrNames'` ⇒ 80 names, and the per-module export counts sum to the same figure — so no key is overwritten |
+| ★ A RULE WITH TWO LITERALS CAN STILL BE **UNARY**, and the engine routes it to the closure arm. The discriminator is the greatest **positive** body arity; a negative literal contributes nothing to it | `mkProgram { rules = [ { head="b"; } { head="z"; pos=["b"]; neg=["q"]; } ]; }` ⇒ `bodyArity = 1`, `unaryBodies = true`, `armFor ⇒ "unary"`. Live control in the same suite: adding `{ head="y"; pos=["b" "r"]; }` ⇒ `bodyArity = 2`, `armFor ⇒ "conjunctive"`. Why it is SOUND to compute once: reduction deletes rules and deletes negative literals, and does neither of the two things that could raise the figure. Tests: `engine-program`, `engine-least-model` |
+| ★ `mkRule`'s unknown-field refusal is **NOT CATCHABLE** — an argument-arity error kills the evaluation rather than answering `{ success = false; }`, so no nix-unit cell can host it. The same is true of `eval`'s pattern (row above). And `tryEval` DISCARDS a throw's message, so a refusal's TEXT is unreadable in-language even where the throw itself is catchable | `nix-instantiate --argstr arm refuseUnknownField ./ci/bench/engine-ceiling.nix` ⇒ exit 1, `error: function 'mkRule' called with unexpected argument 'negs'`, `Did you mean neg?`. `--argstr arm refuseConjunctiveOnUnaryArm` ⇒ exit 1, message contains `unary-only`. Both are read off the EXIT CODE; `catchControl` in the same sweep returns `{ success = false; }`, so the catcher is live |
+| ★ **TWO ABORT SIGNATURES, NOT ONE.** An unforced accumulator field chaining through a FUNCTION APPLICATION exhausts `max-call-depth` first; the same field chaining through a bare `+` has no guard in front of it and goes straight to the C stack. A sweep armed for one label reads the other as green | Measured on one loop over one accumulator, differing only in the link and the forcing (`./ci/bench/engine-ceiling.sh`, nix 2.34.8 · max-call-depth 10000 · `ulimit -s` 8192): `unforcedCall` green 9995 → **CALLDEPTH** 9998; `unforcedOperator` green 45000 → **CSTACK** 45500; `forced` (the same loop under `forceFields`) **green at 50000**, past both; `tryUnforced` (the unforced arm inside `tryEval`) **dies** at 50000 |
+| A STRICT READ IS ITSELF A FORCE, but only of the field it reads — so an accumulator whose guard reads one attrset field strictly is force-free on THAT field while every scalar counter beside it still chains. This is how a partial fix arises by construction rather than by omission | The `engine-ceiling.nix` accumulator carries `set` (read strictly by the guard) and `tick` (read by nothing); `set` never chains and `tick` is what aborts. The engine's own alternating fixpoint carries the same shape — `innerConverged` is read by no control flow — which is why `forceFields` derives its forcing from the record rather than from a list of field names |
+| The library now takes **two** inputs, and one of them is a sibling: `graph` is gen-graph's `.lib`. `lib/graph.nix` (this library's algebraic constructors) is a DIFFERENT thing, bound as `algebraicGraph` inside `lib/default.nix` | `flake.nix` inputs are `gen-prelude` + `gen-graph`; `lib/default.nix` takes `{ prelude, graph }`. The engine calls `graph.condensation program.dependency` and reads `.depth`; it partitions nothing itself |
 
 ## Theory
 
@@ -204,18 +264,30 @@ Claimed in `README.md` under "Theoretical Foundations", which labels each source
 **Implements**
 
 - **Vogt et al. (1989), *Higher-order attribute grammars*** — dynamic node synthesis via `children` / `derived-children` as non-terminal attributes (§2.4); `derived-children` extends this with second-stage stratification.
+
 - **Hedin (2000), *Reference attributed grammars*** — import edges as reference attributes; cross-node attribute access through computed scope references.
+
 - **Neron et al. (2015), *A theory of name resolution*** — scope graph construction, the resolution calculus (`query` / `queryAll`), D < I < P specificity ordering (Fig. 2), path well-formedness (§2.4), seen-imports cycle prevention (rule X), shadowing (§5 Def. 1). The partial-function constraint on P (§2.2) is enforced by `buildNodes`.
+
 - **Mokhov (2017), *Algebraic graphs with class*** — all four construction primitives (`empty` / `vertex` / `overlay` / `connect`) and the derived constructors (`star` / `path` / `clique` / `tree` / …) from §2.1–§5.1; `overlay`'s idempotence is what licenses deferring dedup to `buildNodes`.
+
 - **Sloane et al. (2010), *Kiama: AG embedding*** — the `CachedAttribute` pattern realized as the co-located `_eval` cache; `paramAttr` (§3); `circular` fixed-point attributes (§2.2); collection attributes (§7).
+
+- **Van Gelder, Ross & Schlipf (1991), *The well-founded semantics for general logic programs*** — the well-founded partial model computed at the ATOM level, with `UNDEFINED` a named third verdict for contested atoms; total and equal to the perfect model on locally stratified programs.
+
+- **Van Gelder (1993), *The alternating fixpoint of logic programs with negation*** — the construction: `S(J) = lfp T_{P/J}` antimonotone, `S²` monotone, `W⁺ = lfp(S²)` from ∅, `S(W⁺)` the true-or-undefined set.
+
+- **van Emden & Kowalski (1976), *The semantics of predicate logic as a programming language*** — `T_P` and its least fixpoint as the meaning of a definite program; both `leastModel` arms compute it over the reduct.
 
 **Partial**
 
+- **Gelfond & Lifschitz (1988), *The stable model semantics for logic programming*** — the reduct `P/J` is implemented and iterated. Stable-model EXISTENCE, the companion refusal criterion, is **NOT built**: no construction in this library decides it, and containment (well-founded ⊆ every stable model) is not a decision procedure. Stated so a reader does not infer an oracle from the semantics beside it.
+- **Tarjan (1972) / Fleischer, Hendrickson & Pınar (2000)** — CONSUMED, not implemented: the SCC partition and the condensation come from gen-graph's published front door, and the engine reads the reported `depth` and nothing else.
 - **van Antwerpen et al. (2018), *Scopes as types*** — custom edge labels via `edgeGraphs` / `followEdge`, structural subtyping (`subtypeOf`), coarse-grained visibility (boolean shadowing flags). README marks the Statix-style constraint patterns partial: custom labelled edges only, and a single `decls` relation per node.
 
-**Informed by** (README's own label; no result claimed): Hedin & Magnusson (2003) *JastAdd*, for the demand-driven evaluation pattern and the aspect-oriented attribute extension model — the code comment on `queryReverse` cites the same paper's inter-type declarations; Radul & Sussman (2009) *Art of the propagator*, for monotonic convergence in `circular`; Van Wyk et al. (2010) *Silver*, for forwarding and fold operators behind `collectionAttr` / `inheritSet`; Mokhov et al. (2018) *Build systems à la carte*, for demand-driven evaluation as a suspending scheduler (§4.1) — README states gen-scope builds no scheduler, Nix is the scheduler; Acar et al. (2006) *Adaptive functional programming*, for `evalWarm`'s clean-result reuse and `recordedDeps` as the declared read-edge projection of a dynamic dependence graph.
+**Informed by** (README's own label; no result claimed): Apt, Blair & Walker (1988) *Towards a theory of declarative knowledge*, for why the third verdict is needed at all — the stratified semantics admits positive cycles and leaves a cycle through a negative edge without a meaning; Hedin & Magnusson (2003) *JastAdd*, for the demand-driven evaluation pattern and the aspect-oriented attribute extension model — the code comment on `queryReverse` cites the same paper's inter-type declarations; Radul & Sussman (2009) *Art of the propagator*, for monotonic convergence in `circular`; Van Wyk et al. (2010) *Silver*, for forwarding and fold operators behind `collectionAttr` / `inheritSet`; Mokhov et al. (2018) *Build systems à la carte*, for demand-driven evaluation as a suspending scheduler (§4.1) — README states gen-scope builds no scheduler, Nix is the scheduler; Acar et al. (2006) *Adaptive functional programming*, for `evalWarm`'s clean-result reuse and `recordedDeps` as the declared read-edge projection of a dynamic dependence graph.
 
-**Checked invariant**: nixpkgs-lib-freedom (dependency on gen-prelude alone, no `lib.`, no `evalModules` / `mkOption`, no `nixpkgs` input) is enforced by `test-library-source-is-nixpkgs-lib-free` (`ci/tests/purity.nix`) over `lib/**.nix` + root `flake.nix` + `default.nix`, on comment-stripped source.
+**Checked invariant**: nixpkgs-lib-freedom (no `lib.`, no `evalModules` / `mkOption`, no `nixpkgs` input — the dependencies are gen-prelude and gen-graph, both themselves nixpkgs-lib-free) is enforced by `test-library-source-is-nixpkgs-lib-free` (`ci/tests/purity.nix`) over `lib/**.nix` + root `flake.nix` + `default.nix`, on comment-stripped source.
 
 ## Drift check
 
@@ -226,7 +298,7 @@ nix eval --json .#lib --apply 'builtins.attrNames'
 Current output (verbatim):
 
 ```json
-["ambiguous","ancestors","buildNodes","children","childrenIds","circuit","circular","clique","collect","collectByLabel","collectByType","collectImports","collectionAttr","connect","descendants","edge","edges","empty","eval","evalDebug","evalWarm","followEdge","forest","gmap","hasEdge","hasVertex","induce","inherit'","inheritAll","inheritSet","isAncestor","isDescendant","nodesByType","overlay","overlays","paramAttr","parent","path","query","queryAll","queryReverse","recordedDeps","removeEdge","removeVertex","resolve","shadow","siblings","star","subtypeOf","transpose","tree","vertex","vertices","visibleFrom"]
+["acceptanceSignal","ambiguous","ancestors","armFor","armNames","buildNodes","childBearing","children","childrenIds","circuit","circular","clique","coldDecision","collect","collectByLabel","collectByType","collectImports","collectionAttr","connect","decisionFindings","descendants","edge","edgePrefix","edges","empty","eval","evalDebug","evalWarm","facadeNames","foldContributions","followEdge","forceFields","forest","gmap","hasEdge","hasVertex","induce","inherit'","inheritAll","inheritSet","isAncestor","isDescendant","leastModel","leastModelRounds","leastModelUnary","mkDecision","mkFacade","mkProgram","mkRule","nodesByType","overlay","overlays","paramAttr","parent","path","provenanceFor","query","queryAll","queryReverse","recordedDeps","reduct","removeEdge","removeVertex","resolutionalNames","resolve","shadow","siblings","signalNames","solve","star","structural","subtypeOf","transpose","tree","verdictNames","verifiedDepth","vertex","vertices","visibleFrom","wellFoundedModel"]
 ```
 
 **Checks.** Test-runner invocation (from the repo root; CI runs the same command with `working-directory: ci`, `.github/workflows/ci.yml`):

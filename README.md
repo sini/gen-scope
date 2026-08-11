@@ -8,6 +8,8 @@ gen-scope is a **hybrid HOAG/RAG** evaluator: Higher-Order Attribute Grammars (V
 
 gen-scope is generic. It has no knowledge of NixOS, aspects, policies, or system configuration. It provides evaluation machinery; consumers define what to compute.
 
+Beside the evaluator it carries a second, independent concern: **the well-founded engine**, which computes the meaning of a rule program with negation (Van Gelder, Ross & Schlipf 1991) — including the third verdict, `UNDEFINED`, for the contested cycles a stratified semantics leaves without one. See [The well-founded engine](#the-well-founded-engine).
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -27,6 +29,12 @@ gen-scope is generic. It has no knowledge of NixOS, aspects, policies, or system
   - [Algebraic Graph Construction](#algebraic-graph-construction)
   - [Attribute Combinators](#attribute-combinators)
   - [Structural Queries](#structural-queries)
+- [The well-founded engine](#the-well-founded-engine)
+  - [The construction, and the two arms behind the door](#the-construction-and-the-two-arms-behind-the-door)
+  - [Iterative encodings, and the accumulator discipline](#iterative-encodings-and-the-accumulator-discipline)
+  - [Ceilings](#ceilings)
+  - [The partition, the bound, and the warning the result carries](#the-partition-the-bound-and-the-warning-the-result-carries)
+  - [The ordered fold](#the-ordered-fold)
 - [Performance](#performance)
 - [Testing](#testing)
 - [Theoretical Foundations](#theoretical-foundations)
@@ -67,7 +75,9 @@ The tree is not fixed. The `children` and `derived-children` attributes **synthe
 
 ## Usage
 
-gen-scope is **Class B**: nixpkgs-lib-free, depending only on [gen-prelude](https://github.com/sini/gen-prelude) (pure, zero-input). The HOAG evaluator is pure list/attr combinators + builtins — no module system, no `nixpkgs.lib`. The flake exposes a single `.lib` value output.
+gen-scope is **Class B**: nixpkgs-lib-free, depending on [gen-prelude](https://github.com/sini/gen-prelude) (pure, zero-input) and [gen-graph](https://github.com/sini/gen-graph). Both halves are pure list/attr combinators + builtins — no module system, no `nixpkgs.lib`. The flake exposes a single `.lib` value output.
+
+The gen-graph dependency is the **engine's**, not the evaluator's: the well-founded engine consumes that library's one published SCC-partition front door rather than carrying a second partitioner, because reverse reachability and the condensation are its concern.
 
 ```nix
 # flake.nix
@@ -78,7 +88,7 @@ gen-scope is **Class B**: nixpkgs-lib-free, depending only on [gen-prelude](http
     in { /* ... */ };
 }
 
-# Or without flakes (prelude auto-derived from the pinned flake.lock):
+# Or without flakes (both inputs auto-derived from the pinned flake.lock):
 let engine = import ./gen-scope { };
 in { /* ... */ }
 ```
@@ -540,6 +550,144 @@ Thin wrappers over `self.node` and `self.get`:
 | `isDescendant self descendantId id` | `elem` check | Whether `descendantId` is a descendant of `id` |
 | `nodesByType self type` | `self.allNodes` filter | Nodes by type (Tier 2) |
 
+## The well-founded engine
+
+A second concern lives in this library beside the attribute evaluator: an engine that computes the meaning of a **rule program with negation**. It shares the evaluator's substrate and nothing else — no node, no attribute, no scope graph. What it computes is the **well-founded partial model** (Van Gelder, Ross & Schlipf 1991), and the reason it exists is the third value.
+
+```nix
+program = engine.mkProgram {
+  rules = [
+    { head = "t"; }                                    # a fact
+    { head = "u1"; neg = [ "u2" ]; }                   # u1 :- not u2
+    { head = "u2"; neg = [ "u1" ]; }                   # u2 :- not u1
+    { head = "c1"; pos = [ "c2" ]; }                   # c1 :- c2
+    { head = "c2"; pos = [ "c1" ]; }                   # c2 :- c1
+  ];
+};
+model = engine.wellFoundedModel program;
+
+model.trueAtoms       # [ "t" ]         — derived
+model.undefinedAtoms  # [ "u1" "u2" ]   — CONTESTED: a cycle through a negative edge
+model.falseAtoms      # [ "c1" "c2" ]   — UNFOUNDED: a positive cycle with no support
+model.verdict "nothing-mentions-this"   # "false" — total on every string
+```
+
+**Why a third value.** A cycle through a negative edge has no meaning under the stratified semantics — Apt, Blair & Walker 1988 admit positive cycles and leave that shape without one. `UNDEFINED` is what the well-founded model gives it, and it is a **named verdict**, never a silence: `verdict` is total on every string, and an atom no rule mentions comes back `"false"` rather than as an absence the caller has to interpret. On locally stratified programs the model is total and equal to the perfect model, so nothing that already had a meaning acquires a different one.
+
+**Stable-model existence is the refusal oracle, and it is NOT built here.** The engine constructs the well-founded model; deciding whether a program has a stable model is a harder problem and this library supplies no construction for it. Containment (well-founded ⊆ every stable model) is what keeps the pair coherent; it is not a decision procedure. Stated so a reader does not infer an oracle from the semantics it accompanies.
+
+### The construction, and the two arms behind the door
+
+`S(J) = lfp T_{P/J}` over the Gelfond–Lifschitz reduct is antimonotone, so `S²` is monotone; `W⁺ = lfp(S²)` from ∅ is the true set and `S(W⁺)` is the true-or-undefined set. The inner least fixpoint has two constructions and the door routes between them:
+
+| arm | construction | expresses | round count |
+|---|---|---|---|
+| `leastModelUnary` | `builtins.genericClosure` — a C-level worklist, no accumulator, no recursion | **unary bodies only**; refuses conjunctive input by name | not observable (the done-set is C++-side) |
+| `leastModelRounds` | one `T_P` application per round over a flat fold | every program | reported |
+
+```nix
+engine.armFor program        # "unary" | "conjunctive" — computed from the program
+engine.leastModel program    # the door: routes, then delegates
+```
+
+**The routing is a property of the program, never a caller-selected mode.** A mode would let a caller select the engine that cannot express their program. The discriminator is the greatest **positive** body arity, and reading only the positive body is what makes computing it *once* sound: reduction deletes whole rules and deletes negative literals, and does neither of the two things that could raise that number — so a program routed once routes the same way for every reduct taken of it. A rule with one positive and one negative literal is therefore **unary**, which is worth stating because it does not look it.
+
+**The price of conjunctivity is the loss of the closure arm**, and it is measurable: on unary input the two arms agree on the answer while the round loop costs a growing multiple of the closure, and on conjunctive input the closure arm cannot express the program at all.
+
+### Iterative encodings, and the accumulator discipline
+
+Two constructions are excluded outright rather than merely not chosen, because both fail as **aborts** rather than as errors — `tryEval` does not contain either, so no in-language assertion can observe one and no caller can recover.
+
+- **Per-atom recursion.** A self-applying loop costs one evaluator frame per iteration, so its descent depth is its iteration count. Every loop here is flat: a C-level closure or a C-level fold.
+- **A partially-forced round accumulator.** `foldl'` forces its accumulator to weak head normal form — for a record, the record and not its fields — so a field written every round and read in none chains one update thunk per round.
+
+`forceFields` is the answer, and it is derived from the accumulator's **own fields** rather than from a maintained list of them, so a field added later is forced without the discipline being re-applied:
+
+```nix
+engine.forceFields acc   # seq over every value in the record; a partial fix is no fix
+```
+
+**There are TWO abort signatures, and an engine armed for one misses the other.** Where the chain passes through a function application the descent exhausts the evaluator's call-depth guard first; where it is a bare operator there is no guard in front of it at all and it goes straight to the C stack. Measured on this host (nix 2.34.8 · `max-call-depth` 10000 · `ulimit -s` 8192 KB), on one loop over one accumulator at one round count, differing only in whether the forcing is applied:
+
+| arm | boundary | signature |
+|---|---|---|
+| `unforcedCall` — the counter chains through a function application | green 9995, aborts 9998 | `CALLDEPTH` (`max-call-depth exceeded`) |
+| `unforcedOperator` — the counter chains through `+` | green 45000, aborts 45500 | `CSTACK` (`stack overflow`) |
+| `forced` — the same loop under `forceFields` | **green at 50000**, past both | — |
+| `tryUnforced` — the unforced arm wrapped in `tryEval` | **dies** at 50000 | the abort is uncatchable |
+
+Re-run: `./ci/bench/engine-ceiling.sh`. A sweep in which a signature does not fire reports `INVALID` rather than passing: a green row from an evaluation that could not have observed an abort says nothing.
+
+**The round bound is a theorem, not a cap.** `T_P` is monotone and its iteration from ∅ is increasing, so at most one round per atom can be productive and one further round observes that none was. `|atoms| + 1` is the number of steps the recursion would itself have taken. Nothing refuses at it, and `converged` rides every result so an unconverged answer is visible rather than inferred.
+
+### Ceilings
+
+| surface | ceiling | disposition |
+|---|---|---|
+| `leastModelUnary` | none found | states no ceiling; refuses nothing on size |
+| `leastModelRounds` | none found to 8001 rounds | states no ceiling; refuses nothing |
+| `wellFoundedModel` outer loop | none found to 4001 outer rounds | states no ceiling; refuses nothing |
+| `leastModelUnary` on conjunctive input | not a ceiling — a **refusal by name**, since the arm cannot express the program | throws, naming the arm and the offending rule's head and arity |
+
+The round counts above are where the loops were **run**, not where they were pushed to failure: cost is rounds × rules, so the round counts at which the unforced controls abort are hours away on either loop. What carries the construction claim is the controlled forced/unforced comparison above, not a cliff-region reading of the engine itself.
+
+### The partition, the bound, and the warning the result carries
+
+The engine does not partition. Strongly connected components and the condensation are [gen-graph](https://github.com/sini/gen-graph)'s concern, and this engine **consumes that library's one published front door**:
+
+```nix
+solved = engine.solve program;
+solved.condensationDepth   # read from the door, reported as the door reports it
+solved.provenance          # [ ] inside the verified bound; one plain-data entry past it
+```
+
+What the door is handed is the **unsigned** dependency accessor (`program.dependency`), because mutual reachability is a property of the unsigned relation; the sign labels sit beside it (`program.signs`) as the labelled view, and nothing here asks the door to carry a label.
+
+**The engine constrains nothing on cost.** It accepts any program the semantics does not refuse and costs what it costs: no depth, size or shape makes a program inadmissible. `verifiedDepth` is an **acceptance** bound — what has been verified, never what the engine permits — and past it the engine **warns**; it does not refuse. A runtime refusal past a stated depth would make cost into correctness.
+
+**The warning rides the result.** It is a value the caller receives, never a side channel: a printed warning goes to stderr, which the evaluation cache swallows after the first run, and a debug-only field is invisible in ordinary use. A field that *is* the result survives caching because it is what was cached. It is plain data, so it crosses an evaluation boundary as itself. It is **not** the semantics' third value — `UNDEFINED` is a verdict on an atom inside the model; this accompanies a successful operation.
+
+```nix
+engine.verifiedDepth
+# { depth = 2049;
+#   derivation = "the greatest condensation depth at which every arm of
+#                 ci/bench/cost-classes.nix completed with converged=true, …";
+#   fixtures = [ "chain" "cycle" "blocks" "blocksWide" "deepContested" "layers" ];
+#   environment = { nix = "2.34.8"; maxCallDepth = 10000; stackLimitKb = 8192; };
+#   reDerivationOwedOn = [ … ]; }
+```
+
+**The figure is never a bare number.** It is derived at implementation from the engine's own measured cost curve, recorded with its derivation, and re-derived whenever the engine changes — `reDerivationOwedOn` names the four constructions whose editing owes one. Re-run: `./ci/bench/cost-classes.sh`, whose default ladder is what produced the figure. The ladder as measured, wall ms, most expensive arm per rung:
+
+| rung `d` | chain | blocks | deepContested | layers | greatest condensation depth |
+|---|---|---|---|---|---|
+| 128 | 434 | 441 | 503 | 643 | 129 |
+| 512 | 570 | 602 | 1531 | 3653 | 513 |
+| 1024 | 1038 | 1135 | 5003 | 13943 | 1025 |
+| 2048 | 2722 | 3161 | 19346 | 58669 | **2049** |
+
+No figure here is a budget and none is offered as one. Whether a curve is adequate for the fleet the engine is for is a judgement, made by a person reading it, and no threshold is manufactured to make it runnable.
+
+**The detector detects; it does not act.** A bound derived from the measured curve cannot be failed by that curve, so the signal is not "the benchmark exceeded the figure" — it is a re-derivation moving the verified depth **downward**, compared under three pinned terms:
+
+```nix
+engine.acceptanceSignal { baseline = <recorded>; reading = <fresh>; }
+# → { signal = "unbaselined" | "voided" | "fired" | "steady"; reason = "…"; }
+```
+
+A change to the fixture families, the derivation function, or the environment terms **voids** the comparison rather than passing or failing it, and a fresh baseline is owed. A fired detector is a **signal to a judge**, who takes the retreat or declines it; nothing here executes anything. And it detects **regression, never inadequacy** — an engine whose first verified depth is far too low regresses against nothing and this stays silent, which is why the first run reports `unbaselined` and why the judge is a person.
+
+### The ordered fold
+
+```nix
+engine.foldContributions { model; contributions; op; init; }
+# → { value; admitted; contested; }
+```
+
+Contributions combine in the order they were **declared**, and the fold reads no strength annotation: positional authority is the substrate's, and a priority algebra is the module system's own. A priority is content — a value carrying meaning — which the substrate must not interpret and which may not cross an evaluation boundary; an ordered contribution list is plain data. Nothing is sorted, deduped, or filtered by rank, because the list's order *is* the authority.
+
+A contribution whose gating atom is **UNDEFINED** is not admitted and is not dropped either: it comes back in `contested`. A gate that is FALSE is neither — it did not happen, which is a different fact from being undecided.
+
 ## Performance
 
 | Operation | Cost | Memoized? |
@@ -563,7 +711,16 @@ cd ci && just ci eval                       # run one suite
 cd ci && just ci eval.test-basic-root-attribute  # run one test
 ```
 
-Requires nix-unit. **174 tests across 20 suites** (13 test files): `eval`, `eval-debug`, `eval-warm`, `build-nodes`, `graph`, `hoag`, `circular`, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `recorded-deps`, and `purity`. The `purity` suite asserts the evaluator never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant.
+Requires nix-unit. **288 tests across 32 suites** (19 test files). The evaluator's: `eval`, `eval-debug`, `eval-debug-trace`, `eval-warm`, `build-nodes`, `graph`, `hoag`, `circular`, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `recorded-deps`, `structural`, and the six `plane-*` suites. The engine's: `engine-program`, `engine-least-model`, `engine-well-founded`, `engine-door`. The `purity` suite asserts the library source never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant.
+
+**Two things the suite structurally cannot host**, and both are read off exit codes instead:
+
+```bash
+./ci/bench/engine-ceiling.sh    # the abort controls, both signatures, and the refusals
+./ci/bench/cost-classes.sh      # the cost curve the acceptance bound derives from
+```
+
+A stack overflow is an abort rather than a throw, so `tryEval` does not contain one and no in-language assertion can observe it — and an argument-arity refusal is not catchable either, while a throw's *message* is discarded by `tryEval`. `engine-ceiling.sh` reports `INVALID` when a signature fails to fire, because a green row from an evaluation that could not have observed an abort is not a pass.
 
 ## Theoretical Foundations
 
@@ -579,4 +736,10 @@ Requires nix-unit. **174 tests across 20 suites** (13 test files): `eval`, `eval
 | Radul & Sussman (2009) "Art of the propagator" | **Informed by** | Monotonic convergence concept for `circular` attribute iteration; cells accepting information from multiple sources as design influence on scope graph merging |
 | Van Wyk et al. (2010) "Silver: extensible AG" | **Informed by** | Forwarding concept (productions defining default attribute values via translation); collection attributes with fold operators as design influence on `collectionAttr` |
 | Mokhov et al. (2018) "Build systems a la carte" | **Informed by** | Demand-driven evaluation as suspending scheduler (§4.1); Nix's lazy evaluation recognized as the scheduling mechanism — we do not build a scheduler, Nix is the scheduler |
+| Van Gelder, Ross & Schlipf (1991) "The well-founded semantics for general logic programs" | **Implements** | The well-founded partial model at the ATOM level; `UNDEFINED` as a named third verdict for contested atoms; totality on locally stratified programs |
+| Van Gelder (1993) "The alternating fixpoint of logic programs with negation" | **Implements** | The construction: `S(J) = lfp T_{P/J}` antimonotone, `S²` monotone, `W⁺ = lfp(S²)` from ∅, `S(W⁺)` the true-or-undefined set |
+| Gelfond & Lifschitz (1988) "The stable model semantics for logic programming" | **Partial** | The reduct `P/J` the alternating fixpoint iterates over. Stable-model EXISTENCE as the refusal oracle is adopted as the companion criterion and is **not built here** — no construction in this library decides it |
+| Apt, Blair & Walker (1988) "Towards a theory of declarative knowledge" | **Informed by** | Why the third value is needed at all: the stratified semantics admits positive cycles and leaves a cycle through a negative edge without a meaning |
+| van Emden & Kowalski (1976) "The semantics of predicate logic as a programming language" | **Implements** | `T_P` and its least fixpoint as the meaning of a definite program — what both `leastModel` arms compute over the reduct |
+| Tarjan (1972) / Fleischer, Hendrickson & Pınar (2000) | **Consumes** | Strongly connected components and the condensation, through gen-graph's published partition front door. Not re-implemented here: the engine reads the reported condensation depth and nothing else |
 | Acar et al. (2006) "Adaptive functional programming" | **Informed by** | Warm-cache incremental re-evaluation (`evalWarm`): reusing clean prior results and recomputing only dirty nodes; `recordedDeps` as the declared read-edge projection of a dynamic dependence graph |
