@@ -340,6 +340,10 @@ in
   };
 
   # appended inside the same `{ ... }` the module returns, as a sibling of flake.tests."eval"
+  #
+  # The prior is an EVALUATION, not a result map: every "cached" value below is produced by a
+  # second `eval` over the same program, read through its accessor. Membership in a snapshot is
+  # gone — what an attribute may be reused for is now the decision's `reusable`.
   flake.tests."eval-warm" =
     let
       mkRoots =
@@ -355,24 +359,29 @@ in
         boom = self: id: throw "boom-${id}";
         val = self: id: (self.node id).decls.v or 0;
       };
+      # The same program, evaluated with attribute functions that answer with the prior values.
+      priorOf = roots: attributes: genScope.eval { inherit roots attributes; };
+      allClean =
+        names:
+        genScope.mkDecision {
+          isClean = _: true;
+          reusable = _: names;
+        };
+      nRoots = mkRoots {
+        n = {
+          v = 5;
+        };
+      };
     in
     {
-      # clean + prior present ⇒ warm-served, fn NEVER forced (poison doesn't throw)
+      # clean + named reusable ⇒ served from the prior, fn NEVER forced (poison doesn't throw)
       test-warm-serves-clean-no-force = {
         expr =
           (genScope.evalWarm {
-            roots = mkRoots {
-              n = {
-                v = 5;
-              };
-            };
+            roots = nRoots;
             attributes = poison;
-            priorResults = {
-              n = {
-                boom = "cached";
-              };
-            };
-            isClean = _: true;
+            prior = priorOf nRoots (poison // { boom = self: id: "cached"; });
+            decision = allClean [ "boom" ];
           }).get
             "n"
             "boom";
@@ -383,71 +392,52 @@ in
         expr =
           (builtins.tryEval (
             (genScope.evalWarm {
-              roots = mkRoots {
-                n = {
-                  v = 5;
-                };
-              };
+              roots = nRoots;
               attributes = poison;
-              priorResults = {
-                n = {
-                  boom = "cached";
-                };
+              prior = priorOf nRoots (poison // { boom = self: id: "cached"; });
+              decision = genScope.mkDecision {
+                isClean = _: false;
+                reusable = _: [ "boom" ];
               };
-              isClean = _: false;
             }).get
               "n"
               "boom"
           )).success;
         expected = false;
       };
-      # clean but attr absent from priorResults ⇒ falls through to fn ⇒ throws
+      # clean but the decision does not name the attribute ⇒ falls through to fn ⇒ throws
       test-warm-missing-attr-falls-through = {
         expr =
           (builtins.tryEval (
             (genScope.evalWarm {
-              roots = mkRoots {
-                n = {
-                  v = 5;
-                };
-              };
+              roots = nRoots;
               attributes = poison;
-              priorResults = {
-                n = { };
-              };
-              isClean = _: true;
+              prior = priorOf nRoots (poison // { boom = self: id: "cached"; });
+              decision = allClean [ ];
             }).get
               "n"
               "boom"
           )).success;
         expected = false;
       };
-      # warm value is served verbatim (not the fresh computation)
+      # the prior's value is served verbatim (not the fresh computation)
       test-warm-serves-prior-value = {
         expr =
           (genScope.evalWarm {
-            roots = mkRoots {
-              n = {
-                v = 5;
-              };
-            };
+            roots = nRoots;
             attributes = poison;
-            priorResults = {
-              n = {
-                val = 99;
-              };
-            };
-            isClean = _: true;
+            prior = priorOf nRoots (poison // { val = self: id: 99; });
+            decision = allClean [ "val" ];
           }).get
             "n"
             "val";
         expected = 99;
       };
-      # a dirty node reads a clean dep's WARM value
+      # a dirty node reads a clean dep's REUSED value
       test-dirty-reads-clean-dep = {
         expr =
-          (genScope.evalWarm {
-            roots = mkRoots {
+          let
+            abRoots = mkRoots {
               a = {
                 base = 10;
               };
@@ -455,25 +445,30 @@ in
                 base = 0;
               };
             };
-            attributes = {
+            attrs = {
               children = self: id: { };
               val = self: id: if id == "b" then (self.get "a" "val") + 1 else (self.node id).decls.base;
             };
-            priorResults = {
-              a = {
-                val = 99;
-              };
+          in
+          (genScope.evalWarm {
+            roots = abRoots;
+            attributes = attrs;
+            prior = priorOf abRoots (attrs // { val = self: id: 99; });
+            decision = genScope.mkDecision {
+              isClean = id: id == "a";
+              reusable = _: [ "val" ];
             };
-            isClean = id: id == "a";
           }).get
             "b"
             "val";
         expected = 100;
       };
-      # children NEVER warm-served (stale prior children ignored; fresh structure used)
+      # children NEVER reused (stale prior children ignored; fresh structure used) — the
+      # decision names a structural attribute and the always-recompute branch answers first
       test-children-always-recomputed = {
         expr =
           let
+            pRoots = mkRoots { p = { }; };
             attrs = {
               children =
                 self: id:
@@ -491,16 +486,27 @@ in
               label = self: id: "fresh-${id}";
             };
             w = genScope.evalWarm {
-              roots = mkRoots { p = { }; };
+              roots = pRoots;
               attributes = attrs;
-              priorResults = {
-                p = {
-                  children = {
-                    BOGUS = { };
-                  };
-                };
-              };
-              isClean = _: true;
+              prior = priorOf pRoots (
+                attrs
+                // {
+                  children =
+                    self: id:
+                    if id == "p" then
+                      {
+                        BOGUS = {
+                          id = "BOGUS";
+                          type = "t";
+                          parent = "p";
+                          decls = { };
+                        };
+                      }
+                    else
+                      { };
+                }
+              );
+              decision = allClean [ "children" ];
             };
           in
           builtins.attrNames (w.get "p" "children");
@@ -510,6 +516,7 @@ in
       test-dirty-grandchild-reachable = {
         expr =
           let
+            pRoots = mkRoots { p = { }; };
             attrs = {
               children =
                 self: id:
@@ -536,36 +543,39 @@ in
               label = self: id: "fresh-${id}";
             };
             w = genScope.evalWarm {
-              roots = mkRoots { p = { }; };
+              roots = pRoots;
               attributes = attrs;
-              priorResults = {
-                g = {
-                  label = "stale-g";
-                };
+              prior = priorOf pRoots (attrs // { label = self: id: "stale-${id}"; });
+              decision = genScope.mkDecision {
+                isClean = id: id != "g"; # g dirty, p/c clean
+                reusable = _: [ "label" ];
               };
-              isClean = id: id != "g"; # g dirty, p/c clean
             };
           in
           w.get "g" "label";
-        expected = "fresh-g"; # g recomputed (dirty) AND reachable (children recomputed, never warm)
+        expected = "fresh-g"; # g recomputed (dirty) AND reachable (children recomputed, never reused)
       };
-      # per-(node,attr) granularity: clean node, attr a warm / attr b cold
+      # per-(node,attr) granularity: clean node, attr a reused / attr b recomputed
       test-mixed-warm-cold = {
         expr =
           let
+            nnRoots = mkRoots { n = { }; };
+            attrs = {
+              children = self: id: { };
+              a = self: id: "fresh-a";
+              b = self: id: "fresh-b";
+            };
             w = genScope.evalWarm {
-              roots = mkRoots { n = { }; };
-              attributes = {
-                children = self: id: { };
-                a = self: id: "fresh-a";
-                b = self: id: "fresh-b";
-              };
-              priorResults = {
-                n = {
-                  a = "cached-a";
-                };
-              }; # has a, not b
-              isClean = _: true;
+              roots = nnRoots;
+              attributes = attrs;
+              prior = priorOf nnRoots (
+                attrs
+                // {
+                  a = self: id: "cached-a";
+                  b = self: id: "cached-b";
+                }
+              );
+              decision = allClean [ "a" ]; # names a, not b
             };
           in
           [
@@ -577,18 +587,22 @@ in
           "fresh-b"
         ];
       };
-      # evalWarm with warm-off defaults == eval
-      test-evalWarm-defaults-equal-eval = {
+      # evalWarm under the COLD decision == eval. The cold case is the same code path with the
+      # decision saying nothing is clean, not a second one.
+      test-evalWarm-cold-decision-equals-eval = {
         expr =
-          (genScope.evalWarm {
-            roots = mkRoots {
+          let
+            r = mkRoots {
               n = {
                 v = 7;
               };
             };
+          in
+          (genScope.evalWarm {
+            roots = r;
             attributes = poison;
-            priorResults = { };
-            isClean = _: false;
+            prior = null;
+            decision = genScope.coldDecision;
           }).get
             "n"
             "val";

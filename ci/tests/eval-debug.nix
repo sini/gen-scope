@@ -117,4 +117,61 @@ in
       };
     };
   };
+
+  # THE TRACE AS A RETURNED VALUE. The read recording used to exist only as text inside a
+  # cycle throw; it is now a value the caller receives, readable WITHOUT forcing the value it
+  # accompanies. That is what makes the dynamic recording comparable against the static
+  # structural derivation at all — while it lived in a throw message there was nothing to
+  # compare.
+  flake.tests."eval-debug-trace" = {
+    test-accessor-trace-starts-empty = {
+      expr = debugResult.trace;
+      expected = [ ];
+    };
+    test-traced-read-answers-value-and-path = {
+      expr = debugResult.getTraced "a" "value";
+      expected = {
+        value = 42;
+        trace = [ "a.value" ];
+      };
+    };
+    # The path is available even where the value is not — the case the throw message used to
+    # be the only carrier for.
+    test-cycle-trace-is-readable-without-forcing-the-value = {
+      expr = (cycleResult.getTraced "a" "x").trace;
+      expected = [ "a.x" ];
+    };
+    test-cycle-value-still-throws = {
+      expr = builtins.tryEval (cycleResult.getTraced "a" "x").value;
+      expected = {
+        success = false;
+        value = false;
+      };
+    };
+    test-unknown-attribute-trace-is-readable = {
+      expr = (debugResult.getTraced "a" "nope").trace;
+      expected = [ "a.nope" ];
+    };
+    # The path deepens through the reads an attribute makes: `p` on `a` reads `q` on `b`,
+    # which reads `p` on `a` again — the indirect cycle, recorded in order.
+    test-nested-reads-extend-the-path = {
+      expr =
+        let
+          r = builtins.tryEval (indirectResult.getTraced "a" "p").value;
+        in
+        [
+          (indirectResult.getTraced "a" "p").trace
+          r.success
+        ];
+      expected = [
+        [ "a.p" ]
+        false
+      ];
+    };
+    # `get` is `getTraced` without the path, so the two cannot drift apart.
+    test-get-agrees-with-traced-read = {
+      expr = debugResult.get "a" "value" == (debugResult.getTraced "a" "value").value;
+      expected = true;
+    };
+  };
 }

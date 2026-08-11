@@ -10,32 +10,72 @@
 # or `derived-children` attribute.
 { prelude }:
 let
+  structural = import ./structural.nix { inherit prelude; };
+  interface = import ./interface.nix { inherit prelude; };
+
   eval =
     {
       roots,
       attributes,
       parseParent ? null,
-      priorResults ? { },
-      isClean ? (_: false),
+      prior ? null,
+      decision ? interface.coldDecision,
+      provenance ? [ ],
     }:
     prelude.fix (
       self:
       let
+        # The reuse vocabulary: this attribute set minus the structural partition. A structural
+        # name is absent from it, so it contributes nothing to what may be served — there is
+        # nothing for it to intersect with. The attribute set is one set for every node, so the
+        # projection is node-independent here; the per-node signature is the interface's,
+        # because a substrate whose attribute set varies by node must still answer per node.
+        resolutionalNamesAll = structural.resolutionalNames (builtins.attrNames attributes);
+        resolutionalAt = _nodeId: resolutionalNamesAll;
+        structuralNamesAll = builtins.filter structural.structural (builtins.attrNames attributes);
+
+        # served nodeId = reusable nodeId ∩ resolutional nodeId. A total function, not a check
+        # that can fail.
+        servedAt =
+          nodeId: builtins.filter (a: builtins.elem a resolutionalNamesAll) (decision.reusable nodeId);
+
+        servePrior =
+          nodeId: attrName:
+          if prior == null then
+            throw "gen-scope: the decision reuses '${attrName}' on '${nodeId}' but no prior evaluation was supplied"
+          else
+            prior.get nodeId attrName;
+
         # One per-attribute evaluator, shared by rootEval + wrapChild._eval.
-        # children/derived-children always recompute the structure (descendant
-        # _eval caches are built by recursing through wrapChild). A clean node's
-        # leaf attr present in priorResults is served without forcing fn (warm,
-        # relocatable); otherwise cold demand. With the defaults (isClean = _: false)
-        # the warm branch never fires, so eval stays byte-identical.
+        #
+        # THE STRUCTURAL BRANCH FIRES FIRST AND NEVER CONSULTS THE DECISION — by branch order,
+        # not by a check. Structure is always recomputed, so dirty descendants stay reachable
+        # and a labelled reachability relation is never read stale. That the branch tests the
+        # PARTITION rather than two literal names is what extends the law from the child
+        # attributes to the whole `edges-*` family and to `includes`.
+        #
+        # THE COST OF THAT, ON THE RECORD: edge sets are never reused, so a warm evaluation
+        # pays edge-set recomputation. That is a cost fact, not a correctness fact, and it is
+        # taken deliberately — an edge set IS the labelled reachability relation, and the
+        # reason structure is always recomputed applies to it exactly. If the recomputation
+        # proves dominant the answer is to make the structural recompute cheaper, never to
+        # serve structure from a prior evaluation.
+        #
+        # The second branch consults the SERVED INTERSECTION, not the decision's raw list. The
+        # structural branch has already fired, so the two agree at this call site — and that is
+        # exactly why the intersection is written here rather than assumed: an agreement that
+        # holds because of a neighbouring branch is a fact about today's branch order, and the
+        # clause this implements is about what may be served, not about which branch ran. Both
+        # halves are real; neither is decoration for the other.
         evalAttr =
           nodeId: attrName: fn:
-          if attrName == "children" || attrName == "derived-children" then
+          if structural.structural attrName then
             let
               raw = fn self nodeId;
             in
-            builtins.mapAttrs (_: wrapChild) raw
-          else if isClean nodeId && (priorResults.${nodeId} or { }) ? ${attrName} then
-            priorResults.${nodeId}.${attrName}
+            if structural.childBearing attrName then builtins.mapAttrs (_: wrapChild) raw else raw
+          else if decision.isClean nodeId && builtins.elem attrName (servedAt nodeId) then
+            servePrior nodeId attrName
           else
             fn self nodeId;
         wrapChild =
@@ -236,6 +276,60 @@ let
         # Walks full tree but only includes matching types.
         # O(n) walk, result size = nodes of that type.
         nodesOfType = type: self.allNodesWhere (node: node.type == type);
+
+        # --- The plane interface ---
+
+        # What an incremental plane reads this evaluation through. It is handed the FACADE,
+        # never `self`: the materialization surfaces, the node accessor and the combinators are
+        # absent from the RECORD, so a read outside those three names cannot be written against
+        # this value at all.
+        #
+        # ★ That closes the KEY SET, not reachability. `get id "children"` answers node records
+        # carrying `decls` / `parent` and the co-located `_eval` cache, so a caller holding one
+        # can evaluate through `_eval` without passing through `get`; and `get` takes any
+        # string, so a dynamically constructed name is issuable whether or not the combinators
+        # travel. Measured, and pinned by the facade cells. What survives that residual is the
+        # property reuse rests on — the always-recompute branch below fires before the decision
+        # is consulted, so no structural value is ever served from a prior evaluation.
+        facade = interface.mkFacade {
+          get = self.get;
+          nodeIds = self.allNodeIds;
+          resolutional = resolutionalAt;
+        };
+
+        # The reuse vocabulary, per node, and the subset of a decision's request that is
+        # actually served. Both are the same projection the facade carries, exposed so the
+        # intersection is inspectable rather than only inferable from behaviour.
+        resolutional = resolutionalAt;
+        served = servedAt;
+
+        # THE STRUCTURAL EDGE SET THE SUBSTRATE CONSTRUCTED — the children /
+        # derived-children / edges-* / includes relation, materialized by the always-recompute
+        # branch, readable WITHOUT forcing any resolutional attribute. Reads derive from it
+        # statically. It is derived rather than declared: the substrate constructed these
+        # edges, so no impossibility argument is owed for them.
+        structuralEdges = id: prelude.genAttrs structuralNamesAll (name: self.get id name);
+
+        # The debug-mode validator, as a value. Nothing in the production path forces it, so it
+        # alters no production result and is not a rule the plane must obey; forcing it reports
+        # every attribute a decision named that this node's vocabulary does not contain.
+        decisionFindings = interface.decisionFindings {
+          inherit decision;
+          resolutional = resolutionalAt;
+          nodeIds = self.allNodeIds;
+        };
+
+        # PROVENANCE RIDES THE RESULT. Plain data the caller receives with its answer, never a
+        # side channel and never debug-only: a print goes to stderr, which the evaluation cache
+        # swallows after the first run, and a debug-only field is invisible in ordinary use.
+        # A field that IS the result survives caching because it is what was cached.
+        #
+        # This library carries the field and never invents a record for it. The facts that get
+        # stamped — an input past a benchmark-verified bound, and the bound itself — are the
+        # engine's, derived from a cost curve measured there; the substrate holds no threshold
+        # and makes no comparison. Carried, so no layer between the engine and the caller can
+        # silently drop it.
+        inherit provenance;
       }
     );
 
@@ -253,68 +347,101 @@ let
       parseParent ? null,
     }:
     let
-      mkSelf = visited: traceList: {
-        node =
-          id:
-          if roots ? ${id} then
-            roots.${id}
-          else if parseParent != null then
+      mkSelf =
+        visited: traceList:
+        let
+          # THE TRACE IS A RESULT, NOT A THROW FRAGMENT. `getTraced` answers with the read path
+          # AND the value, and the path is readable WITHOUT forcing the value — so the trace is
+          # available in exactly the case where it used to be reachable only by parsing a throw
+          # message. It is the dynamic read recording, run against the same names the static
+          # structural derivation is defined over, and it stays in the debug evaluator because
+          # the fresh-self-per-get that records it is what defeats memoization.
+          #
+          # WHAT IT IS AND IS NOT: the path from the root read to this one. The union of reads
+          # across sibling branches is not recoverable here — the thread runs downward into the
+          # consumer's attribute functions, and their results are values, so nothing carries a
+          # read set back up.
+          getTraced =
+            id: attrName:
             let
-              parentId = parseParent id;
-              s = mkSelf visited traceList;
-              children = if parentId != null then s.get parentId "children" else { };
-              derived =
-                if parentId != null && attributes ? "derived-children" then
-                  s.get parentId "derived-children"
-                else
-                  { };
+              traceEntry = "${id}.${attrName}";
+              path = traceList ++ [ traceEntry ];
             in
-            (children // derived).${id} or (throw "gen-scope: node '${id}' not reachable")
-          else
-            throw "gen-scope: evalDebug requires parseParent for non-root nodes";
+            {
+              trace = path;
+              value =
+                if !(attributes ? ${attrName}) then
+                  throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
+                else if visited ? ${traceEntry} then
+                  throw "gen-scope: cycle detected: ${builtins.concatStringsSep " -> " path}"
+                else
+                  attributes.${attrName} (mkSelf (visited // { ${traceEntry} = true; }) path) id;
+            };
+        in
+        {
+          inherit getTraced;
 
-        get =
-          id: attrName:
-          let
-            traceEntry = "${id}.${attrName}";
-          in
-          if !(attributes ? ${attrName}) then
-            throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
-          else if visited ? ${traceEntry} then
-            throw "gen-scope: cycle detected: ${builtins.concatStringsSep " -> " (traceList ++ [ traceEntry ])}"
-          else
-            attributes.${attrName} (mkSelf (visited // { ${traceEntry} = true; }) (
-              traceList ++ [ traceEntry ]
-            )) id;
+          # The read path this accessor was reached along, as a value.
+          trace = traceList;
 
-        allNodes = throw "gen-scope: evalDebug does not support allNodes (use eval for materialization)";
+          node =
+            id:
+            if roots ? ${id} then
+              roots.${id}
+            else if parseParent != null then
+              let
+                parentId = parseParent id;
+                s = mkSelf visited traceList;
+                children = if parentId != null then s.get parentId "children" else { };
+                derived =
+                  if parentId != null && attributes ? "derived-children" then
+                    s.get parentId "derived-children"
+                  else
+                    { };
+              in
+              (children // derived).${id} or (throw "gen-scope: node '${id}' not reachable")
+            else
+              throw "gen-scope: evalDebug requires parseParent for non-root nodes";
 
-        allNodeIds = throw "gen-scope: evalDebug does not support allNodeIds (use eval for materialization)";
-      };
+          get = id: attrName: (getTraced id attrName).value;
+
+          allNodes = throw "gen-scope: evalDebug does not support allNodes (use eval for materialization)";
+
+          allNodeIds = throw "gen-scope: evalDebug does not support allNodeIds (use eval for materialization)";
+        };
     in
     mkSelf { } [ ];
 
-  # Relocatable warm-cache evaluator. Same interface as `eval`; a clean node's
-  # leaf attr present in priorResults is served without forcing its compute fn,
-  # while children/derived-children are never warm-served (structure always
-  # recomputed, so dirty descendants stay reachable). Thin wrapper over `eval` —
-  # a single code path, with `eval`'s defaults being the warm-off case.
+  # Reuse-driven evaluator. Same interface as `eval` with the plane's two arguments made
+  # MANDATORY: an evaluation that means to reuse says which prior it reuses from and which
+  # decision authorises it, rather than inheriting a default that decides for it. A thin
+  # wrapper over `eval` — one code path, whose cold case is the same path under a decision
+  # saying nothing is clean.
+  #
+  # THE PRIOR IS AN ACCESSOR, NOT A RESULT MAP. The plane is handed the prior evaluation to
+  # read, never a snapshot to hold: a projection is something the EVALUATOR performs on demand
+  # from the accessor, not an artefact the plane constructs and carries. The accessor is live
+  # inside the same evaluation — this reuse is INTRA-EVALUATION, over the override cone and
+  # across targets composed within one evaluation. Nothing here persists from one invocation of
+  # the evaluator to the next, and nothing here may claim to.
   # (Informed by Acar's self-adjusting computation: reusing clean prior results.)
   evalWarm =
     {
       roots,
       attributes,
       parseParent ? null,
-      priorResults,
-      isClean,
+      prior,
+      decision,
+      provenance ? [ ],
     }:
     eval {
       inherit
         roots
         attributes
         parseParent
-        priorResults
-        isClean
+        prior
+        decision
+        provenance
         ;
     };
 
