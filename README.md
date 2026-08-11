@@ -21,6 +21,7 @@ gen-scope is generic. It has no knowledge of NixOS, aspects, policies, or system
   - [eval](#eval)
   - [evalDebug](#evaldebug)
   - [evalWarm](#evalwarm)
+  - [The structural partition](#the-structural-partition)
   - [recordedDeps](#recordeddeps)
   - [buildNodes](#buildnodes)
   - [Algebraic Graph Construction](#algebraic-graph-construction)
@@ -227,10 +228,13 @@ eval {
   roots;               # { id = { id, type, parent, decls }; }
   attributes;          # { attrName = self: id: value; }
   parseParent ? null;  # id → parentId | null
+  prior ? null;        # a prior EVALUATION's accessor — not a result map
+  decision ? coldDecision;  # { isClean; reusable; } — see `evalWarm`
+  provenance ? [ ];    # plain data carried back to the caller on the result
 }
 ```
 
-Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfType }`:
+Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfType, facade, resolutional, served, structuralEdges, decisionFindings, provenance }`:
 
 | Function | Cost | Description |
 |----------|------|-------------|
@@ -241,6 +245,12 @@ Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfTyp
 | `result.allNodesWhere pred` | O(n) | Tier 2: selective materialization filtered by predicate on node data |
 | `result.subtreeOf rootId` | O(subtree) | Tier 2: materialize only the subtree rooted at a given node |
 | `result.nodesOfType type` | O(n) | Tier 2: all nodes matching a given type string |
+| `result.facade` | O(1) | The restricted read record an incremental plane is handed — see [`evalWarm`](#evalwarm) |
+| `result.resolutional id` | O(a) | The reuse vocabulary at a node: this attribute set minus the structural partition |
+| `result.served id` | O(a·r) | What the decision asked to reuse, intersected with that vocabulary |
+| `result.structuralEdges id` | O(1) + per entry | The structural relation the substrate constructed, readable without forcing any resolutional attribute |
+| `result.decisionFindings` | O(n·r), only if forced | Debug-mode validator: every attribute a decision named that the node's vocabulary does not contain |
+| `result.provenance` | O(1) | The provenance the caller supplied, carried back on the result rather than dropped |
 
 **Special attributes:** `children` and `derived-children` are auto-wrapped — their results are node attrsets where each child receives a co-located `_eval` cache.
 
@@ -259,6 +269,15 @@ This is the survey order an attribute-grammar collection or reverse reference at
 
 Same interface as `eval`. Provides structured cycle traces instead of Nix's opaque "infinite recursion." Trade-off: defeats memoization. Use for diagnosing cycles only.
 
+The trace is a **returned value**, not text inside an error. Alongside `node` and `get`, the accessor carries:
+
+| Function | Description |
+|----------|-------------|
+| `d.trace` | The read path this accessor was reached along |
+| `d.getTraced id attrName` | `{ value; trace; }` — the path is readable **without forcing the value**, so it survives the cycle and unknown-attribute cases where the value throws |
+
+`get` is `getTraced` with the path dropped, so the two cannot drift apart. What is recorded is the **path** from the root read to this one; the union of reads across sibling branches is not recoverable, because the thread runs downward into the consumer's attribute functions and their results are values.
+
 ### `evalWarm`
 
 ```nix
@@ -266,24 +285,57 @@ evalWarm {
   roots;               # { id = { id, type, parent, decls }; }
   attributes;          # { attrName = self: id: value; }
   parseParent ? null;  # id → parentId | null
-  priorResults;        # { id = { attrName = cachedValue; }; }
-  isClean;             # id → bool
+  prior;               # a prior EVALUATION's accessor
+  decision;            # mkDecision { isClean; reusable; }
+  provenance ? [ ];
 }
 ```
 
-Warm-cache variant of `eval` for incremental re-evaluation. A leaf attribute of a **clean** node (`isClean id == true`) whose value is present in `priorResults` is served from the cache **without forcing its compute function**; everything else evaluates cold. `children`/`derived-children` are **never** served warm — tree structure is always recomputed, so a dirty descendant stays reachable through freshly-materialized parents. Returns the same shape as `eval`.
+Reuse-driven variant of `eval`. Both plane arguments are **mandatory**: an evaluation that means to reuse says which prior it reuses from and which decision authorises it, rather than inheriting a default that decides for it. Returns the same shape as `eval`.
 
-With `eval`'s defaults (`priorResults = {}`, `isClean = _: false`) the warm branch never fires, so `eval` and warm-off `evalWarm` are byte-identical — they share a single code path.
+**The interface is a DECISION interface.** The plane takes the current program, a prior evaluation and the graph, and returns a `Decision` — a predicate over nodes and a projection over the prior evaluation's results. The evaluator consumes it and does all recomputation. A `Decision` is two total functions and carries **no values**, so a plane that accumulates its own evaluation state has nowhere to put a result; `mkDecision`'s argument set is closed, so a field holding values is refused by name at construction rather than added silently.
+
+**The prior is an accessor, not a result map.** Reuse is intra-evaluation: the prior is another evaluation live inside the same one, so there is nothing to materialize and nothing persists from one invocation to the next.
+
+**Structure is never reused.** `children`, `derived-children`, every `edges-*` label and `includes` are decided by one syntactic predicate (`structural`) and always recomputed — the branch that does so fires before the decision is consulted at all, so a decision naming a structural attribute is inconsequential rather than dangerous. A dirty descendant therefore stays reachable through freshly-materialized parents, and a labelled reachability relation is never read stale. The cost is real and taken deliberately: a reuse-driven evaluation pays edge-set recomputation.
+
+**What the plane is handed** is `result.facade` — exactly `{ get; nodeIds; resolutional; }`, and that **key set is closed and checkable**: no `node` entry, no materialization surfaces, no combinator entries, and a read outside those three names is an attribute that does not exist rather than one that is refused.
+
+**What that does *not* close, stated because it would otherwise read as containment.** Closing the key set bounds the names the plane can ask this record for; it does not bound what is reachable through the values `get` returns. Two channels, both measured:
+
+- `get id "children"` answers **node records**, each carrying `id` / `type` / `parent` / `decls` and the co-located `_eval` cache — so `(get id "children").<kid>._eval.<attr>` evaluates without passing through `get`, and `decls` / `parent` are read straight off the record. Raw node records are **reachable**.
+- `get` accepts **any string**. Withholding the combinators withholds the combinators; it does not stop a caller building `"edges-" + label` and passing it in.
+
+This is the same shape as the fact that there is no single read choke point anywhere in this library, and the facade cells pin it as measured fact rather than arguing it away. So the facade bounds one consumer's **entry points**; it does not make gen-scope single-choke-point, because the evaluator's own attribute functions keep every read channel they have. What survives the residual is the property reuse actually rests on: **no structural value is ever served from a prior evaluation**, which is a property of the evaluator's branch order and not of this record.
+
+Under `coldDecision` — nothing clean, nothing reusable — the reuse branch never fires, so `eval` and cold-decision `evalWarm` are byte-identical; they share a single code path.
 
 ```nix
+prior = engine.eval { inherit roots attributes; };   # the previous evaluation
 result = engine.evalWarm {
-  inherit roots attributes;
-  priorResults = { "host:web" = { region = "us-east"; }; };  # from a prior eval
-  isClean = id: id != "host:db";                              # only db changed
+  inherit roots attributes prior;
+  decision = engine.mkDecision {
+    isClean = id: id != "host:db";      # only db changed
+    reusable = _: [ "region" ];         # and this is what may be reused
+  };
 };
-result.get "host:web" "region"   # "us-east" — served warm, compute fn not forced
+result.get "host:web" "region"   # reused from `prior`, compute fn not forced
 result.get "host:db"  "region"   # recomputed (db is dirty)
 ```
+
+### The structural partition
+
+```nix
+structural name          # → bool, total on every string
+resolutionalNames names  # → the complement over a list of names
+edgePrefix               # "edges-" — the reserved structural namespace
+```
+
+An attribute is **structural** when the graph's shape depends on it: `children`, `derived-children`, anything under `edges-`, and `includes`. The predicate is over the **name** rather than an enumeration because `edges-<label>` is an open family whose members are built during evaluation, so no list could be complete — and an under-inclusive partition would admit a structural name into the reuse vocabulary, where reusing it serves a stale edge relation.
+
+**Its stated domain.** The predicate is decidable and total, but its faithfulness rests on consumers naming structural attributes inside the reserved namespace. An attribute that is structural in *meaning* under a name outside it — `myEdges` — classifies resolutional and may be reused. Semantic structurality is undecidable, so that residual is real and is not closed here; what catches it is the byte-parity oracle, since a stale structural value is a parity failure.
+
+Containment needs no term: a node's parent rides the node record's `.parent` field and never reaches the evaluator as an attribute name.
 
 ### `recordedDeps`
 
@@ -291,7 +343,7 @@ result.get "host:db"  "region"   # recomputed (db is dirty)
 recordedDeps { declaredEdges } id   # → [id]
 ```
 
-First-class projection of a consumer's **declared** read-edges: it simply applies `declaredEdges id`. Pure and memo-free — it never runs through `get`. The *dynamic* read-set (the attributes a node actually `self.get`s) is only recoverable via `evalDebug`'s fresh-`self`-per-`get`, which defeats memoization; there is no pure, memo-preserving way to capture it, so the declared edges are the inspectable contract. Useful for incremental consumers that need an explicit dependency edge set (e.g. driving a rebuild).
+First-class projection of a consumer's **declared** read-edges: it simply applies `declaredEdges id`. Pure and memo-free — it never runs through `get`. The *dynamic* read-set (the attributes a node actually `self.get`s) is only recoverable via `evalDebug`'s fresh-`self`-per-`get` — `getTraced` returns that recording as a value — and that construction defeats memoization; there is no pure, memo-preserving way to capture it, so the declared edges are the inspectable contract. Useful for incremental consumers that need an explicit dependency edge set (e.g. driving a rebuild).
 
 ### `buildNodes`
 

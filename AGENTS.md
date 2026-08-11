@@ -18,7 +18,7 @@ Quoted text is the owner's own `flake.nix` `description` field, verbatim. Grep c
 | Type checking / `verify` | `gen-types` — "gen-types: pure, nixpkgs-lib-free structural type checker for the gen ecosystem" |
 | General utilities — gen-scope's *only* dependency; `flake.nix` declares `gen-prelude` alone | `gen-prelude` — "gen-prelude: vendored, nixpkgs-lib-free pure utilities for the gen ecosystem" |
 | Graph products, coordinate tuples, slices, fibers | `gen-product` — "gen-product — graph products as first-class operations over accessor-graphs (Cartesian / tensor / strong / lexicographic; cells, slices, fibers, projections, quotients, restriction, containment chains), lazy in and out". `coordsOf\|cartesian\|tensor` over `gen-scope/lib` ⇒ 0, control `gen-product/lib` ⇒ 4 |
-| Computing the dirty set / change propagation for an incremental rebuild | `gen-rebuild` — "gen-rebuild: pure-Nix incremental rebuilder core (Mokhov rebuilder dimension)". gen-scope supplies only the consumer-driven hooks: `evalWarm`'s `isClean` + `priorResults`, and `recordedDeps` |
+| Computing the dirty set / change propagation for an incremental rebuild | `gen-rebuild` — "gen-rebuild: pure-Nix incremental rebuilder core (Mokhov rebuilder dimension)". gen-scope supplies only the consumer-driven hooks: `evalWarm`'s `decision` (`isClean` + `reusable`) over a `prior` accessor, the `facade` the plane reads through, and `recordedDeps` |
 | Choosing a winner among matched rules (guard→effect step, ordering, conflict resolution) | `gen-dispatch` — "gen-dispatch: relational rule dispatch over ordered groups (the dispatch STEP)" |
 | Layered settings resolution with precedence and structured provenance | `gen-settings` — "gen-settings — stratified settings resolution as a pure layered fold, with refs-as-data, structured provenance, and the graduated injection construct". `stratif\|precedence\|provenance` over `gen-scope/lib` ⇒ 0, control `gen-settings/lib` ⇒ 4 |
 | Typed resource demands resolving into resources + wiring — a different sense of "demand" from gen-scope's demand-*driven* evaluation | `gen-demand` — "gen-demand — typed demand cascade (kinds resolve demands into resources + wiring + sub-demands; a stratified, terminating fold resolves the multiset with full provenance)" |
@@ -30,7 +30,7 @@ Quoted text is the owner's own `flake.nix` `description` field, verbatim. Grep c
 
 Entry: `inputs.gen-scope.lib` (flake). Root `default.nix` is a function `{ prelude ? <derived from flake.lock>, ... }` — callable as `import ./gen-scope { }`, which content-addresses gen-prelude out of the pinned lock and needs no `<nixpkgs>`.
 
-`lib/default.nix` is one flat merge — `graph // buildNodes // queries // resolve // eval`. All 54 exports sit at top level; there is no nested namespace and no key is shadowed (see traps).
+`lib/default.nix` is one flat merge — `graph // buildNodes // queries // resolve // structural // interface // eval`. All 63 exports sit at top level; there is no nested namespace and no key is shadowed (see traps).
 
 **Algebraic graph construction** — `lib/graph.nix`. A graph value is `{ vertices = [id]; edges = [{ from; to; }]; }`.
 
@@ -63,12 +63,30 @@ Vertices are collected from every edge graph plus the `decls` and `types` key se
 
 | Export | Signature |
 |---|---|
-| `eval` | `{ roots, attributes, parseParent ? null, priorResults ? {}, isClean ? (_: false) } -> accessorRecord` |
-| `evalDebug` | `{ roots, attributes, parseParent ? null } -> { node; get; allNodes; allNodeIds; }` — shadow-stack cycle tracing; defeats memoization. Both materializers are named throws |
-| `evalWarm` | `{ roots, attributes, parseParent ? null, priorResults, isClean } -> accessorRecord` — thin wrapper over `eval`, same code path |
+| `eval` | `{ roots, attributes, parseParent ? null, prior ? null, decision ? coldDecision, provenance ? [] } -> accessorRecord` |
+| `evalDebug` | `{ roots, attributes, parseParent ? null } -> { node; get; getTraced; trace; allNodes; allNodeIds; }` — shadow-stack cycle tracing; defeats memoization. Both materializers are named throws |
+| `evalWarm` | `{ roots, attributes, parseParent ? null, prior, decision, provenance ? [] } -> accessorRecord` — thin wrapper over `eval`, same code path; `prior` and `decision` MANDATORY |
 | `recordedDeps` | `{ declaredEdges } -> id -> [id]` |
 
-`accessorRecord` keys, observed: `node`, `get`, `allNodes`, `allNodeIds`, `allNodesWhere`, `subtreeOf`, `nodesOfType`, `_walkFrom`. Tier 1 is `node id` / `get id attrName`; the rest are Tier 2 materializers that force the tree.
+**The plane interface** — `lib/structural.nix`, `lib/interface.nix`
+
+| Export | Signature |
+|---|---|
+| `structural` | `name -> bool` — the syntactic partition: `children`, `derived-children`, `edges-*`, `includes`. Total on every string |
+| `resolutionalNames` | `[name] -> [name]` — the complement |
+| `edgePrefix` | `"edges-"` — the reserved structural namespace |
+| `childBearing` | `name -> bool` — the two attributes whose values are child-node records (a materialization concern, not a partition one) |
+| `coldDecision` | `{ isClean = _: false; reusable = _: []; }` |
+| `mkDecision` | `{ isClean, reusable } -> Decision` — argument set CLOSED, both required; an extra field is an arity error `tryEval` cannot catch |
+| `mkFacade` | `{ get, nodeIds, resolutional } -> Facade` — same closure |
+| `facadeNames` | `[ "get" "nodeIds" "resolutional" ]`, the enumeration as data |
+| `decisionFindings` | `{ decision, resolutional, nodeIds } -> [{ nodeId; attrName; reason; }]` |
+
+`accessorRecord` keys, observed: `node`, `get`, `allNodes`, `allNodeIds`, `allNodesWhere`, `subtreeOf`, `nodesOfType`, `_walkFrom`, plus the plane interface — `facade`, `resolutional`, `served`, `structuralEdges`, `decisionFindings`, `provenance`. Tier 1 is `node id` / `get id attrName`; the rest are Tier 2 materializers that force the tree.
+
+`evalAttr` has THREE branches and only the second is ever the plane's. The first tests `structural attrName` and **always recomputes** — it never consults the decision, by branch order rather than by a check — so no structural value is served from a prior evaluation and a decision naming one is inconsequential rather than dangerous. The second is `decision.isClean nodeId && elem attrName (decision.reusable nodeId)`, which at that point IS membership in `reusable ∩ resolutional`, because the structural branch has already fired and `evalAttr` only ever sees a name in `attributes`. The third recomputes. Anything outside the served set therefore falls to a recompute, so over the `reusable` axis the worst a buggy or hostile plane achieves is a MISSED REUSE, never a stale serve. That does **not** hold over the `isClean` axis: a decision calling a dirty node clean serves stale resolutional values, and byte-parity against a cold run is that class's only instrument.
+
+`decisionFindings` on the accessor is the debug-mode validator and is a VALUE, not a guard — nothing in the production path forces it, so it alters no result. `provenance` is a pass-through carrier: this library never invents a record for it, because the fact that gets stamped (an input past a benchmark-verified bound) and the threshold it is compared against belong to the engine above, which holds the cost curve they derive from.
 
 `allNodes` and `allNodeIds` are two projections of ONE walk (`walkEntries` in `lib/eval.nix`), so asking for both costs one traversal. They carry the same node set; they differ in what survives of the walk. `allNodes` is an attrset, so `attrNames` on it answers in codepoint order and the traversal order is gone. `allNodeIds` keeps it: **root order, then pre-order depth-first through `children` / `derived-children`** (subtree contiguous, parent before descendants), repeats dropped **first-occurrence-wins** so `sort lessThan allNodeIds == attrNames allNodes`.
 
@@ -83,7 +101,7 @@ Tests: `test-allNodeIds-dedups-repeat-visit`, `test-allNodeIds-is-allNodes-key-s
 
 - **Evaluation order** — not governed. `eval` schedules nothing; Nix's laziness is the scheduler.
 - **Memoization** — not governed. `recordedDeps` never runs through `get`, so it neither reads nor populates any `_eval` cache.
-- **Warm-cache admission** — not governed. `evalWarm` decides warm vs cold from `isClean id` and `priorResults.<id> ? <attr>` only.
+- **Reuse admission** — not governed. `evalWarm` decides reuse from `decision.isClean id` and `decision.reusable id` only, and never for a structural attribute.
 - **Reachability / error reporting** — not governed. Node resolution uses `roots`, `parseParent`, and the `children` / `derived-children` attributes.
 - **Its own return value** — governed, and nothing else: it applies the caller's function to the caller's id. Neither evaluator accepts a `declaredEdges` argument (both patterns are closed; passing one is an arity error).
 
@@ -136,7 +154,7 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 | Turn graphs into root node descriptors | `buildNodes { parentGraph; importGraph; edgeGraphs; decls; types; }` |
 | Evaluate attributes | `eval { roots; attributes; parseParent; }` then `result.get id attrName` |
 | Diagnose an "infinite recursion" | `evalDebug` (named cycle trace; no `allNodes`) |
-| Re-evaluate incrementally against prior results | `evalWarm { …; priorResults; isClean; }` |
+| Re-evaluate incrementally against a prior evaluation | `evalWarm { …; prior; decision = mkDecision { isClean; reusable; }; }` |
 | Expose a consumer's declared dependency edges | `recordedDeps { declaredEdges }` |
 | Synthesize nodes on demand | declare a `children` attribute; for a second stage that reads first-stage attrs, `derived-children` |
 | Inherit a value down the parent chain | `inherit'` (first hit) / `inheritAll` (all, ordered) / `inheritSet` (all, deduped) |
@@ -168,10 +186,10 @@ Each row verified in this run against `s = import ./. { }`. Shared fixtures: `ro
 | `query` returns `null` on a miss, it does not throw | `resolve` in `lib/resolve.nix`; `s.query { dataFilter = _n: null; } R "c"` ⇒ `null`, `s.resolve { }` ⇒ `null`. Test: `test-resolve-all-null` (`ci/tests/resolve.nix`) |
 | `nodesByType` is unusable with `evalDebug` — it delegates to `self.nodesOfType`, which only the `eval` record carries | `nodesByType` in `lib/queries.nix`; on an `evalDebug` record ⇒ `error: attribute 'nodesOfType' missing`, which `tryEval` does **not** catch. Record keys observed: `eval` ⇒ `[ "_walkFrom" "allNodes" "allNodesWhere" "get" "node" "nodesOfType" "subtreeOf" ]`, `evalDebug` ⇒ `[ "allNodes" "get" "node" ]`. Positive control on the `eval` record ⇒ `[ "a" "b" ]` |
 | `evalDebug.allNodes` is a throw, not a function; and `evalDebug` refuses non-root `node` lookups without `parseParent` | `mkSelf` in `lib/eval.nix`; `d.allNodes` ⇒ threw `gen-scope: evalDebug does not support allNodes (use eval for materialization)`; `node "kid"` without `parseParent` ⇒ threw. Positive control `d.get "root" "imports"` ⇒ succeeded |
-| `eval`'s argument pattern has no `...` — an unexpected key is a hard arity error `tryEval` cannot catch; meanwhile `priorResults` / `isClean` **are** accepted although README's `eval` signature block omits both | `eval` in `lib/eval.nix`; `s.eval { roots = {}; attributes = {}; declaredEdges = _: []; }` ⇒ `error: function 'eval' called with unexpected argument 'declaredEdges'` (escapes `tryEval`). Positive control `s.eval { roots = {}; attributes = {}; priorResults = {}; isClean = _: false; }` ⇒ succeeded |
+| `eval`'s argument pattern has no `...` — an unexpected key is a hard arity error `tryEval` cannot catch. The same closure is what makes `mkDecision` unable to carry a value-bearing field | `eval` in `lib/eval.nix`; `s.eval { roots = {}; attributes = {}; declaredEdges = _: []; }` ⇒ `error: function 'eval' called with unexpected argument 'declaredEdges'` (escapes `tryEval`). Positive control `s.eval { roots = {}; attributes = {}; prior = null; decision = s.coldDecision; }` ⇒ succeeded |
 | `recordedDeps` is a pure pass-through with no connection to the evaluator: it applies the caller's function to the caller's id, and neither evaluator consults it | `recordedDeps` in `lib/eval.nix`; `s.recordedDeps { declaredEdges = _: [ "no-such-node" ]; } "also-no-such-node"` ⇒ `[ "no-such-node" ]` with no graph in scope at all; `{ declaredEdges = id: [ (id + "!") ]; } "c"` ⇒ `[ "c!" ]`. An attribute read that no declaration mentions succeeds unremarked: `R.get "c" "imports"` ⇒ `[ ]`. Tests: `test-recordedDeps-declared`, `test-recordedDeps-empty` (`ci/tests/eval.nix`) |
 | A mis-pointed `parseParent` fails **two different ways**: naming a resolvable node that lacks the child throws; naming an unresolvable node diverges into a stack overflow | `resolveNode` / `genericResolve` in `lib/eval.nix`. Fixture: roots `r`, `other`; `r`'s `children` ⇒ `kid@r`. `parseParent "kid@r" = "other"` ⇒ `gen-scope: node 'kid@r' not reachable (parent: other)`. `parseParent "kid@r" = "nosuch"` (unresolvable, `parseParent "nosuch" = null`) ⇒ `error: stack overflow; max-call-depth exceeded` — `genericResolve` walks back through `kid@r`, re-entering `parseParent`. Positive controls: correct `parseParent` ⇒ `"k"`, and `parseParent = _: null` (generic walk) ⇒ `"k"` |
-| `evalWarm` never warm-serves `children` / `derived-children`, even for a clean node whose `priorResults` carry them | `evalAttr` in `lib/eval.nix`; clean root (`isClean = _: true`) with `priorResults.r = { leaf = "WARM"; children = { }; }` ⇒ `get "r" "leaf"` = `"WARM"` (compute fn not forced) but `get "r" "children"` ⇒ `[ "kid@r" ]`, the prior empty attrset ignored. Tests: `test-children-always-recomputed`, `test-warm-serves-prior-value` (`ci/tests/eval.nix`) |
+| `evalWarm` never reuses ANY structural attribute — `children`, `derived-children`, every `edges-*` label, `includes` — however clean the node and whatever the decision names | `evalAttr`'s first branch tests `structural attrName` (`lib/eval.nix`). Measured across the family: a decision reusing `edges-owns` from a prior answering `[ "POISON" ]` still answers the cold `[ "b" ]`, and the validator fires. Live control in the same matrix: a decision reusing the resolutional `label` IS served the prior's value and the validator stays silent. Tests: `plane-structural-matrix` (`ci/tests/plane.nix`), `test-children-always-recomputed` (`ci/tests/eval.nix`) |
 | `circular` defaults to `maxIter = 100` and **throws** rather than returning a partial result | `circular` in `lib/resolve.nix`; `f = _: _: prev: prev + 1` ⇒ threw. Positive control `f = _: _: prev: if prev < 3 then prev + 1 else prev` ⇒ `3`. Test: `test-diverge-throws` (`ci/tests/circular.nix`) |
 | `inheritAll` keeps duplicates (ordered-list `++`); `inheritSet` is its dedup sibling. Both are nearest-first | `inheritAll` / `inheritSet` in `lib/resolve.nix`; chain `root` (tag `T`) → `a` (tag `T`) → `c` (tag `C`): `inheritAll` ⇒ `[ "C" "T" "T" ]`, `inheritSet` ⇒ `[ "C" "T" ]`. Test: `test-inheritSet-dedups-what-inheritAll-keeps` (`ci/tests/resolve.nix`) |
 | `overlay` does not dedup vertices — dedup is deferred to `buildNodes` | `lib/graph.nix` header comment; `(s.overlay (s.vertex "a") (s.vertex "a")).vertices` ⇒ `[ "a" "a" ]`, while `attrNames (buildNodes { parentGraph = <that>; })` ⇒ `[ "a" ]` |
