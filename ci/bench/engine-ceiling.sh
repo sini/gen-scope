@@ -118,6 +118,23 @@ for n in 500 2000 8000; do
 done
 
 echo
+echo "── the round loop PAST the call-depth guard, which is what says it is flat ──"
+# A loop written as a self-applying lambda spends one evaluator frame per iteration, so its
+# descent depth IS its iteration count and it cannot pass `max-call-depth` (10000) at all. A
+# GREEN run at 12001 rounds is therefore a positive statement about the encoding rather than
+# another row below a boundary — and it is the one reading that distinguishes a flat loop from a
+# recursive one that has simply not been pushed far enough yet.
+#
+# The outer loop is not driven here: its cost is outer rounds × two least-model passes × atoms,
+# so reaching 10001 outer rounds needs ~20000 atoms and runs for minutes. It is run separately
+# and its reading is recorded in README; this sweep states what it did NOT push rather than
+# inferring the outer loop's encoding from the inner one's.
+out=$(cell rounds 12000)
+rc=$?
+[ "$rc" -eq 0 ] || engine_failures=$((engine_failures + 1))
+printf '%-18s %6s exit=%d %s\n' rounds 12000 "$rc" "${out:-<no value>}"
+
+echo
 echo "controls run: $controls_run   CALLDEPTH fired: $calldepth_fired   CSTACK fired: $cstack_fired   engine failures: $engine_failures"
 if [ "$calldepth_fired" -eq 0 ] || [ "$cstack_fired" -eq 0 ]; then
   echo "INVALID — a signature did not fire, so this sweep armed one mechanism and left the other untested"

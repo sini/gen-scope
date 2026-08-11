@@ -620,6 +620,8 @@ Re-run: `./ci/bench/engine-ceiling.sh`. A sweep in which a signature does not fi
 
 **The round bound is a theorem, not a cap.** `T_P` is monotone and its iteration from ∅ is increasing, so at most one round per atom can be productive and one further round observes that none was. `|atoms| + 1` is the number of steps the recursion would itself have taken. Nothing refuses at it, and `converged` rides every result so an unconverged answer is visible rather than inferred.
 
+**And the loops are flat, which is a measurement rather than a reading of the source.** A self-applying loop cannot pass `max-call-depth` at all — its descent depth *is* its iteration count. Both loops are green **past** that guard: `leastModelRounds` at **12001 rounds** and `wellFoundedModel`'s outer loop at **10002 outer rounds**, against a guard of 10000. The first is an arm of `./ci/bench/engine-ceiling.sh`; the second costs minutes (outer rounds × two least-model passes × ~20000 atoms) and is run on its own rather than in the sweep.
+
 ### Ceilings
 
 | surface | ceiling | disposition |
@@ -661,10 +663,12 @@ engine.verifiedDepth
 
 | rung `d` | chain | blocks | deepContested | layers | greatest condensation depth |
 |---|---|---|---|---|---|
-| 128 | 434 | 441 | 503 | 643 | 129 |
-| 512 | 570 | 602 | 1531 | 3653 | 513 |
-| 1024 | 1038 | 1135 | 5003 | 13943 | 1025 |
-| 2048 | 2722 | 3161 | 19346 | 58669 | **2049** |
+| 128 | 430 | 432 | 503 | 641 | 129 |
+| 512 | 569 | 589 | 1524 | 3643 | 513 |
+| 1024 | 1014 | 1144 | 5020 | 13807 | 1025 |
+| 2048 | 2740 | 3152 | 20335 | 58590 | **2049** |
+
+Each cell is a separate `nix-instantiate`, so every figure carries the evaluator's startup — around 250 ms, which is most of the 128 rung and none of the 2048 one. The ladder is read for **what completed**, not as a cost model; the `model` and `depth` arms are what separate the engine's cost from the partition door's.
 
 No figure here is a budget and none is offered as one. Whether a curve is adequate for the fleet the engine is for is a judgement, made by a person reading it, and no threshold is manufactured to make it runnable.
 
