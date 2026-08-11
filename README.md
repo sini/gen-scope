@@ -627,11 +627,11 @@ Re-run: `./ci/bench/engine-ceiling.sh`. A sweep in which a signature does not fi
 | surface | ceiling | disposition |
 |---|---|---|
 | `leastModelUnary` | none found | states no ceiling; refuses nothing on size |
-| `leastModelRounds` | none found to 8001 rounds | states no ceiling; refuses nothing |
-| `wellFoundedModel` outer loop | none found to 4001 outer rounds | states no ceiling; refuses nothing |
+| `leastModelRounds` | none found to 12001 rounds — past the call-depth guard | states no ceiling; refuses nothing |
+| `wellFoundedModel` outer loop | none found to 10002 outer rounds — past the same guard | states no ceiling; refuses nothing |
 | `leastModelUnary` on conjunctive input | not a ceiling — a **refusal by name**, since the arm cannot express the program | throws, naming the arm and the offending rule's head and arity |
 
-The round counts above are where the loops were **run**, not where they were pushed to failure: cost is rounds × rules, so the round counts at which the unforced controls abort are hours away on either loop. What carries the construction claim is the controlled forced/unforced comparison above, not a cliff-region reading of the engine itself.
+The round counts above are where the loops were **run**, not where they were pushed to failure — but they are past the **call-depth guard**, which is the reading that settles the encoding. Neither is near the **C-stack** boundary at ~45500 and neither can cheaply be: cost is rounds × rules, and the outer cell already costs 465 s at 10002 rounds. What carries the construction claim there is the controlled forced/unforced comparison above, not a cliff-region reading of the engine itself.
 
 ### The partition, the bound, and the warning the result carries
 
@@ -646,6 +646,8 @@ solved.provenance          # [ ] inside the verified bound; one plain-data entry
 What the door is handed is the **unsigned** dependency accessor (`program.dependency`), because mutual reachability is a property of the unsigned relation; the sign labels sit beside it (`program.signs`) as the labelled view, and nothing here asks the door to carry a label.
 
 **The engine constrains nothing on cost.** It accepts any program the semantics does not refuse and costs what it costs: no depth, size or shape makes a program inadmissible. `verifiedDepth` is an **acceptance** bound — what has been verified, never what the engine permits — and past it the engine **warns**; it does not refuse. A runtime refusal past a stated depth would make cost into correctness.
+
+**The depth is paid only if the warning is read.** Measured on one 2049-atom chain: forcing `solve`'s `trueAtoms` costs 679 ms, forcing its `provenance` costs 2765 ms. The difference is the condensation, and it is demand-driven like everything else in this substrate — the field is on the result and cannot be dropped, but nothing computes it until something reads it.
 
 **The warning rides the result.** It is a value the caller receives, never a side channel: a printed warning goes to stderr, which the evaluation cache swallows after the first run, and a debug-only field is invisible in ordinary use. A field that *is* the result survives caching because it is what was cached. It is plain data, so it crosses an evaluation boundary as itself. It is **not** the semantics' third value — `UNDEFINED` is a verdict on an atom inside the model; this accompanies a successful operation.
 
