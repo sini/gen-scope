@@ -4,6 +4,7 @@ let
   buildNodes = import ./build-nodes.nix { inherit prelude; };
   queries = import ./queries.nix { inherit prelude; };
   resolve = import ./resolve.nix { inherit prelude; };
+  structural = import ./structural.nix { inherit prelude; };
   eval = import ./eval.nix { inherit prelude; };
 in
-graph // buildNodes // queries // resolve // eval
+graph // buildNodes // queries // resolve // structural // eval
