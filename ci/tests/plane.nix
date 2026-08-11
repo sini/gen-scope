@@ -71,20 +71,55 @@ let
 
   # A graph that actually materializes a child, for the facade-residual cells: `children` is
   # what hands a raw node record back through `get`.
+  childRoots.p = mkNode "p" null { owns = [ "kid" ]; };
+  childAttrs = {
+    children =
+      self: id:
+      if id == "p" then
+        {
+          kid = mkNode "kid" "p" {
+            secret = "reachable";
+            owns = [ "p" ];
+          };
+        }
+      else
+        { };
+    "edges-owns" = self: id: (self.node id).decls.owns or [ ];
+    label = self: id: "fresh-${id}";
+  };
+  childParseParent = id: if id == "kid" then "p" else null;
+
   childCold = genScope.eval {
-    roots.p = mkNode "p" null { };
-    attributes = {
-      children =
-        self: id:
-        if id == "p" then
-          {
-            kid = mkNode "kid" "p" { secret = "reachable"; };
-          }
-        else
-          { };
-      label = self: id: "fresh-${id}";
+    roots = childRoots;
+    attributes = childAttrs;
+    parseParent = childParseParent;
+  };
+
+  # The same program answering values a cold run never produces, so anything served from it is
+  # visible wherever it surfaces — including through a channel that bypasses `get`.
+  childPrior = genScope.eval {
+    roots = childRoots;
+    attributes = childAttrs // {
+      "edges-owns" = self: id: [ "POISON-EDGE" ];
+      label = self: id: "cached-${id}";
     };
-    parseParent = id: if id == "kid" then "p" else null;
+    parseParent = childParseParent;
+  };
+
+  # Everything clean, reusing one STRUCTURAL and one RESOLUTIONAL name, so both can be read
+  # back through the same residual channel in one fixture.
+  childWarm = genScope.evalWarm {
+    roots = childRoots;
+    attributes = childAttrs;
+    parseParent = childParseParent;
+    prior = childPrior;
+    decision = genScope.mkDecision {
+      isClean = _: true;
+      reusable = _: [
+        "edges-owns"
+        "label"
+      ];
+    };
   };
 
   # One warm evaluation per row, everything clean, reusing exactly the named attributes.
@@ -232,7 +267,7 @@ in
     # ════ THE RESIDUAL, AS MEASURED FACT ════
     #
     # The three cells above close the facade's KEY SET. They say nothing about what is
-    # reachable through the values `get` returns, and the two cells below record what is —
+    # reachable through the values `get` returns, and the cells below record what is —
     # asserting the channels EXIST rather than asserting they do not. A containment claim these
     # refute would be worse than no claim at all, because the next reader would trust it.
 
@@ -275,21 +310,41 @@ in
       expected = [ "b" ];
     };
 
-    # What survives the residual: the property reuse rests on is the evaluator's branch order,
-    # not this record's key set, so reaching through a returned value does not weaken it.
-    test-residual-does-not-reach-the-reuse-property = {
+    # 3. WHAT SURVIVES THE RESIDUAL, READ THROUGH THE RESIDUAL ITSELF. The channel above
+    #    bypasses `get`; it does not bypass `evalAttr`, because `_eval` is built BY `evalAttr`
+    #    per child (`wrapChild`). So the always-recompute branch governs a `_eval` read exactly
+    #    as it governs a `get` read, and the property reuse rests on is a property of that
+    #    branch order rather than of the facade record.
+    #
+    #    The prior here is POISONED and the decision names BOTH a structural and a resolutional
+    #    attribute, so one fixture answers both halves through the same bypassing channel: the
+    #    structural read must show the cold value, and the resolutional read — the LIVE CONTROL
+    #    — must show the prior's. Without that control the structural assertion would also pass
+    #    against an evaluator that reuses nothing at all through `_eval`.
+    test-residual-channel-still-recomputes-structure = {
       expr =
         let
-          w = row [ "edges-owns" ];
+          kid = (childWarm.facade.get "p" "children").kid;
         in
-        [
-          (w.get "a" "edges-owns")
-          (w.facade.get "a" "edges-owns")
-        ];
-      expected = [
-        [ "b" ]
-        [ "b" ]
-      ];
+        {
+          structuralViaEval = kid._eval."edges-owns";
+          structuralViaGet = childWarm.facade.get "kid" "edges-owns";
+          resolutionalViaEval = kid._eval.label;
+          resolutionalViaGet = childWarm.facade.get "kid" "label";
+          coldStructural = childCold.get "kid" "edges-owns";
+          priorStructural = childPrior.get "kid" "edges-owns";
+        };
+      expected = {
+        # recomputed on BOTH channels — the poisoned edge set never surfaces
+        structuralViaEval = [ "p" ];
+        structuralViaGet = [ "p" ];
+        # reused on BOTH channels — the control that makes the two above non-vacuous
+        resolutionalViaEval = "cached-kid";
+        resolutionalViaGet = "cached-kid";
+        # the two values the structural reads are being distinguished between
+        coldStructural = [ "p" ];
+        priorStructural = [ "POISON-EDGE" ];
+      };
     };
     test-facade-nodeIds-is-the-node-set = {
       expr = cold.facade.nodeIds;
