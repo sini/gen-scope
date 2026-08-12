@@ -670,7 +670,7 @@ engine.verifiedDepth
 | 1024 | 1014 | 1144 | 5020 | 13807 | 1025 |
 | 2048 | 2740 | 3152 | 20335 | 58590 | **2049** |
 
-Each cell is a separate `nix-instantiate`, so every figure carries the evaluator's startup — around 250 ms, which is most of the 128 rung and none of the 2048 one. The ladder is read for **what completed**, not as a cost model; the `model` and `depth` arms are what separate the engine's cost from the partition door's.
+Each cell is a separate `nix-instantiate`, so every figure carries the evaluator's startup — around 250 ms, which is most of the 128 rung and none of the 2048 one. The ladder is read for **what completed**, not as a cost model. The `model` arm is the engine's own cost; the `depth` arm is the model **plus** the door, so the door's price is the difference between them and never the `depth` reading.
 
 No figure here is a budget and none is offered as one. Whether a curve is adequate for the fleet the engine is for is a judgement, made by a person reading it, and no threshold is manufactured to make it runnable.
 

@@ -4,11 +4,14 @@
 #   ./ci/bench/cost-classes.sh [depth ladder...]   -> one row per cell, then the derived bound
 #
 # THE DERIVATION FUNCTION, which is a PINNED TERM of the acceptance comparison and is therefore
-# implemented once, here, rather than described: the bound is the GREATEST CONDENSATION DEPTH at
-# which every arm of every fixture family completed with `converged=true`. It is what has been
-# VERIFIED. It is not a budget, nothing refuses at it, and no threshold is picked to make this
-# runnable — the judge of whether the curve below is adequate for the fleet the engine is for is
-# a person reading it, once.
+# implemented once, here, rather than described: the bound is *"the greatest condensation depth at
+# which every arm of ci/bench/cost-classes.nix completed with converged=true, over the fixture
+# families named beside it"* — quoted from `lib/acceptance.nix`, which is where that string is
+# RECORDED and against which `acceptanceSignal` voids a comparison. The families it names are
+# `$shapes` below, and the maximum is taken over that one list. It is what has been VERIFIED. It
+# is not a budget, nothing refuses at it, and no threshold is picked to make this runnable — the
+# judge of whether the curve below is adequate for the fleet the engine is for is a person reading
+# it, once.
 #
 # A cell that does not converge, or that does not return, ENDS the ladder: the bound is the last
 # depth every cell cleared, so an incomplete cell cannot be rounded up into one that passed.
@@ -46,10 +49,15 @@ for d in $ladder; do
     done
   done
   if [ "$cleared" -eq 1 ]; then
-    # The depth-bearing families are the ones whose condensation depth moves with the ladder
-    # parameter; the greatest of them at a cleared rung is what that rung verified.
+    # The maximum is taken over `$shapes` — ONE list, the same one the clearing loop above reads.
+    # A second list naming only "the depth-bearing families" stood here, and it was a place the
+    # rule could drift from the figure it defines: adding a depth-bearing family to the RECORDED
+    # `fixtures` without adding it here would silently under-report the maximum, and the
+    # detector's voiding term could not catch it, because the recorded string would be unchanged.
+    # The depth-0 families contribute 0 and cannot be the maximum, so iterating all of them costs
+    # two extra cells per rung and REMOVES the drift rather than documenting it.
     best=0
-    for shape in chain blocks deepContested layers; do
+    for shape in $shapes; do
       dep=$(cell "$shape" depth "$d" | sed -n 's/.*"depth":\([0-9]*\).*/\1/p')
       [ -n "$dep" ] && [ "$dep" -gt "$best" ] && best=$dep
     done
@@ -62,5 +70,10 @@ for d in $ladder; do
 done
 
 echo
-echo "derivation: the greatest condensation depth at which every arm of every fixture family completed with converged=true"
+# ★ QUOTED, NOT PARAPHRASED. This is the string `lib/acceptance.nix` records as the comparison's
+# pinned DERIVATION FUNCTION term, printed character-for-character so the two can be diffed rather
+# than read for agreement. A paraphrase here would read as agreement while the detector's voiding
+# term compared something else. "…named beside it" is the `fixtures` list, printed below.
+echo "derivation: the greatest condensation depth at which every arm of ci/bench/cost-classes.nix completed with converged=true, over the fixture families named beside it"
+echo "fixture families: $shapes"
 echo "verified depth: $verified"

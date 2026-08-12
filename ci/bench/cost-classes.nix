@@ -15,11 +15,14 @@
 #
 #   model  — the well-founded model alone. No partition, no door. This is the semantics' own cost
 #            and it is the one the round axis belongs to.
-#   depth  — the partition door alone, reporting the condensation depth. This is the OTHER
-#            library's cost, measured apart so an engine figure is never quoted with a
-#            partitioner's price inside it.
-#   solve  — the front door: model, plus the depth, plus the provenance stamp. The sum, measured
-#            rather than added up from the two above.
+#   depth  — the model PLUS the partition door, reporting the condensation depth beside it.
+#            ★ It is NOT the door alone, and the difference matters when a figure is quoted:
+#            `report` binds the model and `deepSeq`s the whole row on every arm, so the OTHER
+#            library's price is the `depth` − `model` DIFFERENCE and never the `depth` reading.
+#            Separating the two costs is what these arms are for; the separation is a subtraction,
+#            not a column.
+#   solve  — the front door: the same, plus the provenance stamp. Measured rather than added up
+#            from the two above.
 #
 # `converged` is on every cell and an unconverged cell is INVALID rather than slow. It is what
 # makes the acceptance derivation readable at all: the bound is the greatest depth at which every
