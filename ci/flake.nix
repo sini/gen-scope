@@ -1,6 +1,6 @@
 {
   inputs = {
-    gen.url = "github:sini/gen";
+    gen-harness.url = "github:sini/gen-harness";
     gen-prelude.url = "github:sini/gen-prelude";
     # The engine's dependency, pinned here directly rather than reached through the hub: the
     # partition door's published record is what the engine's provenance cells read, so the suite
@@ -14,7 +14,7 @@
 
   outputs =
     inputs@{
-      gen,
+      gen-harness,
       gen-prelude,
       gen-graph,
       ...
@@ -26,7 +26,7 @@
         graph = gen-graph.lib;
       };
     in
-    gen.lib.mkCi {
+    gen-harness.lib.mkCi {
       inherit inputs;
       name = "gen-scope";
       testModules = ./tests;
