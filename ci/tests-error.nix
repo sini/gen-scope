@@ -172,6 +172,27 @@ in
       };
     };
 
+    # ── THE REGISTRY NAMES THE ENTRY AND THE FIELD ──
+    # A run projects `resolve`, `dedupKey` and `fold` at points where no refusal can follow, so
+    # their absence is decided at registration. The message has to carry BOTH coordinates a caller
+    # needs — which entry, and which field — because a registry is a list and "one of these is not
+    # a kind" leaves the caller to bisect it.
+    test-registry-names-the-entry-and-the-missing-field = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind";
+          name = "ghost";
+          below = [ ];
+          dedupKey = null;
+          fold = null;
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries no `resolve` field"]'';
+      };
+    };
+
     # ── LIVE CONTROL, SAME INVOCATION ──
     # An `expected` cell inside an `expectedError` output on purpose: a control has to run in the
     # same invocation as the thing it controls, or it controls nothing. Without it the six cells

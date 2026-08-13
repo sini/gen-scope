@@ -548,6 +548,79 @@ let
     ];
   };
 
+  # ── FORGED KIND RECORDS: THE FIELDS THE RUN PROJECTS ──
+  # `resolve`, `dedupKey` and `fold` are read at five places in a run, each of them a projection
+  # where no refusal can follow — a missing attribute is a type error, and `tryEval` does not hold
+  # a type error. So `didThrow` reporting TRUE below is itself the evidence: it can only be true if
+  # the failure is a named `throw`, which means the registry decided it while it was still data.
+  #
+  # ★ THE UNCLAIMED ROWS ARE THE SHARP ONES. Resource combination ranges over every REGISTERED
+  # kind, because a kind nobody claimed must still report an empty entry — so one bare record
+  # reaches a projection in a run that holds no claim of it at all.
+  forgedKind =
+    fields:
+    {
+      _type = "gen-scope/kind";
+      name = "ghost";
+      below = [ ];
+    }
+    // fields;
+
+  # Every forged resolver PRODUCES a resource. Without that the fold path is never entered and the
+  # `fold` projection is never reached, so a probe over these would report a refusal it never
+  # actually asked for.
+  ghostResolve = _: _: { resources.ghostRes = "ran"; };
+
+  withForged =
+    fields: claimed:
+    let
+      registry = mkKinds [
+        (mkKind {
+          name = "host";
+          resolve = _: _: { resources.hostRes = "ran"; };
+        })
+        (forgedKind fields)
+      ];
+    in
+    resolveClaims {
+      kinds = registry;
+      claims = [
+        (mkClaim {
+          kind = "host";
+          subject = subjA;
+        })
+      ]
+      ++ (
+        if claimed then
+          [
+            (mkClaim {
+              kind = "ghost";
+              subject = subjA;
+            })
+          ]
+        else
+          [ ]
+      );
+    };
+
+  noResolve = {
+    dedupKey = null;
+    fold = null;
+  };
+  noDedupKey = {
+    resolve = ghostResolve;
+    fold = null;
+  };
+  noFold = {
+    resolve = ghostResolve;
+    dedupKey = _: "g";
+  };
+  wellFormedForged = {
+    resolve = ghostResolve;
+    dedupKey = null;
+    fold = null;
+  };
+
   # ── A HAND-BUILT CLAIM DECLARING A VIOLATION THE CONSTRUCTOR WOULD HAVE REFUSED ──
   # `mkClaim` now refuses a shadowing payload where the author is, so the run's own reserved-key
   # arm is reachable only through a record that did not come from it — which is exactly the class
@@ -954,6 +1027,56 @@ in
           subject = subjA;
         })._reserved;
       expected = [ ];
+    };
+
+    # ── THE FIELDS A RUN PROJECTS ARE DECIDED AT REGISTRATION, NOT AT THE PROJECTION ──
+    # Six cells, one per field × claimed/unclaimed. `didThrow` can only report true here if the
+    # refusal is a named `throw`: a missing attribute is a type error and `tryEval` does not hold
+    # one, so under a construction that projects instead of deciding, these cells do not fail —
+    # they take the runner down with them.
+    test-kind-record-with-no-resolver-refused-when-claimed = {
+      expr = didThrow (withForged noResolve true);
+      expected = true;
+    };
+    test-kind-record-with-no-resolver-refused-when-nothing-claims-it = {
+      expr = didThrow (withForged noResolve false);
+      expected = true;
+    };
+    test-kind-record-with-no-dedupkey-refused-when-claimed = {
+      expr = didThrow (withForged noDedupKey true);
+      expected = true;
+    };
+    # ★ The widest one: resource combination ranges over every registered kind, so this record is
+    # reached in a run that holds no claim of it.
+    test-kind-record-with-no-dedupkey-refused-when-nothing-claims-it = {
+      expr = didThrow (withForged noDedupKey false);
+      expected = true;
+    };
+    test-kind-record-with-no-fold-refused-when-claimed = {
+      expr = didThrow (withForged noFold true);
+      expected = true;
+    };
+    test-kind-record-with-no-fold-refused-when-nothing-claims-it = {
+      expr = didThrow (withForged noFold false);
+      expected = true;
+    };
+    # CONTROL — the same forged shape carrying all three fields registers and runs, so the six
+    # cells above are about the missing field and not about a marker the registry now rejects.
+    test-control-a-forged-record-carrying-all-three-fields-runs = {
+      expr = (withForged wellFormedForged true).resources.ghost;
+      expected = {
+        ghostRes = "ran";
+      };
+    };
+    # CONTROL — the ordinary door requires all three, so a cooperative caller pays nothing: a kind
+    # declaring neither grouping nor merge still registers and still runs.
+    test-control-a-constructed-kind-declaring-no-dedup-still-runs = {
+      expr = cascadeRun.resources.leaf;
+      expected = {
+        at_0_0_0 = "id-a";
+        at_0_1_0 = "id-a";
+        at_1 = "id-b";
+      };
     };
 
     # ── A MEASURE THAT IS NOT THE RELATION'S RANK STRANDS CLAIMS, AND THEY ARE NAMED ──

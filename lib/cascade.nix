@@ -51,10 +51,25 @@
 # The marker answers PROVENANCE, and it answers it for a COOPERATIVE CALLER: a record that came out
 # of the constructor has been through everything the constructor refuses, while a record that
 # merely writes the token has asserted something about its own origin that nothing here can check.
-# So what the token does NOT establish is exactly the three fields the constructor writes and the
-# intake never reads — `resolve`, `dedupKey` and `fold`. A record carrying `_type`, `name` and
-# `below` alone registers, and it has no resolver. ANYTHING DOWNSTREAM THAT NEEDS ONE MUST SAY SO
-# ITSELF: a registered kind is not evidence that one is there.
+# So what the token does NOT establish is WHAT the three fields the constructor writes actually are
+# — whether `resolve` is a function of the right shape, whether `dedupKey` returns a string,
+# whether `fold` merges anything sensible. Those are questions about values, and the answers live
+# where the values are applied.
+#
+# ★ THEIR PRESENCE IS A DIFFERENT QUESTION, AND THE REGISTRY DOES ANSWER IT. "Is the field there"
+# is decidable on any value at all, cheaply and totally, exactly like the `name` and `below` checks
+# beside it — and every one of them is READ by a consumer at a point where no refusal can follow.
+# A projection of a missing attribute is a type error, and a type error is not a value: it
+# terminates the evaluation, `tryEval` does not contain it, and the caller gets no name. So a
+# record that registers WITHOUT them would be this registry publishing something it has called a
+# kind while leaving the first reader to discover, from an abort, that it is not one. That is the
+# failure this intake exists to prevent, and declining it here on the grounds that the token cannot
+# vouch for the fields' CONTENTS would be answering a question nobody asked.
+#
+# ★ AND THE ORDINARY DOOR ALREADY REQUIRES ALL THREE, so this costs a cooperative caller nothing:
+# `mkKind` gives `resolve` no default and writes `dedupKey` and `fold` as null when a kind declares
+# neither. No record it builds can fail these arms. What they reach is precisely the forged record
+# — the one case the marker was never able to speak for.
 #
 # The field checks answer USABILITY, and they are the half that holds against any input at all —
 # `name` is used as an attribute name and `below` as a list of them, and those obligations are the
@@ -99,11 +114,13 @@
 # Written down rather than left for the next construction to discover, because the next
 # construction is what builds on it.
 #
-# `resolve`, `dedupKey` and `fold` are not type-checked. The pairing between the last two is a
-# registration-time error, and that is all: a kind whose resolver is not a function registers here
-# and fails wherever it is finally applied. Nothing here constrains what a resolver may RETURN
-# either, so the conformance of a returned fragment is not a property this registry has
-# established — a consumer that needs plain data must obtain it somewhere else.
+# `resolve`, `dedupKey` and `fold` are PRESENT on anything that registers, and they are not
+# TYPE-CHECKED. The pairing between the last two is a registration-time error, and that is the
+# whole of it: a kind whose resolver is a string registers here and fails where it is applied.
+# Nothing here constrains what a resolver may RETURN either, so the conformance of a returned
+# fragment is not a property this registry has established — a consumer that needs plain data must
+# obtain it somewhere else. The line is between EXISTENCE, which a consumer cannot check without
+# already having aborted, and SHAPE, which a consumer can only judge at the point of application.
 #
 # And the marker's limit above is the scope of every completeness claim on this page. The intake is
 # total on the shapes an ordinary caller can reach; it is not total against a caller who writes the
@@ -305,6 +322,12 @@ let
       "carries a `below` that is not a list"
     else if !(all isString k.below) then
       "carries a `below` holding a name that is not a string"
+    else if !(k ? resolve) then
+      "carries no `resolve` field"
+    else if !(k ? dedupKey) then
+      "carries no `dedupKey` field"
+    else if !(k ? fold) then
+      "carries no `fold` field"
     else
       null;
 
