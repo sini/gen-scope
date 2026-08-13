@@ -550,9 +550,32 @@ let
           "carries a `maxDepth` that is not an integer"
         else
           let
-            undepthed = filter (n: !(kindSet.depth ? ${n})) (attrNames kindSet.kinds);
+            registered = attrNames kindSet.kinds;
+            # The same question the registration door asks, asked again on the door that skips it.
+            # A record carrying the kind-set token was never handed to `mkKinds`, so no entry in it
+            # has met `notAKind` — and this run projects `below`, `resolve`, `dedupKey` and `fold`
+            # off those entries at points where a missing one is a type error rather than a
+            # refusal. Deciding it here and not there would be this run publishing an empty entry
+            # for something it never established was a kind, which is the reading the registration
+            # door exists to prevent; the token cannot vouch for the entries any more than the kind
+            # token vouches for the fields inside one.
+            malformed = filter (m: m != null) (
+              map (
+                n:
+                let
+                  reason = notAKind kindSet.kinds.${n};
+                in
+                if reason == null then null else "`${n}` ${reason}"
+              ) registered
+            );
+            undepthed = filter (n: !(kindSet.depth ? ${n})) registered;
           in
-          if undepthed != [ ] then "registers kind(s) ${toJSON undepthed} with no `depth` entry" else null;
+          if malformed != [ ] then
+            "holds entries that are not kind records: ${toJSON malformed}"
+          else if undepthed != [ ] then
+            "registers kind(s) ${toJSON undepthed} with no `depth` entry"
+          else
+            null;
 
       # ── the refusal chain, shared by intake and emission ──
       # `chain` names the emitting claim for a sub-claim's errors, and is empty for a root. Each

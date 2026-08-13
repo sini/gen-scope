@@ -621,6 +621,92 @@ let
     fold = null;
   };
 
+  # ── THE SECOND DOOR: A HAND-BUILT KIND-SET RECORD ──
+  # A record carrying the kind-set token is handed to the run WHOLE — `mkKinds` is never called on
+  # it, so no entry inside it has met the registration checks. The same four fields a run projects
+  # are therefore just as absent here, and reached by the same code.
+  #
+  # ★ WHICH FIELDS A RUN ACTUALLY PROJECTS WAS ENUMERATED BY SUBSTITUTION, NOT BY READING THE
+  # SOURCE: each field replaced in turn by a throw carrying its own name, so a form a scan has no
+  # case for — `inherit (…)`, `getAttr`, a map over `attrValues` — fires exactly the same. Four
+  # fire: `below`, `resolve`, `dedupKey`, `fold`. `_type` and `name` do not.
+  forgedEntry =
+    fields:
+    {
+      _type = "gen-scope/kind";
+      name = "unused";
+    }
+    // fields;
+
+  kindSetWithForged =
+    fields:
+    cascadeKinds
+    // {
+      kinds = cascadeKinds.kinds // {
+        unused = forgedEntry fields;
+      };
+    };
+
+  # `unused` is registered and nothing claims it, so the unclaimed arm reaches it only through
+  # resource combination — which ranges over every registered kind so an unclaimed one can report
+  # an empty entry.
+  withForgedKindSet =
+    fields: claimed:
+    resolveClaims {
+      kinds = kindSetWithForged fields;
+      claims =
+        if claimed then
+          [
+            (mkClaim {
+              kind = "unused";
+              subject = subjA;
+            })
+          ]
+        else
+          [
+            (mkClaim {
+              kind = "leaf";
+              subject = subjB;
+            })
+          ];
+    };
+
+  entryNoResolve = {
+    below = [ ];
+    dedupKey = null;
+    fold = null;
+  };
+  entryNoDedupKey = {
+    below = [ ];
+    resolve = ghostResolve;
+    fold = null;
+  };
+  entryNoFold = {
+    below = [ ];
+    resolve = ghostResolve;
+    dedupKey = _: "g";
+  };
+  # `below` is read only where an emission is validated, so this entry must emit or the cell
+  # reports a refusal it never asked for.
+  entryNoBelow = {
+    resolve = c: _: {
+      claims = [
+        (mkClaim {
+          kind = "leaf";
+          inherit (c) subject;
+        })
+      ];
+    };
+    dedupKey = null;
+    fold = null;
+  };
+  entryWellFormed = {
+    below = [ ];
+    resolve = ghostResolve;
+    dedupKey = null;
+    fold = null;
+  };
+
   # ── A HAND-BUILT CLAIM DECLARING A VIOLATION THE CONSTRUCTOR WOULD HAVE REFUSED ──
   # `mkClaim` now refuses a shadowing payload where the author is, so the run's own reserved-key
   # arm is reachable only through a record that did not come from it — which is exactly the class
@@ -1068,6 +1154,63 @@ in
         ghostRes = "ran";
       };
     };
+    # ── THE SAME QUESTION ON THE DOOR THAT SKIPS REGISTRATION ──
+    # A kind-set record is handed over whole, so nothing inside it met the registration checks.
+    # Eight cells: four projected fields × claimed/unclaimed. `didThrow` reporting true is again
+    # the evidence — a missing attribute is a type error and `tryEval` does not hold one.
+    test-kind-set-entry-with-no-resolver-refused-when-claimed = {
+      expr = didThrow (withForgedKindSet entryNoResolve true);
+      expected = true;
+    };
+    test-kind-set-entry-with-no-resolver-refused-when-nothing-claims-it = {
+      expr = didThrow (withForgedKindSet entryNoResolve false);
+      expected = true;
+    };
+    test-kind-set-entry-with-no-dedupkey-refused-when-claimed = {
+      expr = didThrow (withForgedKindSet entryNoDedupKey true);
+      expected = true;
+    };
+    test-kind-set-entry-with-no-dedupkey-refused-when-nothing-claims-it = {
+      expr = didThrow (withForgedKindSet entryNoDedupKey false);
+      expected = true;
+    };
+    test-kind-set-entry-with-no-fold-refused-when-claimed = {
+      expr = didThrow (withForgedKindSet entryNoFold true);
+      expected = true;
+    };
+    test-kind-set-entry-with-no-fold-refused-when-nothing-claims-it = {
+      expr = didThrow (withForgedKindSet entryNoFold false);
+      expected = true;
+    };
+    test-kind-set-entry-with-no-below-refused-when-claimed = {
+      expr = didThrow (withForgedKindSet entryNoBelow true);
+      expected = true;
+    };
+    test-kind-set-entry-with-no-below-refused-when-nothing-claims-it = {
+      expr = didThrow (withForgedKindSet entryNoBelow false);
+      expected = true;
+    };
+    # CONTROL — a hand-built kind-set record whose entries are well formed still passes through.
+    # The pass-through is the door's whole purpose; the check is about what comes through it.
+    test-control-a-hand-built-kind-set-with-sound-entries-runs = {
+      expr = (withForgedKindSet entryWellFormed true).resources.unused;
+      expected = {
+        ghostRes = "ran";
+      };
+    };
+    # CONTROL — the two hand-modified registries this suite already relies on still pass, so the
+    # new check does not close the door the schedule and measure cells are measured through.
+    test-control-the-hand-modified-registries-still-pass-the-door = {
+      expr = [
+        (succeeds truncatedRun.unrun)
+        (succeeds flattenedRun.unrun)
+      ];
+      expected = [
+        true
+        true
+      ];
+    };
+
     # CONTROL — the ordinary door requires all three, so a cooperative caller pays nothing: a kind
     # declaring neither grouping nor merge still registers and still runs.
     test-control-a-constructed-kind-declaring-no-dedup-still-runs = {

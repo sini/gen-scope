@@ -193,6 +193,37 @@ in
       };
     };
 
+    # ── THE PASS-THROUGH DOOR NAMES THE ENTRY'S KEY, WHICH IS HOW THE RUN INDEXES IT ──
+    # A kind-set record handed over whole never met the registration checks, so the run asks the
+    # same question of its entries. The key is what the message carries — not the record's own
+    # `name` field — because the key is what a claim's `kind` resolves through, and on a forged
+    # record the two need not agree.
+    test-pass-through-door-names-the-entry-key-and-the-missing-field = {
+      expr = resolveClaims {
+        kinds = {
+          _type = "gen-scope/kind-set";
+          kinds = {
+            l = {
+              _type = "gen-scope/kind";
+              name = "l";
+              below = [ ];
+              dedupKey = null;
+              fold = null;
+            };
+          };
+          depth = {
+            l = 0;
+          };
+          maxDepth = 0;
+        };
+        claims = [ ];
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.resolveClaims: the kind set holds entries that are not kind records: ["`l` carries no `resolve` field"]'';
+      };
+    };
+
     # ── LIVE CONTROL, SAME INVOCATION ──
     # An `expected` cell inside an `expectedError` output on purpose: a control has to run in the
     # same invocation as the thing it controls, or it controls nothing. Without it the six cells
