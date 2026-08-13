@@ -95,6 +95,39 @@ let
     (leaf "a")
   ];
 
+  # ── FORGED KIND RECORDS: REACHING THE FIELD ARMS AT ALL ──
+  # The intake predicate decides IN ORDER, and the marker arm sits ahead of every field arm. A bare
+  # record is therefore refused for its PROVENANCE, and a cell built from one is green whatever the
+  # arm it is named for does — measured, not argued: deleting `isString name` outright left such a
+  # cell passing and the suite whole. Forging the marker is what puts the field arms on the path.
+  #
+  # ★ AND THE REST OF THE RECORD HAS TO BE WHOLE, which is the half that is easy to miss. The arms
+  # BELOW the field checks ask for `resolve`, `dedupKey` and `fold` by presence, so a forged record
+  # that stops at the marker is refused THERE instead — the same defect wearing a later arm, and
+  # measurably so: with the provenance arm deleted the old bare records were still refused, two
+  # arms further down, for carrying no `resolve`. Every field except the one under test is supplied
+  # and well-formed here, which leaves exactly one thing wrong with the record and exactly one arm
+  # that can answer for it.
+  #
+  # The marker is written as a LITERAL rather than read off the library. A forgery that imported
+  # the constant it forges would agree with the library by construction and could not detect a
+  # record the library refuses to recognise.
+  forgedKind =
+    fields:
+    {
+      _type = "gen-scope/kind";
+      name = "ghost";
+      below = [ ];
+      resolve = _: _: { };
+      dedupKey = null;
+      fold = null;
+    }
+    // fields;
+
+  # The same whole record with the marker WITHHELD: nothing else about it is wrong, so provenance
+  # is the only arm that can refuse it, and deleting that arm has to let it register.
+  unmarkedKind = removeAttrs (forgedKind { name = "a"; }) [ "_type" ];
+
   # ── THE ARMED VARIANT ──
   # The registry built the way the domination requirement forbids: the unregistered-name check is
   # a sibling binding that reading the measure never forces. Everything else is identical. It is
@@ -355,39 +388,26 @@ in
       expected = true;
     };
     test-entry-not-built-by-the-constructor-refused = {
-      expr = didThrow (mkKinds [
-        {
-          name = "a";
-          below = [ ];
-        }
-      ]);
+      expr = didThrow (mkKinds [ unmarkedKind ]);
       expected = true;
     };
     test-entry-with-a-non-string-name-refused = {
-      expr = didThrow (mkKinds [
-        {
-          name = 42;
-          below = [ ];
-        }
-      ]);
+      expr = didThrow (mkKinds [ (forgedKind { name = 42; }) ]);
       expected = true;
     };
     test-entry-with-no-below-field-refused = {
-      expr = didThrow (mkKinds [ { name = "a"; } ]);
+      expr = didThrow (mkKinds [ (removeAttrs (forgedKind { }) [ "below" ]) ]);
       expected = true;
     };
+    # The `below` arms are reached through a forged record and not through the constructor: the
+    # constructor screens both shapes itself, so a fixture built with it is refused before the
+    # registry's own arm is ever consulted.
     test-below-holding-a-non-string-refused = {
-      expr = didThrow (mkKinds [
-        (leaf "b")
-        (node "a" [ 42 ])
-      ]);
+      expr = didThrow (mkKinds [ (forgedKind { below = [ 42 ]; }) ]);
       expected = true;
     };
     test-below-that-is-not-a-list-refused = {
-      expr = didThrow (mkKinds [
-        (leaf "b")
-        (node "a" "b")
-      ]);
+      expr = didThrow (mkKinds [ (forgedKind { below = "b"; }) ]);
       expected = true;
     };
     test-argument-that-is-neither-list-nor-attrset-refused = {
@@ -397,7 +417,7 @@ in
     # Composed, like the unregistered-name cell: the intake refusal has to dominate the path to
     # the measure, not merely exist beside it.
     test-intake-refusal-dominates-the-depth-path = {
-      expr = didThrow (mkKinds [ { name = "a"; } ]).depth;
+      expr = didThrow (mkKinds [ (forgedKind { name = 42; }) ]).depth;
       expected = true;
     };
 
