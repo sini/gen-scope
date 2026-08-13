@@ -102,15 +102,29 @@ let
   fnB = {
     gen = _: "b";
   };
-  # Store-path carriers whose functions sit BELOW the point `toJSON` and `==` stop at. The cell
-  # over these asserts the CONFLICT message, which is the only way to tell "the scan stopped" from
-  # "the scan never ran" — both would be a throw, and `tryEval` cannot tell them apart.
-  carrierA = {
+  # ── THE SCAN'S STOPPING RULE, WHICH ONLY A MESSAGE CAN REPORT ──
+  # Both pairs carry functions and share their shape; only the derivation marker differs. Marked,
+  # the fold reaches its COMPARISON and the conflict renders both by their paths. Unmarked, the
+  # comparison would be decided field by field — functions included — so the fold refuses first.
+  # `tryEval` cannot tell those apart, because BOTH throw: a fold that admitted the unmarked pair
+  # would report a conflict between two fragments that render IDENTICALLY, which is a throw and a
+  # useless one. The discrimination is the text.
+  drvA = {
+    type = "derivation";
     outPath = "/nix/store/aaaa";
     passthru = _: 1;
   };
-  carrierB = {
+  drvB = {
+    type = "derivation";
     outPath = "/nix/store/bbbb";
+    passthru = _: 2;
+  };
+  bareA = {
+    outPath = "/nix/store/aaaa";
+    passthru = _: 1;
+  };
+  bareA2 = {
+    outPath = "/nix/store/aaaa";
     passthru = _: 2;
   };
 
@@ -421,18 +435,32 @@ in
       };
     };
 
-    # ★ THE SCAN'S STOPPING RULE, WHICH ONLY A MESSAGE CAN REPORT. These fragments carry functions
-    # under `outPath`, and the fold reaches its COMPARISON and renders both by their paths. Had the
-    # scan descended, this would be the refusal above; had it not run at all, this message would be
-    # an abort. It is the conflict, so the scan stopped exactly where `toJSON` and `==` do.
-    test-same-conflict-renders-a-store-path-carrier-by-its-path = {
+    # The scan did not descend into a MARKED derivation: the fold reached its comparison, and the
+    # conflict renders each fragment by its path. Had the scan descended, this would be the guard's
+    # message instead — which is exactly what the next cell asserts for the unmarked pair.
+    test-same-conflict-renders-derivations-by-their-paths = {
       expr = folds.same "k" [
-        carrierA
-        carrierB
+        drvA
+        drvB
       ];
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.folds.same: conflicting values for key 'k': [\"/nix/store/aaaa\",\"/nix/store/bbbb\"]";
+      };
+    };
+    # ★ THE SAME SHAPE WITHOUT THE MARKER IS THE GUARD'S, AND THIS IS THE CELL THAT SAYS WHICH.
+    # These two share a store path, so a fold that stopped at `outPath` would compare them field by
+    # field, decide FALSE on their differing functions, and report a conflict whose two rendered
+    # values are the same string — an answer naming a difference the caller cannot see. The
+    # evaluator's shortcut is the marker, so the scan's is too.
+    test-a-store-path-without-the-derivation-marker-is-refused-by-name = {
+      expr = folds.same "k" [
+        bareA
+        bareA2
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a function, at fragment-list position [0].passthru — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
       };
     };
 
@@ -452,6 +480,30 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.folds.byKey: key 'k' has a fragment that is a lambda rather than an attribute set, at fragment-list position [0]";
+      };
+    };
+
+    # ── THE KEY, WHICH IS REFUSED BEFORE ANY MESSAGE IS BUILT ──
+    # The refusal names the fold, because a caller with five folds in one spec learns nothing from a
+    # message that names only the vocabulary.
+    test-same-names-itself-when-the-key-is-not-a-string = {
+      expr = folds.same 42 [
+        1
+        2
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.same: `key` is a int rather than a string — every refusal this fold can raise names the key, so a key that cannot be rendered ends the evaluation in place of the refusal that was owed";
+      };
+    };
+    # ★ `list` RAISES NOTHING ELSE AT ALL, and it still decides its key: the signature belongs to
+    # the vocabulary, so the member with no diagnostics of its own is exactly the one where silent
+    # acceptance would make the shared contract untrue.
+    test-list-names-itself-when-the-key-is-not-a-string = {
+      expr = folds.list [ "not a key" ] [ 1 ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.list: `key` is a list rather than a string — every refusal this fold can raise names the key, so a key that cannot be rendered ends the evaluation in place of the refusal that was owed";
       };
     };
 

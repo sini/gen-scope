@@ -75,6 +75,18 @@ let
         acc // v
     ) { } vs;
 
+  # The fold as it stands with its FRAGMENTS decided and its KEY not: the shape a door takes when
+  # it checks one argument and not the other. Its refusal is real and named, and it never arrives,
+  # because assembling the message coerces the key first.
+  unguardedKeySame =
+    key: vs:
+    if vs == [ ] then
+      throw "unguarded.same: empty fragment list for key '${key}'"
+    else if all (v: v == head vs) vs then
+      head vs
+    else
+      throw "unguarded.same: conflicting values for key '${key}'";
+
   unguardedByKey =
     spec: key: vs:
     let
@@ -169,6 +181,24 @@ let
 
     bykey-wrapped = didThrow (folds.byKey spec "k" [ (_: "not a fragment") ]);
     unguarded-bykey-wrapped = didThrow (unguardedByKey unguardedSpec "k" [ (_: "not a fragment") ]);
+
+    # ── THE KEY, WHICH EVERY DIAGNOSTIC INTERPOLATES ──
+    # Both forms the defect named: fragments that would have conflicted, and no fragments at all.
+    # The refusal each was owed is assembled from the key, so without the door neither arrives.
+    key-guarded-wrapped = didThrow (
+      folds.same 42 [
+        1
+        2
+      ]
+    );
+    key-guarded-empty-wrapped = didThrow (folds.same 42 [ ]);
+    unguarded-key-wrapped = didThrow (
+      unguardedKeySame 42 [
+        1
+        2
+      ]
+    );
+    unguarded-key-empty-wrapped = didThrow (unguardedKeySame 42 [ ]);
 
     mergeattrs-wrapped = didThrow (
       folds.mergeAttrs "k" [

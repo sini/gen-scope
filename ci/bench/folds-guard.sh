@@ -42,6 +42,10 @@ cells=(
   "unguarded-bykey-wrapped|1|cannot convert a function to JSON"
   "mergeattrs-wrapped|0|^true$"
   "unguarded-mergeattrs-wrapped|1|expected a set but found a function"
+  "key-guarded-wrapped|0|^true$"
+  "key-guarded-empty-wrapped|0|^true$"
+  "unguarded-key-wrapped|1|cannot coerce an integer to a string"
+  "unguarded-key-empty-wrapped|1|cannot coerce an integer to a string"
 )
 
 fail=0

@@ -177,12 +177,13 @@
 # fold over a kind's resource fragments — meaningful, and it is the classical reason aggregation
 # demands stratification.
 #
-# THEORY. Apt, Blair & Walker (1988), "Stratified Programs", Definition 3 (printed p. 96), stratify
-# a program so that a relation occurring POSITIVELY in a stratum is defined within that stratum or
-# below, and a relation occurring NEGATIVELY is defined strictly below. The invariant this buys is
-# the standard model built stratum by stratum, `M_i = T_{P_i}↑ω(M_{i-1})` (printed p. 108) — each
-# stratum reaches its own fixed point before the next begins. Strictly-lower indexing is ABW's rule
-# for the NEGATIVE case and a sufficient condition for completeness, not the property itself; this
+# THEORY. Apt, Blair & Walker (1988), "Towards a Theory of Declarative Knowledge", in Minker (ed.),
+# pp. 89–148, §"Stratified Programs", Definition 3 (printed p. 96), stratify a program so that a
+# relation occurring POSITIVELY in a stratum is defined within that stratum or below, and a relation
+# occurring NEGATIVELY is defined strictly below. The invariant this buys is the standard model
+# built stratum by stratum, `M_i = T_{P_i}↑ω(M_{i-1})` (printed p. 108) — each stratum reaches its
+# own fixed point before the next begins. Strictly-lower indexing is their rule for the NEGATIVE
+# case and a sufficient condition for completeness, not the property itself; this
 # cascade has no negation anywhere, so what it takes from the construction is completeness alone.
 # A resolver may therefore read anything the caller handed it. If a negated read is ever added
 # here, ABW's second clause acquires a subject and the strictly-lower rule applies to it — that
@@ -866,8 +867,9 @@ let
 
       # ── resource combination, per kind, per dedup group, per key ──
       # THEORY: stratum-local aggregation on a COMPLETE fact set — Apt, Blair & Walker (1988),
-      # "Stratified Programs", whose standard model is built stratum by stratum with each reaching
-      # its own fixed point before the next begins (printed p. 108). A kind's fragments are folded
+      # "Towards a Theory of Declarative Knowledge", in Minker (ed.), pp. 89–148, whose standard
+      # model is built stratum by stratum with each reaching its own fixed point before the next
+      # begins (printed p. 108). A kind's fragments are folded
       # only once its stratum has finished, which is the classical reason aggregation demands
       # stratification: a fold over a set still being added to answers about a prefix.
       combineKind =

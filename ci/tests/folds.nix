@@ -24,11 +24,12 @@
 # ── WHEN AN AGGREGATE MAY RUN ──
 # The second suite is about the cascade rather than the vocabulary: a fold answers about the fact
 # set it is handed, so what makes its answer mean anything is that the set was CLOSED when it ran.
-# THEORY: Apt, Blair & Walker (1988), "Stratified Programs" — the standard model is built stratum
-# by stratum, `M_i = T_{P_i}↑ω(M_{i-1})` (printed p. 108), each stratum reaching its own fixed
-# point before the next begins; that completeness, and not a restriction on what a stratum may
-# read, is what aggregation demands of stratification (strictly-lower indexing is ABW's rule for
-# the NEGATIVE case, Definition 3, printed p. 96, and this cascade has no negation in it).
+# THEORY: Apt, Blair & Walker (1988), "Towards a Theory of Declarative Knowledge", in Minker (ed.),
+# pp. 89–148 — the standard model is built stratum by stratum, `M_i = T_{P_i}↑ω(M_{i-1})` (printed
+# p. 108), each stratum reaching its own fixed point before the next begins; that completeness, and
+# not a restriction on what a stratum may read, is what aggregation demands of stratification
+# (strictly-lower indexing is their rule for the NEGATIVE case, §"Stratified Programs", Definition 3,
+# printed p. 96, and this cascade has no negation in it).
 #
 # The cells measure the difference that guarantee makes: the same fold, the same fixture, folded
 # over the closed fact set and over the prefix of it that existed before the higher stratum
@@ -80,12 +81,45 @@ let
       v
       v
     ];
-  # A store-path carrier: what `toJSON` renders by its path and what two derivations are compared
-  # by. The function inside it is below the point either of them stops.
-  carrier = {
-    outPath = "/nix/store/0000000000000000000000000000000-fixture";
-    passthru = _: "a function nothing here descends to";
+  # ── THE SCAN'S STOPPING RULE, AS TWO PAIRS THAT DIFFER ONLY BY THE MARKER ──
+  # Both pairs are DISTINCT values sharing one store path and carrying DIFFERENT functions inside,
+  # so nothing about either pair can be explained by one value slot being compared with itself.
+  # Marked, the evaluator compares them by `outPath` alone and never reads the interior; unmarked,
+  # it compares them field by field, the functions included. The marker is the whole difference
+  # between the pairs, and it is the whole of what the scan tests.
+  drvA = {
+    type = "derivation";
+    outPath = "/nix/store/aaaa";
+    passthru = _: "one";
   };
+  drvA2 = {
+    type = "derivation";
+    outPath = "/nix/store/aaaa";
+    passthru = _: "two";
+  };
+  drvB = {
+    type = "derivation";
+    outPath = "/nix/store/bbbb";
+    passthru = _: "three";
+  };
+  bareA = {
+    outPath = "/nix/store/aaaa";
+    passthru = _: "one";
+  };
+  bareA2 = {
+    outPath = "/nix/store/aaaa";
+    passthru = _: "two";
+  };
+
+  # Every fold in the vocabulary, in one list, so a key-type cell reports WHICH member regressed
+  # rather than that something did.
+  everyFold = [
+    folds.same
+    folds.one
+    folds.list
+    folds.mergeAttrs
+    (folds.byKey { a = folds.same; })
+  ];
 
   # ── THE TWO-STRATUM FIXTURE ──
   # `leaf` (depth 0) aggregates its fragments per group; `top` (depth 1) resolves earlier and emits
@@ -239,16 +273,81 @@ in
       );
       expected = true;
     };
-    # The scan stops where `toJSON` and `==` stop. Green only if it did NOT descend past `outPath`:
-    # the function inside this fragment is below that point, and the fold returns the fragment.
-    test-the-scan-stops-at-a-store-path-carrier = {
-      expr = (folds.same "k" [ carrier ]).outPath;
-      expected = "/nix/store/0000000000000000000000000000000-fixture";
+    # ── WHERE THE SCAN STOPS, ON TWO DISTINCT VALUES RATHER THAN ONE COMPARED WITH ITSELF ──
+    # Green only if BOTH halves hold: the scan did not descend into a marked derivation (or the
+    # function inside would be refused), and the comparison agreed on two values whose interiors
+    # differ (which only the evaluator's `outPath` rule can produce). A singleton fragment could
+    # report neither — it agrees with itself by pointer identity whatever the rule is.
+    test-two-derivations-with-one-store-path-agree = {
+      expr =
+        (folds.same "k" [
+          drvA
+          drvA2
+        ]).outPath;
+      expected = "/nix/store/aaaa";
     };
-    # POSITIVE CONTROL for the cell above: the same shape without `outPath` IS refused, so the row
-    # above reports where the scan stopped rather than that it never ran.
-    test-the-same-shape-without-a-store-path-is-refused = {
-      expr = didThrow (folds.same "k" [ { passthru = _: "a function"; } ]);
+    # ★ THE SAME PAIR WITHOUT THE MARKER IS REFUSED, because the evaluator's shortcut is narrower
+    # than its rendering: an unmarked carrier is compared field by field, functions included. That
+    # this cell and the one above disagree IS the stopping rule. Which refusal fires is asserted in
+    # `../tests-error.nix` — a fold that let this pair through would ALSO throw here, reporting a
+    # conflict between two fragments that render identically, so `didThrow` cannot tell them apart.
+    test-a-store-path-without-the-derivation-marker-is-refused = {
+      expr = didThrow (
+        folds.same "k" [
+          bareA
+          bareA2
+        ]
+      );
+      expected = true;
+    };
+    # Two marked derivations with DIFFERENT paths still conflict: stopping at the marker decides
+    # what is compared, not whether anything is.
+    test-two-derivations-with-different-store-paths-conflict = {
+      expr = didThrow (
+        folds.same "k" [
+          drvA
+          drvB
+        ]
+      );
+      expected = true;
+    };
+
+    # ── THE KEY IS AN ARGUMENT THE VOCABULARY DECIDES, AT EVERY MEMBER ──
+    test-every-fold-refuses-a-non-string-key = {
+      expr = builtins.map (f: didThrow (f 42 [ { a = 1; } ])) everyFold;
+      expected = [
+        true
+        true
+        true
+        true
+        true
+      ];
+    };
+    # CONTROL, same run, same folds, same fragments: with a string key every one of them returns.
+    # Without it the row above is satisfied by a vocabulary that refuses this fragment list outright.
+    test-every-fold-accepts-a-string-key = {
+      expr = builtins.map (f: succeeds (f "k" [ { a = 1; } ])) everyFold;
+      expected = [
+        true
+        true
+        true
+        true
+        true
+      ];
+    };
+    # The key is decided before the fragments are, so it is refused where the fragments would have
+    # folded cleanly, where they would have conflicted, and where there are none at all.
+    test-a-non-string-key-is-refused-where-the-fragments-would-conflict = {
+      expr = didThrow (
+        folds.same 42 [
+          1
+          2
+        ]
+      );
+      expected = true;
+    };
+    test-a-non-string-key-is-refused-on-an-empty-fragment-list = {
+      expr = didThrow (folds.same 42 [ ]);
       expected = true;
     };
 

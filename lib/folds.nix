@@ -13,12 +13,12 @@
 #
 # ── WHAT AGGREGATION RESTS ON, AND WHERE THAT GUARANTEE IS ACTUALLY MADE ──
 # An aggregate is meaningful over a COMPLETE fact set. THEORY: Apt, Blair & Walker (1988),
-# "Stratified Programs" — a stratified program's standard model is built stratum by stratum,
-# `M_i = T_{P_i}↑ω(M_{i-1})` (printed p. 108), each stratum reaching its own fixed point before the
-# next begins. That completeness is what aggregation classically demands of stratification, and it
-# is NOT a restriction on what a stratum may read: strictly-lower indexing is ABW's rule for the
-# NEGATIVE case (Definition 3, printed p. 96) and a sufficient condition for completeness rather
-# than the property itself.
+# "Towards a Theory of Declarative Knowledge", in Minker (ed.), pp. 89–148 — a stratified program's
+# standard model is built stratum by stratum, `M_i = T_{P_i}↑ω(M_{i-1})` (printed p. 108), each
+# stratum reaching its own fixed point before the next begins. That completeness is what aggregation
+# classically demands of stratification, and it is NOT a restriction on what a stratum may read:
+# strictly-lower indexing is their rule for the NEGATIVE case (§"Stratified Programs", Definition 3,
+# printed p. 96) and a sufficient condition for completeness rather than the property itself.
 #
 # ★ AND NOTHING IN THIS FILE ENFORCES IT, WHICH IS THE POINT OF SAYING IT HERE. These are total
 # functions of the list they are handed; no fold can tell a closed fact set from a prefix of one,
@@ -49,6 +49,7 @@ let
     isAttrs
     isFunction
     isList
+    isString
     toJSON
     typeOf
     ;
@@ -66,22 +67,30 @@ let
     unique
     ;
 
+  # A value the EVALUATOR treats as its store path rather than as its contents: `==` compares two
+  # of these by `outPath` alone, and `toJSON` renders one by its path. The marker is the whole of
+  # the test, because it is the whole of the evaluator's test.
+  isDerivation = v: isAttrs v && (v.type or null) == "derivation";
+
   # ── WHERE A FUNCTION SITS INSIDE A VALUE ──
   # The position of the first function anywhere in a value, rendered as a path expression, or null
   # if there is none. Written as a pair of mutually recursive scans whose frame depth is the value's
   # NESTING DEPTH and not its size: siblings are independent applications that do not nest, and the
   # fold over them stops descending as soon as a site is found.
   #
-  # It stops at `outPath`, because that is where both readers of these values already stop:
-  # `toJSON` renders a store-path carrier by its path, and `==` compares two derivations by theirs.
-  # A scan that walked inside one would answer a question neither the comparison nor the diagnostic
-  # ever asks.
+  # ★ IT STOPS AT A DERIVATION, AND AT NOTHING ELSE THAT CARRIES AN `outPath`. The evaluator's
+  # shortcut is narrower than its store-path rendering: `==` compares by `outPath` only when BOTH
+  # sides are marked derivations, and compares every other attribute set FIELD BY FIELD — functions
+  # included. So a bare `outPath` carrier is a value whose comparison the interior decides, and a
+  # scan that stopped there would hand exactly such fragments to `==`. Measured on this evaluator:
+  # two distinct carriers with one `outPath` and different functions compare FALSE, while the same
+  # pair marked `type = "derivation"` compares TRUE.
   siteIn =
     where: v:
     if isFunction v then
       where
     else if isAttrs v then
-      if v ? outPath then
+      if isDerivation v then
         null
       else
         firstSite (
@@ -121,6 +130,32 @@ let
     in
     if bad == [ ] then null else head bad;
 
+  # ── THE KEY IS DECIDED BEFORE ANY MESSAGE CAN BE BUILT, AT EVERY FOLD ──
+  # Every refusal in this file NAMES the key, and naming it means interpolating it. Interpolating a
+  # non-string is not a refusal that mentions the wrong thing — it is a coercion error, which is not
+  # a value: `tryEval` does not hold it, and it fires while the message explaining a DIFFERENT
+  # refusal is being assembled. So a fold handed a non-string key ended the evaluation both when its
+  # fragments were fine and when they were not, and the caller was told neither.
+  #
+  # ★ THIS IS THE SHAPE A DOOR TAKES WHEN IT CHECKS ONE ARGUMENT AND NOT THE OTHER, and the project
+  # has it recorded elsewhere: a published entry point that refuses ill-typed values by name through
+  # the arm underneath it, while an ill-typed value in its OWN preamble kills the evaluation before
+  # that arm can see it. A door strictly weaker than its own refusals is the same defect wherever it
+  # appears, and the answer is the same — decide the argument where the door is, not where the
+  # message is.
+  #
+  # It is checked at EVERY fold, `list` included, even though `list` raises nothing to interpolate.
+  # The signature `key: [v]: v` belongs to the VOCABULARY and not to its members: a fold that
+  # quietly accepted what the others refuse would make the one contract a caller is given untrue at
+  # the member they happened to pick. The check names the fold, so the caller learns which one.
+  keyDefect = key: if isString key then null else "`key` is a ${typeOf key} rather than a string";
+
+  # Named for the fold, because a message that names only the vocabulary tells a caller with five
+  # folds in a spec nothing about which call to fix.
+  refuseKey =
+    fold: defect:
+    throw "gen-scope.folds.${fold}: ${defect} — every refusal this fold can raise names the key, so a key that cannot be rendered ends the evaluation in place of the refusal that was owed";
+
   # ── `same`: ALL FRAGMENTS AGREE, AND THEY MUST BE COMPARABLE FOR THAT TO BE A QUESTION ──
   # Duplicate contributions that must agree are provisioned once. Returns the first fragment, which
   # is the whole content of "they agree".
@@ -142,18 +177,29 @@ let
   # function-bearing fragment reaches the comparison, so nothing that reaches the diagnostic can
   # abort inside it.
   #
-  # ★ WHICH WAY THE APPROXIMATION ERRS, stated because it is one. The scan asks a structural
-  # question — is there a function anywhere in here — and that is stricter than what `toJSON` can
-  # render: an attribute set carrying `__toString` renders through its string coercion and this
-  # refuses it anyway. It errs toward refusal, which is the only direction a guard against an
-  # uncatchable abort may err, and what it refuses is exactly the set of fragments the comparison
-  # could have accepted only by pointer accident.
+  # ★ WHERE THE SCAN IS STRICTER THAN THE DIAGNOSTIC, AND WHAT THAT COSTS — measured, because the
+  # first version of this paragraph was wrong in both halves. The scan's domain is the COMPARISON's
+  # precondition, and it stops exactly where `==` stops: at a marked derivation, whose interior
+  # neither the comparison nor the message ever reads. It is stricter than what `toJSON` can RENDER,
+  # which is a wider set — a bare `outPath` carrier and a `__toString` carrier both render, and both
+  # are refused here when a function sits inside them. That direction is deliberate: their
+  # comparison is decided field by field, functions included, so admitting them would buy a rendered
+  # message at the price of an answer nobody can account for.
+  #
+  # ★ AND THE REFUSED SET IS NOT "what the comparison could only have accepted by accident". Some of
+  # it would have produced a perfectly catchable conflict — two rendering-capable carriers with
+  # different functions inside compare FALSE and the message prints them fine. What the refusal buys
+  # THERE is not catchability but meaning: a conflict between two fragments that render IDENTICALLY,
+  # reported to a caller who can see no difference between them, is an answer they cannot act on.
   same =
     key: vs:
     let
+      kd = keyDefect key;
       site = functionSite vs;
     in
-    if vs == [ ] then
+    if kd != null then
+      refuseKey "same" kd
+    else if vs == [ ] then
       throw "gen-scope.folds.same: empty fragment list for key '${key}'"
     else if site != null then
       throw "gen-scope.folds.same: key '${key}' has a fragment carrying a function, at fragment-list position ${site} — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer"
@@ -166,14 +212,26 @@ let
   # two authors of one key have no merge rule between them.
   one =
     key: vs:
-    if length vs == 1 then
+    let
+      kd = keyDefect key;
+    in
+    if kd != null then
+      refuseKey "one" kd
+    else if length vs == 1 then
       head vs
     else
       throw "gen-scope.folds.one: key '${key}' has ${toString (length vs)} contributors, expected exactly 1";
 
   # Collect the fragments in pinned order (`key: [v]: [v]`). The identity of this vocabulary: it
   # imposes nothing, which is what makes it the fold to reach for when the aggregate IS the list.
-  list = _key: vs: vs;
+  # It still decides its key, for the reason given where that check is written: the signature is the
+  # vocabulary's, and a member that admits what the others refuse makes it untrue.
+  list =
+    key: vs:
+    let
+      kd = keyDefect key;
+    in
+    if kd != null then refuseKey "list" kd else vs;
 
   # Shallow merge of attribute-set fragments; disjoint sub-keys required, because two fragments
   # writing one sub-key have no merge rule between them and picking a winner here would decide it
@@ -184,9 +242,12 @@ let
   mergeAttrs =
     key: vs:
     let
+      kd = keyDefect key;
       bad = nonAttrsSite vs;
     in
-    if bad != null then
+    if kd != null then
+      refuseKey "mergeAttrs" kd
+    else if bad != null then
       throw "gen-scope.folds.mergeAttrs: key '${key}' has a fragment that is a ${typeOf bad.v} rather than an attribute set, at fragment-list position [${toString bad.i}]"
     else
       foldl' (
@@ -212,9 +273,12 @@ let
   byKey =
     spec: key: vs:
     let
+      kd = keyDefect key;
       bad = nonAttrsSite vs;
       shaped =
-        if bad == null then
+        if kd != null then
+          refuseKey "byKey" kd
+        else if bad == null then
           true
         else
           throw "gen-scope.folds.byKey: key '${key}' has a fragment that is a ${typeOf bad.v} rather than an attribute set, at fragment-list position [${toString bad.i}]";
