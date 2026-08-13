@@ -147,6 +147,12 @@ let
       passthru = _: 2;
     }
   ];
+  # A path and no function at all. The comparison handles these; the message cannot be built over
+  # them, which is the half of the property an exit code is the only way to read.
+  pathBearing = [
+    { a = /x; }
+    { a = /y; }
+  ];
   # Marker and `outPath` both present, and the path's VALUE is a function. Both readers want that
   # value: the comparison compares it by pointer and the rendering cannot coerce it at all.
   nonStringPath = [
@@ -214,6 +220,12 @@ let
     marker-only-guarded-wrapped = didThrow (folds.same "k" markerOnly);
     unguarded-marker-only-wrapped = didThrow (unguardedSame "k" markerOnly);
     unguarded-marker-only-bare = unguardedSame "k" markerOnly;
+
+    # ── A PATH, WHICH THE COMPARISON TAKES AND THE MESSAGE CANNOT ──
+    # No function anywhere in these fragments: what the unguarded arms end on is the path alone.
+    path-guarded-wrapped = didThrow (folds.same "k" pathBearing);
+    unguarded-path-wrapped = didThrow (unguardedSame "k" pathBearing);
+    unguarded-path-bare = unguardedSame "k" pathBearing;
 
     # ── AND THE PATH'S OWN VALUE, WHICH BOTH READERS NEED ──
     nonstring-path-guarded-wrapped = didThrow (folds.same "k" nonStringPath);

@@ -536,6 +536,21 @@ in
       };
     };
 
+    # ★ A PATH IS REFUSED ON ITS OWN GROUND, AND THE MESSAGE IS WHERE THAT SHOWS. These fragments
+    # carry NO function, so a refusal naming one would mean the fold found something that is not
+    # there; what it names instead is the path, and the reason it gives is about REPORTING rather
+    # than about comparing — which is the half of the property this term belongs to.
+    test-a-path-is-refused-on-its-own-ground = {
+      expr = folds.same "k" [
+        { a = /x; }
+        { a = /y; }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a path, at fragment-list position [0].a — reporting a conflict over it would either abort on a path that is not there or copy the caller's path into the store, and a message explaining a refusal may do neither";
+      };
+    };
+
     # ── THE KEY, WHICH IS REFUSED BEFORE ANY MESSAGE IS BUILT ──
     # The refusal names the fold, because a caller with five folds in one spec learns nothing from a
     # message that names only the vocabulary.

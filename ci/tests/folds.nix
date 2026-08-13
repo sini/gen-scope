@@ -138,18 +138,31 @@ let
     outPath = _: "two";
     passthru = _: "two";
   };
-  # The shape that agrees quietly and only bites on the CONFLICT branch: two path literals compare
-  # fine and render by attempting a store path that is not there. A fixture whose fragments agreed
-  # would report this hazard as absent.
+  # ★ NO FUNCTION ANYWHERE IN THESE. A path compares perfectly well and cannot be REPORTED, so it is
+  # refused on its own ground — and a fixture carrying a function beside the path would be refused
+  # for the function instead, passing whatever the path term did. That is the shape these replaced.
   litPath1 = {
     type = "derivation";
     outPath = /x;
-    passthru = _: "one";
   };
   litPath2 = {
     type = "derivation";
     outPath = /y;
-    passthru = _: "two";
+  };
+  # The same hazard at a position no `outPath` rule reaches: no marker, no store path, no function.
+  pathElsewhere1 = {
+    a = /x;
+  };
+  pathElsewhere2 = {
+    a = /y;
+  };
+  # The control for both: identical shape, the path replaced by a string. What is refused above is
+  # the value's TYPE and not the shape it sits in.
+  stringElsewhere1 = {
+    a = "/x";
+  };
+  stringElsewhere2 = {
+    a = "/x";
   };
 
   # Every fold in the vocabulary, in one list, so a key-type cell reports WHICH member regressed
@@ -367,10 +380,10 @@ in
       );
       expected = true;
     };
-    # ★ AND THE SAME TERM ON THE BRANCH WHERE IT HIDES. Path literals compare cleanly, so a fragment
-    # pair that AGREED would take the quiet branch and report nothing; these differ, so the fold
-    # reaches the point where a skipped fragment would have to be rendered.
-    test-a-path-literal-store-path-is-refused-on-the-conflict-branch = {
+    # ── AND THE OTHER HALF OF THE PROPERTY: WHAT IS ADMITTED MUST BE REPORTABLE ──
+    # A path passes the comparison and defeats the message. These fragments contain NO function, so
+    # nothing but the path's own type can be refusing them.
+    test-a-path-valued-store-path-is-refused = {
       expr = didThrow (
         folds.same "k" [
           litPath1
@@ -378,6 +391,41 @@ in
         ]
       );
       expected = true;
+    };
+    # ★ AND AT A POSITION NO `outPath` RULE REACHES. No marker, no store path, no function: a rule
+    # written about `outPath` would admit this pair and abort inside the conflict message.
+    test-a-path-anywhere-in-a-fragment-is-refused = {
+      expr = didThrow (
+        folds.same "k" [
+          pathElsewhere1
+          pathElsewhere2
+        ]
+      );
+      expected = true;
+    };
+    # ★ THE COST, PINNED RATHER THAN DISCOVERED. Refusal is at admission, so it does not wait to see
+    # whether the fragments agree — these two are the SAME path and are refused anyway. The fold
+    # could have returned this, and the reason it does not is written at the construction: what it
+    # cannot report, it does not accept.
+    test-agreeing-path-fragments-are-refused-too = {
+      expr = didThrow (
+        folds.same "k" [
+          pathElsewhere1
+          pathElsewhere1
+        ]
+      );
+      expected = true;
+    };
+    # POSITIVE CONTROL for all three: the same shape with a STRING is folded, not refused. Without
+    # it the rows above are equally satisfied by a fold that refuses this fragment shape outright.
+    test-the-same-shape-with-a-string-is-folded = {
+      expr = folds.same "k" [
+        stringElsewhere1
+        stringElsewhere2
+      ];
+      expected = {
+        a = "/x";
+      };
     };
     # Two marked derivations with DIFFERENT paths still conflict: where the scan stops decides what
     # is compared, not whether anything is.

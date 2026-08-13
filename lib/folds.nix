@@ -49,6 +49,7 @@ let
     isAttrs
     isFunction
     isList
+    isPath
     isString
     toJSON
     typeOf
@@ -67,11 +68,24 @@ let
     unique
     ;
 
+  # ── THE PROPERTY, WHICH HAS TWO HALVES, AND EACH IS ENFORCED SOMEWHERE DIFFERENT ──
+  # Every fragment this fold accepts ends up at two readers: `==` decides whether it agrees, and
+  # `toJSON` renders it if it does not. So the fold is sound only if BOTH of these hold:
+  #
+  #   SKIPPED ⊆ USABLE    — what the scan declines to look inside must still be comparable and
+  #                         renderable, since the scan is what would otherwise have caught it
+  #   ADMITTED ⊆ USABLE   — and so must everything the scan looked at and passed, because a
+  #                         fragment can contain no function at all and still be unrenderable
+  #
+  # The predicate below is the FIRST half. The scan under it is the second: a value neither reader
+  # can take is a refusal SITE wherever it sits, not merely a reason to descend past it. Half one
+  # alone was this construction's defect for several revisions — the licence to skip kept being
+  # narrowed while the admitted set was assumed usable because nothing in it was a function.
+  #
   # ── WHAT MAY BE SKIPPED, DERIVED FROM THE PROPERTY RATHER THAN FROM A LIST OF SHAPES ──
-  # THE PROPERTY: a fragment may be skipped only if BOTH readers still work on it — `==` must
-  # compare it without reaching a function, and `toJSON` must render it without aborting. Skipping
-  # is a promise about two readers, so the predicate is their INTERSECTION, and any term dropped
-  # from it hands the scan's own subject to whichever reader was not considered.
+  # A fragment may be skipped only if both readers still work on it. Skipping is a promise about
+  # two readers, so the predicate is their INTERSECTION, and any term dropped from it hands the
+  # scan's own subject to whichever reader was not considered.
   #
   # That resolves to a three-term conjunction: the derivation MARKER, an `outPath`, and an `outPath`
   # whose value is a STRING. It is deliberately not nixpkgs' `isDerivation`, which tests the marker
@@ -98,9 +112,34 @@ let
   # in this table as absent.
   comparedByPath = v: isAttrs v && (v.type or null) == "derivation" && isString (v.outPath or null);
 
-  # ── WHERE A FUNCTION SITS INSIDE A VALUE ──
-  # The position of the first function anywhere in a value, rendered as a path expression, or null
-  # if there is none. Written as a pair of mutually recursive scans whose frame depth is the value's
+  # ── WHAT A FRAGMENT MAY NOT CONTAIN, AND THE GROUND FOR EACH ──
+  # Two shapes, and they are refused for DIFFERENT reasons — which is why each carries its own,
+  # rather than sharing one sentence that would be true of only one of them.
+  #
+  # A function breaks the comparison first: `==` is not an equivalence over it, so the fold's answer
+  # would be decided by value sharing before rendering ever came up. A PATH compares perfectly well
+  # — and cannot be reported. Measured on this evaluator: `toJSON` on a path that is not there
+  # ABORTS uncatchably, and on one that IS there it COPIES the caller's path into the store and
+  # renders the store path it just created. A message explaining a refusal may do neither, so a path
+  # is refused where it sits even though the comparison would have handled it.
+  hazardIn =
+    v:
+    if isFunction v then
+      {
+        what = "a function";
+        because = "`==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+      }
+    else if isPath v then
+      {
+        what = "a path";
+        because = "reporting a conflict over it would either abort on a path that is not there or copy the caller's path into the store, and a message explaining a refusal may do neither";
+      }
+    else
+      null;
+
+  # ── WHERE AN UNUSABLE VALUE SITS INSIDE A FRAGMENT ──
+  # The position of the first one anywhere in a value, rendered as a path expression, or null if
+  # there is none. Written as a pair of mutually recursive scans whose frame depth is the value's
   # NESTING DEPTH and not its size: siblings are independent applications that do not nest, and the
   # fold over them stops descending as soon as a site is found.
   #
@@ -118,8 +157,11 @@ let
   # a function to settle.
   siteIn =
     where: v:
-    if isFunction v then
-      where
+    let
+      hazard = hazardIn v;
+    in
+    if hazard != null then
+      hazard // { w = where; }
     else if isAttrs v then
       if comparedByPath v then
         null
@@ -142,8 +184,8 @@ let
 
   firstSite = items: foldl' (found: it: if found != null then found else siteIn it.w it.v) null items;
 
-  # The fragment-list position of the first function in a fragment list, or null.
-  functionSite =
+  # The first unusable value in a fragment list, as its position and its ground, or null.
+  hazardSite =
     vs:
     firstSite (
       imap0 (i: v: {
@@ -208,32 +250,43 @@ let
   # function-bearing fragment reaches the comparison, so nothing that reaches the diagnostic can
   # abort inside it.
   #
-  # ★ WHERE THE SCAN IS STRICTER THAN THE DIAGNOSTIC, AND WHAT THAT COSTS. The scan's domain is the
-  # COMPARISON's precondition, and it stops exactly where `==` stops — at the conjunction above,
-  # whose interior neither the comparison nor the message ever reads. It is stricter than what
-  # `toJSON` can RENDER, which is a wider set: a `__toString` carrier renders through its string
-  # coercion, and a marker-less `outPath` carrier renders by its path, and both are refused here
-  # when a function sits inside them. That direction is deliberate — their comparison is decided
-  # field by field, functions included — so admitting them would buy a rendered message at the price
-  # of an answer nobody can account for.
+  # ★ WHERE THIS IS STRICTER THAN EITHER READER, AND WHAT EACH PART OF THAT COSTS. Two costs, and
+  # they are paid for different reasons:
   #
-  # ★ AND THE REFUSED SET IS NOT "what the comparison could only have accepted by accident". Some of
-  # it would have produced a perfectly catchable conflict — two rendering-capable carriers with
-  # different functions inside compare FALSE and the message prints them fine. What the refusal buys
-  # THERE is not catchability but meaning: a conflict between two fragments that render IDENTICALLY,
-  # reported to a caller who can see no difference between them, is an answer they cannot act on.
+  # ON THE COMPARISON SIDE, the scan refuses function-bearing fragments that `toJSON` could have
+  # rendered — a `__toString` carrier renders through its string coercion, a marker-less `outPath`
+  # carrier by its path. Their comparison is still decided field by field, functions included, so
+  # admitting them would buy a rendered message at the price of an answer nobody can account for.
+  # ★ And that refused set is NOT "what the comparison could only have accepted by accident": some
+  # of it would have produced a perfectly catchable conflict, two rendering-capable carriers with
+  # different functions comparing FALSE and printing fine. What the refusal buys there is not
+  # catchability but meaning — a conflict between two fragments that render IDENTICALLY, reported to
+  # a caller who can see no difference between them, is an answer they cannot act on.
+  #
+  # ON THE REPORTING SIDE, the cost is newer and larger, and it is paid deliberately: a fragment
+  # carrying a PATH is refused even though the comparison would have handled it, and even when the
+  # fragments AGREE and no message would ever have been built. The fold could have returned those.
+  # It does not, because the alternative is a precondition that holds only until two fragments
+  # differ — and a fold whose safety depends on its inputs agreeing has no precondition at all. The
+  # refusal is at admission for that reason, and a cell pins the agreeing case so the cost stays a
+  # decision rather than something discovered later.
+  #
+  # ★ WHAT IS NOT REFUSED, because the licence is about being reportable and nothing else: an
+  # `outPath` that is an integer fails the skip predicate above, and is then ADMITTED and folded
+  # like any other value — both readers cope with it. Excluding a shape from the shortcut is not the
+  # same act as refusing it, and this file does the first far more often than the second.
   same =
     key: vs:
     let
       kd = keyDefect key;
-      site = functionSite vs;
+      site = hazardSite vs;
     in
     if kd != null then
       refuseKey "same" kd
     else if vs == [ ] then
       throw "gen-scope.folds.same: empty fragment list for key '${key}'"
     else if site != null then
-      throw "gen-scope.folds.same: key '${key}' has a fragment carrying a function, at fragment-list position ${site} — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer"
+      throw "gen-scope.folds.same: key '${key}' has a fragment carrying ${site.what}, at fragment-list position ${site.w} — ${site.because}"
     else if all (v: v == head vs) vs then
       head vs
     else
