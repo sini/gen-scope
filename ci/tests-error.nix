@@ -46,6 +46,7 @@ let
     mkKinds
     mkClaim
     resolveClaims
+    folds
     ;
 
   # The message, pinned to the byte. `escapeRegex` is the prelude's own and its metacharacter set
@@ -91,6 +92,37 @@ let
     subject = subjA;
     _reserved = [ "_path" ];
   };
+
+  # ── FRAGMENTS FOR THE FOLD PRECONDITIONS ──
+  # Two fragments carrying functions, built as DISTINCT values: two literals share no value slot,
+  # so the comparison between them is decided by structure and reaches the arm under test.
+  fnA = {
+    gen = _: "a";
+  };
+  fnB = {
+    gen = _: "b";
+  };
+  # Store-path carriers whose functions sit BELOW the point `toJSON` and `==` stop at. The cell
+  # over these asserts the CONFLICT message, which is the only way to tell "the scan stopped" from
+  # "the scan never ran" — both would be a throw, and `tryEval` cannot tell them apart.
+  carrierA = {
+    outPath = "/nix/store/aaaa";
+    passthru = _: 1;
+  };
+  carrierB = {
+    outPath = "/nix/store/bbbb";
+    passthru = _: 2;
+  };
+
+  # The comparison WITHOUT its precondition, built here to be measured and never used. It is what
+  # the fold did before, and its failure is an error of a different CLASS: a `TypeError` from the
+  # diagnostic's own `toJSON`, which no `tryEval` holds and which names neither fold nor key.
+  unguardedSame =
+    key: vs:
+    if builtins.all (v: v == builtins.head vs) vs then
+      builtins.head vs
+    else
+      throw "unguarded.same: conflicting values for key '${key}': ${builtins.toJSON vs}";
 in
 {
   # Same type as `flake.tests`, because it is the same kind of thing read by the same runner —
@@ -369,6 +401,84 @@ in
           })
         ]).unrun;
       expected = [ ];
+    };
+  };
+
+  # ── THE FOLD PRECONDITIONS, EACH BY ITS OWN TEXT ──
+  # A fold's precondition refusal has to name the fold, the key AND the position in the fragment
+  # list, because the caller's fragments all arrived through one call and a message that says only
+  # "a fragment" sends them looking through the group by hand. Reachability is asserted in
+  # `tests/folds.nix`; these cells are what makes "refuses by name" a claim about anything.
+  config.flake.testsError.folds-refusals = {
+    test-same-names-the-fold-the-key-and-the-function-position = {
+      expr = folds.same "k" [
+        fnA
+        fnB
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a function, at fragment-list position [0].gen — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+      };
+    };
+
+    # ★ THE SCAN'S STOPPING RULE, WHICH ONLY A MESSAGE CAN REPORT. These fragments carry functions
+    # under `outPath`, and the fold reaches its COMPARISON and renders both by their paths. Had the
+    # scan descended, this would be the refusal above; had it not run at all, this message would be
+    # an abort. It is the conflict, so the scan stopped exactly where `toJSON` and `==` do.
+    test-same-conflict-renders-a-store-path-carrier-by-its-path = {
+      expr = folds.same "k" [
+        carrierA
+        carrierB
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.same: conflicting values for key 'k': [\"/nix/store/aaaa\",\"/nix/store/bbbb\"]";
+      };
+    };
+
+    test-mergeattrs-names-the-fragment-type-and-position = {
+      expr = folds.mergeAttrs "k" [
+        { a = 1; }
+        (_: "not a fragment")
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.mergeAttrs: key 'k' has a fragment that is a lambda rather than an attribute set, at fragment-list position [1]";
+      };
+    };
+
+    test-bykey-names-the-fragment-type-and-position = {
+      expr = folds.byKey { gen = folds.same; } "k" [ (_: "not a fragment") ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.byKey: key 'k' has a fragment that is a lambda rather than an attribute set, at fragment-list position [0]";
+      };
+    };
+
+    # ── LIVE CONTROL: WHAT THE PRECONDITION REPLACED, IN THE SAME INVOCATION ──
+    # ★ The same fragments through the comparison without its precondition. It fails as a
+    # `TypeError` from the diagnostic's own `toJSON` — a different CLASS from every refusal above,
+    # holding no fold, no key and no position, and `tryEval` does not hold it at all. Without this
+    # row the four cells above are consistent with a fold that always refused this input.
+    test-control-the-unguarded-comparison-fails-as-a-type-error = {
+      expr = unguardedSame "k" [
+        fnA
+        fnB
+      ];
+      expectedError = {
+        type = "TypeError";
+        msg = ".*cannot convert a function to JSON.*";
+      };
+    };
+
+    # ── LIVE CONTROL: A FOLD THAT RETURNS ──
+    # Without it the suite above is satisfied by a vocabulary that refuses everything.
+    test-control-a-legal-fold-returns = {
+      expr = folds.same "k" [
+        1
+        1
+      ];
+      expected = 1;
     };
   };
 }

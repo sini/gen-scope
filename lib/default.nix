@@ -15,6 +15,9 @@ let
   wellFounded = import ./well-founded.nix { inherit prelude; };
   acceptance = import ./acceptance.nix { inherit prelude; };
   engine = import ./engine.nix { inherit prelude graph; };
+  # A value algebra over fragments, which is why it takes the prelude and nothing else: the cascade
+  # is one of its consumers rather than its home.
+  folds = import ./folds.nix { inherit prelude; };
   cascade = import ./cascade.nix { inherit prelude graph; };
 in
 algebraicGraph
@@ -29,4 +32,5 @@ algebraicGraph
 // wellFounded
 // acceptance
 // engine
+// folds
 // cascade

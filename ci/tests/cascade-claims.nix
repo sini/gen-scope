@@ -1962,7 +1962,7 @@ in
     };
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 80;
+      expected = 81;
     };
     test-this-module-exports-exactly-its-four-names = {
       expr = cascadeNames;
