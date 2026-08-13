@@ -125,8 +125,14 @@
 #     uncatchable type error a non-function does. This language offers no predicate that decides
 #     how many arguments a value will accept, so this is a bound with a reason and not an omission.
 #     ★ It is the one member of the uncatchable class left open, and it is left open knowingly.
-#   · WHAT A RESOLVER RETURNS is unconstrained, so the conformance of a returned fragment is not a
-#     property established here — a consumer needing plain data must obtain it somewhere else.
+#   · WHAT A RESOLVER'S ANSWER CONTAINS is unconstrained: the CONFORMANCE of a resource fragment —
+#     whether it is plain data, whether it is a function — is not a property established anywhere in
+#     this library, and a consumer needing that must obtain it elsewhere. ★ This is about the VALUES
+#     inside the answer. The answer's own SHAPE is not left open and never was: the record itself
+#     and the three containers the run reads off it are decided at the point the resolver returns,
+#     because `isAttrs` and `isList` decide them on any value and the alternative is a type error
+#     with no kind and no path in it — or, for a record that is not a set at all, no error and no
+#     output either.
 #   · WHAT A `dedupKey` RETURNS is checked, but at APPLICATION and not here: a non-string grouping
 #     key is a named refusal carrying the kind and the path, which is where the value first exists.
 #
@@ -334,8 +340,9 @@ let
   # followed the chain would diverge deciding it. A depth ceiling would be a number nobody can
   # justify. One level is what terminates on every input.
   #
-  # WHAT THAT COSTS, MEASURED: a NESTED functor — `{ __functor = { __functor = g; }; }` — does
-  # apply, and this refuses it. The approximation therefore errs toward refusing working input
+  # WHAT THAT COSTS, MEASURED AT TWO LEVELS AND AT THREE: a NESTED functor applies — two and three
+  # levels of `__functor` both evaluate to their innermost function — and this admits only one, so
+  # it refuses every deeper one. The approximation therefore errs toward refusing working input
   # rather than admitting input that aborts, which is the direction where the caller gets a name
   # instead of a dead evaluation.
   callable = v: isFunction v || (isAttrs v && v ? __functor && isFunction v.__functor);
@@ -528,6 +535,13 @@ let
 
   hasId = e: isAttrs e && e ? id_hash;
 
+  # Carrying an identity is not the same as carrying a USABLE one. `id_hash` becomes an ATTRIBUTE
+  # NAME — the result keys its subjects by it — and a non-string attribute name is a type error at
+  # the point the result is assembled, far from the claim that supplied it, uncatchably and with no
+  # mention of a subject at all. So the two questions are asked separately: whether an identity was
+  # supplied, and whether the one supplied can be what the engine needs it to be.
+  hasUsableId = e: hasId e && isString e.id_hash;
+
   # Lexicographic order over integer-list paths — roots by intake index, children by parent path
   # plus emission index — which is a strict total order because one stratum's paths are distinct
   # by construction. Written as a scan over the common prefix rather than as a walk that calls
@@ -637,6 +651,8 @@ let
           throw "gen-scope.resolveClaims: claim at path ${pathStr} (kind '${c.kind}', subject '${rendered}') shadows reserved payload key(s) ${toJSON c._reserved}${chain}"
         else if !(hasId (c.subject or null)) then
           throw "gen-scope.resolveClaims: claim at path ${pathStr} (kind '${c.kind}') has a subject without id_hash (renders as '${rendered}')${chain}"
+        else if !(hasUsableId c.subject) then
+          throw "gen-scope.resolveClaims: claim at path ${pathStr} (kind '${c.kind}') has a subject whose id_hash is a ${typeOf c.subject.id_hash} rather than a string (renders as '${rendered}')${chain}"
         else
           c;
 
@@ -648,6 +664,36 @@ let
       # fields plus `_path`, and the caller's constant `ctx` — the engine's bookkeeping channel is
       # stripped and no resolved state is ever threaded in.
       resolverView = i: removeAttrs i.claim [ "_reserved" ] // { _path = i.path; };
+
+      # ── WHAT A RESOLVER HANDS BACK, DECIDED WHERE THE VALUE FIRST EXISTS ──
+      # The run reads three fields off this record: `resources` as an attribute set, `wiring` as a
+      # set or a list, `claims` as a list. Each is read at a site where the wrong container is a
+      # TYPE ERROR — `attrNames` on a list, `imap0` on an integer — and a type error is not a
+      # value: it terminates the evaluation, `tryEval` does not hold it, and what surfaces is the
+      # evaluator's own sentence with no library, no kind and no path in it.
+      #
+      # ★★ AND THE RECORD ITSELF IS THE WORSE HALF. A resolver returning a list, a number or null
+      # is not a type error anywhere: every field is read through an `or` default, so all three
+      # defaults fire and the claim contributes NOTHING — silently, and byte-identically to a
+      # resolver that returned an empty set on purpose. Something vanishes and nothing says so,
+      # which is the failure this engine's whole result contract is built to make impossible.
+      # Checking only the loud half would leave the quiet one exactly as it was.
+      #
+      # This sits beside the `dedupKey` refusal below and works the same way: the value is in hand,
+      # the emitting kind and its path are in hand, and the caller is told which of them produced
+      # what.
+      resultDefect =
+        result:
+        if !isAttrs result then
+          "returned a ${typeOf result} rather than an attribute set"
+        else if result ? resources && !isAttrs result.resources then
+          "returned a `resources` that is a ${typeOf result.resources} rather than an attribute set"
+        else if result ? wiring && !(isAttrs result.wiring || isList result.wiring) then
+          "returned a `wiring` that is a ${typeOf result.wiring} rather than an attribute set or a list"
+        else if result ? claims && !isList result.claims then
+          "returned a `claims` that is a ${typeOf result.claims} rather than a list"
+        else
+          null;
 
       groupKeyOf =
         i: rv:
@@ -700,7 +746,18 @@ let
             i:
             let
               rv = resolverView i;
-              result = ks.${i.kind}.resolve rv ctx;
+              # Every read of `result` below and downstream goes through this binding, and forcing
+              # it to weak head normal form decides the chain — so no path reaches a field of a
+              # resolver's answer without its shape having been decided first.
+              result =
+                let
+                  answered = ks.${i.kind}.resolve rv ctx;
+                  defect = resultDefect answered;
+                in
+                if defect != null then
+                  throw "gen-scope.resolveClaims: kind '${i.kind}' at path ${toJSON i.path} ${defect}"
+                else
+                  answered;
               emitted = result.claims or [ ];
               below = ks.${i.kind}.below;
               children = imap0 (
@@ -875,6 +932,8 @@ let
             throw "gen-scope.resolveClaims: wiring at path ${toJSON r.path} (kind '${r.kind}') targets a subject without id_hash (renders as '${
               renderSubject (e.subject or null)
             }')"
+          else if !hasUsableId e.subject then
+            throw "gen-scope.resolveClaims: wiring at path ${toJSON r.path} (kind '${r.kind}') targets a subject whose id_hash is a ${typeOf e.subject.id_hash} rather than a string (renders as '${renderSubject e.subject}')"
           else
             {
               id = e.subject.id_hash;

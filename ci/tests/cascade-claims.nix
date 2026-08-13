@@ -803,6 +803,50 @@ let
 
   runKindSetWith = fields: withForgedKindSet fields true;
 
+  # ── WHAT A RESOLVER HANDS BACK ──
+  # ★ NO FORGERY ANYWHERE BELOW. Every fixture here is an ordinary `mkKind` through the ordinary
+  # door — which is what separates this class from the earlier ones, where reaching the defect
+  # meant hand-writing a marker record.
+  runReturning =
+    resolver:
+    resolveClaims {
+      kinds = mkKinds [
+        (mkKind {
+          name = "g";
+          resolve = resolver;
+        })
+      ];
+      claims = [
+        (mkClaim {
+          kind = "g";
+          subject = subjA;
+        })
+      ];
+    };
+
+  # ── SUBJECT IDENTITY THAT IS PRESENT BUT NOT USABLE ──
+  # `id_hash` becomes an attribute name in the result, so a non-string one is a type error where
+  # the result is assembled — with no mention of the claim that supplied it.
+  runWithSubjectId =
+    h:
+    resolveClaims {
+      kinds = mkKinds [
+        (mkKind {
+          name = "g";
+          resolve = _: _: { resources.ok = 1; };
+        })
+      ];
+      claims = [
+        (mkClaim {
+          kind = "g";
+          subject = {
+            id_hash = h;
+            name = "s";
+          };
+        })
+      ];
+    };
+
   # ── A HAND-BUILT CLAIM DECLARING A VIOLATION THE CONSTRUCTOR WOULD HAVE REFUSED ──
   # `mkClaim` now refuses a shadowing payload where the author is, so the run's own reserved-key
   # arm is reachable only through a record that did not come from it — which is exactly the class
@@ -1403,6 +1447,97 @@ in
         at_0_1_0 = "id-a";
         at_1 = "id-b";
       };
+    };
+
+    # ── WHAT A RESOLVER HANDS BACK IS DECIDED WHERE IT IS RETURNED ──
+    # THE LOUD HALF: a present container of the wrong type is read by `attrNames` or `imap0`, which
+    # is a type error carrying no library, no kind and no path. `didThrow` reporting true is the
+    # evidence it is a named refusal now.
+    test-resources-that-is-a-list-refused = {
+      expr = didThrow (
+        runReturning (
+          _: _: {
+            resources = [
+              1
+              2
+            ];
+          }
+        )
+      );
+      expected = true;
+    };
+    test-resources-that-is-a-string-refused = {
+      expr = didThrow (runReturning (_: _: { resources = "s"; }));
+      expected = true;
+    };
+    test-wiring-that-is-a-string-refused = {
+      expr = didThrow (runReturning (_: _: { wiring = "s"; }));
+      expected = true;
+    };
+    test-claims-that-is-an-int-refused = {
+      expr = didThrow (runReturning (_: _: { claims = 42; }));
+      expected = true;
+    };
+    # ★ THE SILENT HALF, AND IT IS THE WORSE ONE. A resolver returning a list, a number or null is
+    # a type error nowhere: every field is read through an `or` default, so all three fire and the
+    # claim contributes nothing — with no throw and no report, byte-identical to a resolver that
+    # returned an empty set deliberately. The control two cells down is that identical output.
+    test-a-result-that-is-a-list-refused = {
+      expr = didThrow (runReturning (_: _: [ 1 ]));
+      expected = true;
+    };
+    test-a-result-that-is-an-int-refused = {
+      expr = didThrow (runReturning (_: _: 42));
+      expected = true;
+    };
+    test-a-result-that-is-null-refused = {
+      expr = didThrow (runReturning (_: _: null));
+      expected = true;
+    };
+    # CONTROL — a resolver that legitimately produces nothing still runs, and its output is what
+    # the silent half was indistinguishable from.
+    test-control-a-resolver-returning-an-empty-set-still-runs = {
+      expr = (runReturning (_: _: { })).resources.g;
+      expected = { };
+    };
+    test-control-a-resolver-producing-resources-still-runs = {
+      expr = (runReturning (_: _: { resources.ok = 1; })).resources.g;
+      expected = {
+        ok = 1;
+      };
+    };
+    # CONTROL — the three containers in their legitimate forms, including `wiring` as a LIST, which
+    # the accumulator accepts and a naive attrset-only check would have refused.
+    test-control-wiring-as-a-list-is-accepted = {
+      expr =
+        builtins.attrNames
+          (runReturning (
+            c: _: {
+              wiring = [
+                {
+                  inherit (c) subject;
+                  wiring.port = 1;
+                }
+              ];
+            }
+          )).wiring;
+      expected = [ "id-a" ];
+    };
+
+    # ── AN IDENTITY THAT IS PRESENT BUT NOT USABLE AS ONE ──
+    # `id_hash` becomes an attribute name when the result is keyed by subject, so a non-string one
+    # aborts where the result is assembled rather than where the claim was written.
+    test-subject-id-hash-that-is-a-list-refused = {
+      expr = didThrow (runWithSubjectId [ 1 ]);
+      expected = true;
+    };
+    test-subject-id-hash-that-is-an-int-refused = {
+      expr = didThrow (runWithSubjectId 42);
+      expected = true;
+    };
+    test-control-a-string-id-hash-runs = {
+      expr = builtins.attrNames (runWithSubjectId "id-a").wiring;
+      expected = [ "id-a" ];
     };
 
     # ── A MEASURE THAT IS NOT THE RELATION'S RANK STRANDS CLAIMS, AND THEY ARE NAMED ──

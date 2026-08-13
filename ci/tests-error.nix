@@ -252,6 +252,79 @@ in
       };
     };
 
+    # ── A RESOLVER'S ANSWER NAMES THE KIND AND THE PATH ──
+    # Both halves. What the evaluator would have said instead — "expected a set but found a list" —
+    # names no library, no kind and no path, and for the silent half it says nothing at all.
+    test-a-result-that-is-not-a-set-names-the-kind-and-the-path = {
+      expr = resolveClaims {
+        kinds = mkKinds [
+          (mkKind {
+            name = "g";
+            resolve = _: _: [ 1 ];
+          })
+        ];
+        claims = [
+          (mkClaim {
+            kind = "g";
+            subject = {
+              id_hash = "id-a";
+            };
+          })
+        ];
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.resolveClaims: kind 'g' at path [0] returned a list rather than an attribute set";
+      };
+    };
+    test-a-container-of-the-wrong-type-names-which-container = {
+      expr = resolveClaims {
+        kinds = mkKinds [
+          (mkKind {
+            name = "g";
+            resolve = _: _: { resources = [ 1 ]; };
+          })
+        ];
+        claims = [
+          (mkClaim {
+            kind = "g";
+            subject = {
+              id_hash = "id-a";
+            };
+          })
+        ];
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.resolveClaims: kind 'g' at path [0] returned a `resources` that is a list rather than an attribute set";
+      };
+    };
+    # An identity that is present but cannot be an attribute name is named as such, distinctly from
+    # one that is absent — two different bugs for the caller.
+    test-an-unusable-id-hash-is-named-distinctly-from-a-missing-one = {
+      expr = resolveClaims {
+        kinds = mkKinds [
+          (mkKind {
+            name = "g";
+            resolve = _: _: { };
+          })
+        ];
+        claims = [
+          (mkClaim {
+            kind = "g";
+            subject = {
+              id_hash = [ 1 ];
+              name = "s";
+            };
+          })
+        ];
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.resolveClaims: claim at path [0] (kind 'g') has a subject whose id_hash is a list rather than a string (renders as 's')";
+      };
+    };
+
     # ── THE BOUND: ARITY, WHICH NO PREDICATE IN THIS LANGUAGE DECIDES ──
     # A one-argument resolver is applicable, is applied, and its RESULT is applied again — so it
     # fails with the same uncatchable type error a non-function does. It is the one member of the
