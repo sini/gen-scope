@@ -17,7 +17,7 @@
 {
   genScope,
   genGraph,
-  genPrelude,
+  genPreludeLib,
   lib,
   ...
 }:
@@ -158,15 +158,54 @@ let
   registeredNames = kindList: builtins.attrNames (lib.genAttrs (map (k: k.name) kindList) (_: null));
   namesOf = kindList: builtins.attrNames (mkKinds kindList).depth;
 
-  # ── THE STRUCTURAL SCAN ──
-  # Comments dropped first, exactly as the purity scan drops them: what a comment says about a
-  # surface is not a consumption of it, and this cell is about consumption.
-  stripComments =
-    text:
-    lib.concatStringsSep "\n" (
-      map (line: lib.head (lib.splitString "#" line)) (lib.splitString "\n" text)
-    );
-  cascadeCode = stripComments (builtins.readFile ../../lib/cascade.nix);
+  # ── THE POISONED RANK SURFACE ──
+  # A source scan cannot decide consumption: it needs a case per syntactic form, and a form it has
+  # no case for reads as absence. This is the semantic instrument instead. The depth map is the
+  # real one; the linearisation throws on contact. The library is instantiated against it, so the
+  # cell goes red if ANY path reads that field, by projection, by `inherit`, by `getAttr`, or by
+  # a form nobody thought to write a case for.
+  poisoned = genGraph // {
+    coneRank =
+      accessor: cone:
+      genGraph.coneRank accessor cone // { order = throw "the rank linearisation was consumed"; };
+  };
+  cascadeUnderPoison = import ../../lib/cascade.nix {
+    prelude = genPreludeLib;
+    graph = poisoned;
+  };
+
+  # The same substitution aimed at the field the registry DOES read. Without this arm the cell
+  # above would pass just as happily against an instantiation that never consulted the injected
+  # surface at all, which is the one way a substitution oracle goes quietly vacuous.
+  depthPoisoned = genGraph // {
+    coneRank =
+      accessor: cone:
+      genGraph.coneRank accessor cone // { depth = throw "the rank measure was consumed"; };
+  };
+  cascadeUnderDepthPoison = import ../../lib/cascade.nix {
+    prelude = genPreludeLib;
+    graph = depthPoisoned;
+  };
+
+  # The accessor the registry builds, rebuilt here so the poison can be aimed at the surface
+  # directly and shown to fire.
+  accessorFor = kindList: {
+    nodes = map (k: k.name) kindList;
+    edges =
+      n:
+      (builtins.listToAttrs (
+        map (k: {
+          inherit (k) name;
+          value = k;
+        }) kindList
+      )).${n}.below;
+  };
+  rankOf = graph: kindList: graph.coneRank (accessorFor kindList) (map (k: k.name) kindList);
+
+  # ARMED: a registry that DOES consume the linearisation, written in the `inherit`-from form a
+  # substring scan for a dotted projection is blind to. Under the poison it must fail the cell the
+  # real construction passes.
+  consumingRegistry = graph: kindList: { inherit (rankOf graph kindList) depth order; };
 in
 {
   flake.tests.cascade-kinds = {
@@ -270,11 +309,95 @@ in
     # correct; the depth map admits no such freedom. The positive control is in the same run and
     # over the same stripped source, so a scan that could not see either token fails visibly.
     test-rank-linearisation-not-consumed = {
-      expr = genPrelude.hasInfix ".order" cascadeCode;
+      expr = succeeds (cascadeUnderPoison.mkKinds diamond);
+      expected = true;
+    };
+    # The poisoned instantiation is the same library doing the same work, so the cell above is not
+    # passing against something that quietly did nothing.
+    test-control-poisoned-instantiation-still-computes-the-measure = {
+      expr = (cascadeUnderPoison.mkKinds diamond).depth == (mkKinds diamond).depth;
+      expected = true;
+    };
+    # ARMED, three ways. The poison fires on contact; it fires through the `inherit`-from form;
+    # and the field is otherwise perfectly readable, so the throw is the poison and not an absence.
+    test-armed-the-poisoned-linearisation-throws-on-contact = {
+      expr = didThrow (rankOf poisoned diamond).order;
+      expected = true;
+    };
+    test-armed-a-registry-consuming-the-linearisation-fails-the-cell = {
+      expr = succeeds (consumingRegistry poisoned diamond);
       expected = false;
     };
-    test-control-rank-depth-is-consumed = {
-      expr = genPrelude.hasInfix ".depth" cascadeCode;
+    test-armed-the-same-consuming-registry-passes-against-the-real-surface = {
+      expr = succeeds (consumingRegistry genGraph diamond);
+      expected = true;
+    };
+    test-armed-the-injected-surface-is-the-one-the-registry-reads = {
+      expr = didThrow (cascadeUnderDepthPoison.mkKinds diamond);
+      expected = true;
+    };
+    test-control-the-poison-leaves-the-measure-alone = {
+      expr = (rankOf poisoned diamond).depth;
+      expected = {
+        leaf = 0;
+        a = 1;
+        b = 1;
+        top = 2;
+      };
+    };
+
+    # ── INTAKE: EVERY ENTRY IS A KIND RECORD, AND THE REFUSAL IS CATCHABLE ──
+    # `didThrow` is the discriminating predicate here: a refusal by name is a caught throw, while
+    # a type error reaching an attribute position terminates the evaluation and reports as a
+    # runner-level crash rather than a failed cell. Both are counted.
+    test-entry-that-is-not-an-attrset-refused = {
+      expr = didThrow (mkKinds [ "a" ]);
+      expected = true;
+    };
+    test-entry-not-built-by-the-constructor-refused = {
+      expr = didThrow (mkKinds [
+        {
+          name = "a";
+          below = [ ];
+        }
+      ]);
+      expected = true;
+    };
+    test-entry-with-a-non-string-name-refused = {
+      expr = didThrow (mkKinds [
+        {
+          name = 42;
+          below = [ ];
+        }
+      ]);
+      expected = true;
+    };
+    test-entry-with-no-below-field-refused = {
+      expr = didThrow (mkKinds [ { name = "a"; } ]);
+      expected = true;
+    };
+    test-below-holding-a-non-string-refused = {
+      expr = didThrow (mkKinds [
+        (leaf "b")
+        (node "a" [ 42 ])
+      ]);
+      expected = true;
+    };
+    test-below-that-is-not-a-list-refused = {
+      expr = didThrow (mkKinds [
+        (leaf "b")
+        (node "a" "b")
+      ]);
+      expected = true;
+    };
+    test-argument-that-is-neither-list-nor-attrset-refused = {
+      expr = didThrow (mkKinds "a");
+      expected = true;
+    };
+    # Composed, like the unregistered-name cell: the intake refusal has to dominate the path to
+    # the measure, not merely exist beside it.
+    test-intake-refusal-dominates-the-depth-path = {
+      expr = didThrow (mkKinds [ { name = "a"; } ]).depth;
       expected = true;
     };
 

@@ -30,12 +30,15 @@
       inherit inputs;
       name = "gen-scope";
       testModules = ./tests;
-      # `genGraph` is here for the armed negative controls: the registry's refusal cells are only
-      # meaningful beside a variant built the wrong way, and building that variant means calling
-      # the same graph surface the library calls.
+      # `genGraph` and `genPreludeLib` are here for the armed negative controls: a refusal cell is
+      # only meaningful beside a construction built the wrong way, and building one means calling
+      # the same graph surface the library calls and instantiating the library against a
+      # substituted one. `genPreludeLib` is a second name rather than an override of the harness's
+      # `genPrelude`, whose surface is deliberately one function and stays that way.
       specialArgs = {
         inherit genScope;
         genGraph = gen-graph.lib;
+        genPreludeLib = prelude;
       };
     };
 }
