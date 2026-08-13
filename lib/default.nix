@@ -16,9 +16,13 @@ let
   acceptance = import ./acceptance.nix { inherit prelude; };
   engine = import ./engine.nix { inherit prelude graph; };
   # A value algebra over fragments, which is why it takes the prelude and nothing else: the cascade
-  # is one of its consumers rather than its home.
+  # is one of its consumers rather than its home — and it is a consumer twice over, since a kind's
+  # resource fold and a wiring splice both take the vocabulary as data.
   folds = import ./folds.nix { inherit prelude; };
-  cascade = import ./cascade.nix { inherit prelude graph; };
+  cascade = import ./cascade.nix {
+    inherit prelude graph;
+    inherit (folds) folds;
+  };
 in
 algebraicGraph
 // buildNodes

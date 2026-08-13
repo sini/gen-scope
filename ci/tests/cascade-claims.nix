@@ -899,6 +899,10 @@ let
     import ../../lib/cascade.nix {
       prelude = genPreludeLib;
       graph = genGraph;
+      # The fold vocabulary is a value algebra the cascade takes as data — `spliceWiring`'s
+      # default combine is drawn from it. Instantiated here the same way the library instantiates
+      # it, so the comparand is this module against a real dependency rather than a stub.
+      inherit (import ../../lib/folds.nix { prelude = genPreludeLib; }) folds;
     }
   );
   incumbentNames = builtins.filter (n: !(builtins.elem n cascadeNames)) (builtins.attrNames genScope);
@@ -1960,17 +1964,25 @@ in
         "leastModel"
       ];
     };
+    # 81 rather than 80: the fold vocabulary is a module of its own and the cascade takes it as a
+    # dependency, so `folds` is part of the library's surface WITHOUT being one of this module's
+    # names — which is exactly what an incumbent is.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
       expected = 81;
     };
-    test-this-module-exports-exactly-its-four-names = {
+    # Six: the four the registration and run doors publish, plus the two consumer accessors over a
+    # resolution. The accessors are named here for the same reason the others are — this cell is
+    # the module's inventory, and an export it does not list is an export nothing measured.
+    test-this-module-exports-exactly-its-six-names = {
       expr = cascadeNames;
       expected = [
         "mkClaim"
         "mkKind"
         "mkKinds"
         "resolveClaims"
+        "spliceWiring"
+        "wiringFor"
       ];
     };
   };

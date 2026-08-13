@@ -271,10 +271,14 @@ in
       expected = [ "prelude" ];
     };
     # The same predicate over a module that takes more, in the same run: without it, an empty or
-    # constant answer would satisfy the cell above.
+    # constant answer would satisfy the cell above. Three rather than two, and the third is this
+    # vocabulary: the cascade's wiring splice draws its default combine from `folds`, so the module
+    # that is a value algebra over fragments is a DEPENDENCY of the module that is not. That is the
+    # cell above's point stated from the other side.
     test-the-cascade-module-takes-more = {
       expr = builtins.attrNames (builtins.functionArgs (import ../../lib/cascade.nix));
       expected = [
+        "folds"
         "graph"
         "prelude"
       ];
