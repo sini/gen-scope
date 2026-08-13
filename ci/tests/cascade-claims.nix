@@ -3,9 +3,10 @@
 #
 # ★ THE REFUSAL CELLS HERE PIN REACHABILITY, NOT MESSAGES. `tryEval` reports that a refusal fired
 # and discards what it said, so no cell in this file can tell one refusal from another; five cells
-# reporting `true` are equally satisfied by a construction with one refusal in it. The five
-# messages are discriminated by an exit-code sweep instead, and that division is stated here so
-# the in-suite half is not read as more than it is.
+# reporting `true` are equally satisfied by a construction with one refusal in it. What each
+# refusal SAYS is asserted in `../tests-error.nix`, on the `testsError` output, where nix-unit's
+# `expectedError` can read the text. The division is stated here so the reachability half is not
+# read as more than it is.
 #
 # ★★ THE EAGERNESS CELL IS ABOUT WHERE A REFUSAL FIRES, so it is measured against a construction
 # that refuses the same input LATER. `lazilyCanonicalizing` below is the constructor with its kind
@@ -345,13 +346,45 @@ let
   # round the schedule has, so nothing downstream selects it and no result field is built from
   # it: it is the one claim in a run that a construction forcing only what it reports would let
   # through. A leaf emitting anything is an error whether or not anyone was going to look.
+  #
+  # ★ THREE STRATA, NOT ONE. A single-kind registry has `maxDepth = 0`, so its only round is also
+  # its last and "the last round" is not distinguished from "the only round" — a construction that
+  # forced just the first round would pass. Here the emitter sits at the bottom of a three-deep
+  # chain, so the round that strands its emission is the third of three.
   bottomEmitter = mkKinds [
     (mkKind {
-      name = "l";
+      name = "t0";
       resolve = c: _: {
+        resources.t0 = "ran";
         claims = [
           (mkClaim {
-            kind = "l";
+            kind = "t0";
+            inherit (c) subject;
+          })
+        ];
+      };
+    })
+    (mkKind {
+      name = "t1";
+      below = [ "t0" ];
+      resolve = c: _: {
+        resources.t1 = "ran";
+        claims = [
+          (mkClaim {
+            kind = "t0";
+            inherit (c) subject;
+          })
+        ];
+      };
+    })
+    (mkKind {
+      name = "t2";
+      below = [ "t1" ];
+      resolve = c: _: {
+        resources.t2 = "ran";
+        claims = [
+          (mkClaim {
+            kind = "t1";
             inherit (c) subject;
           })
         ];
@@ -363,16 +396,44 @@ let
     kinds = bottomEmitter;
     claims = [
       (mkClaim {
-        kind = "l";
+        kind = "t2";
         subject = subjA;
       })
     ];
   };
 
+  # The same three-stratum shape with the bottom kind emitting nothing: the control that says the
+  # cells above are about the stranded emission and not about the fixture being broken.
   quietBottom = mkKinds [
     (mkKind {
-      name = "l";
-      resolve = _: _: { };
+      name = "t0";
+      resolve = _: _: { resources.t0 = "ran"; };
+    })
+    (mkKind {
+      name = "t1";
+      below = [ "t0" ];
+      resolve = c: _: {
+        resources.t1 = "ran";
+        claims = [
+          (mkClaim {
+            kind = "t0";
+            inherit (c) subject;
+          })
+        ];
+      };
+    })
+    (mkKind {
+      name = "t2";
+      below = [ "t1" ];
+      resolve = c: _: {
+        resources.t2 = "ran";
+        claims = [
+          (mkClaim {
+            kind = "t1";
+            inherit (c) subject;
+          })
+        ];
+      };
     })
   ];
 
@@ -380,10 +441,122 @@ let
     kinds = quietBottom;
     claims = [
       (mkClaim {
-        kind = "l";
+        kind = "t2";
         subject = subjA;
       })
     ];
+  };
+
+  # ── A REGISTRY WHOSE MEASURE IS NOT ITS RELATION'S RANK ──
+  # The marker vouches for provenance and not for agreement between `kinds`, `depth` and
+  # `maxDepth`. Flattened to one stratum, `top` runs and its emissions are created after that
+  # round selected its items — so they are never resolved, while every stratum they carry IS in
+  # the schedule. A run that derived "not run" from stratum membership would call them scheduled
+  # and report their kinds as empty, which is byte-identical to a kind nobody claimed.
+  flattenedKinds = cascadeKinds // {
+    depth = {
+      leaf = 0;
+      a = 0;
+      b = 0;
+      top = 0;
+      unused = 0;
+    };
+    maxDepth = 0;
+  };
+
+  flattenedRun = resolveClaims {
+    kinds = flattenedKinds;
+    claims = [
+      (mkClaim {
+        kind = "top";
+        subject = subjA;
+      })
+    ];
+  };
+
+  # A registry that registers a kind the measure has no entry for. Read where no refusal can
+  # follow it — `depth.<kind>` while a child is being built — so it must be decided as data.
+  undepthedKinds = cascadeKinds // {
+    depth = {
+      top = 2;
+      a = 1;
+      b = 1;
+    };
+  };
+
+  nonIntegerMaxDepth = cascadeKinds // {
+    maxDepth = "two";
+  };
+
+  # ── TWO GROUPS, ONE RESOURCE KEY ──
+  # A kind with no `dedupKey` puts every claim in its own group, so two claims of that kind
+  # writing one key have two authors and no merge rule between them.
+  collidingKinds = mkKinds [
+    (mkKind {
+      name = "dup";
+      resolve = _: _: { resources.same = "mine"; };
+    })
+  ];
+
+  collisionRun = resolveClaims {
+    kinds = collidingKinds;
+    claims = [
+      (mkClaim {
+        kind = "dup";
+        subject = subjA;
+      })
+      (mkClaim {
+        kind = "dup";
+        subject = subjB;
+      })
+    ];
+  };
+
+  singleContributorRun = resolveClaims {
+    kinds = collidingKinds;
+    claims = [
+      (mkClaim {
+        kind = "dup";
+        subject = subjA;
+      })
+    ];
+  };
+
+  # The same two claims under a kind that DOES declare a grouping and a merge: one group, one
+  # author, no collision. Without this the refusal above reads as "two claims of one kind is an
+  # error", which it is not.
+  foldedKinds = mkKinds [
+    (mkKind {
+      name = "dup";
+      dedupKey = _: "one-group";
+      fold = _: vs: builtins.concatStringsSep "+" vs;
+      resolve = c: _: { resources.same = c.subject.id_hash; };
+    })
+  ];
+
+  foldedRun = resolveClaims {
+    kinds = foldedKinds;
+    claims = [
+      (mkClaim {
+        kind = "dup";
+        subject = subjA;
+      })
+      (mkClaim {
+        kind = "dup";
+        subject = subjB;
+      })
+    ];
+  };
+
+  # ── A HAND-BUILT CLAIM DECLARING A VIOLATION THE CONSTRUCTOR WOULD HAVE REFUSED ──
+  # `mkClaim` now refuses a shadowing payload where the author is, so the run's own reserved-key
+  # arm is reachable only through a record that did not come from it — which is exactly the class
+  # the marker cannot vouch for, and exactly why that arm stays.
+  handBuiltShadowingClaim = {
+    _type = "gen-scope/claim";
+    kind = "leaf";
+    subject = subjA;
+    _reserved = [ "_path" ];
   };
 
   # ── (f) THE COMPOSITION PREDICATE ──
@@ -597,14 +770,11 @@ in
       ]);
       expected = true;
     };
+    # The run's arm, reached through a record the constructor did not build — the constructor
+    # refuses this payload itself now, so a fixture built with `mkClaim` would exercise the
+    # constructor and report the run's arm as covered when it was never entered.
     test-reserved-payload-key-refused = {
-      expr = didThrow (runWith [
-        (mkClaim {
-          kind = "leaf";
-          subject = subjA;
-          _path = [ 9 ];
-        })
-      ]);
+      expr = didThrow (runWith [ handBuiltShadowingClaim ]);
       expected = true;
     };
     test-subject-without-id-hash-refused = {
@@ -632,17 +802,205 @@ in
       expr = succeeds cascadeRun;
       expected = true;
     };
-    # ★ THE ONE REFUSAL A REPORTED FIELD DOES NOT REACH. Reading `resources` alone — never the
-    # trace, never `unrun` — must still refuse an emission made in the schedule's last round, so
-    # the cell forces exactly that one field. A run that forced only what it reports would answer
-    # `{ }` here and say nothing.
-    test-a-bottom-stratum-emission-is-refused-through-the-resources-field-alone = {
+    # ★ THE REFUSAL NO REPORTED FIELD SELECTS. An emission made in the schedule's LAST round is
+    # created after that round chose its items, so nothing downstream reads it and no result
+    # field is built from it. Each field is forced ON ITS OWN below, because the property is
+    # "every way into the result carries the run's refusals" and a cell that forced the whole
+    # record would pass on a construction where only one field did.
+    test-bottom-stratum-emission-refused-through-resources-alone = {
       expr = didThrow bottomEmissionRun.resources;
       expected = true;
     };
-    test-control-a-bottom-stratum-kind-that-emits-nothing-resolves = {
-      expr = succeeds quietBottomRun.resources;
+    test-bottom-stratum-emission-refused-through-wiring-alone = {
+      expr = didThrow bottomEmissionRun.wiring;
       expected = true;
+    };
+    test-bottom-stratum-emission-refused-through-unrun-alone = {
+      expr = didThrow bottomEmissionRun.unrun;
+      expected = true;
+    };
+    test-bottom-stratum-emission-refused-through-the-trace-alone = {
+      expr = didThrow bottomEmissionRun.trace;
+      expected = true;
+    };
+    # The same three-stratum shape whose bottom kind emits nothing: each field returns. Without
+    # it the four cells above are satisfied by a run that refuses everything.
+    test-control-a-quiet-bottom-stratum-resolves-through-every-field = {
+      expr = [
+        (succeeds quietBottomRun.resources)
+        (succeeds quietBottomRun.wiring)
+        (succeeds quietBottomRun.unrun)
+        (succeeds quietBottomRun.trace)
+      ];
+      expected = [
+        true
+        true
+        true
+        true
+      ];
+    };
+    # And it is three strata deep, so "the last round" is not the same event as "the only round".
+    test-control-the-bottom-emitter-fixture-is-three-strata-deep = {
+      expr = quietBottom.maxDepth;
+      expected = 2;
+    };
+
+    # ── THE ARGUMENTS' OWN SHAPE, DECIDED WHILE THEY ARE STILL DATA ──
+    # `claims` is walked by index and a kind's `depth` entry is projected while a child is built.
+    # Both are type errors on the wrong shape, and `tryEval` does not contain a type error — so
+    # `didThrow` reporting true here is itself the evidence these are named refusals now.
+    test-claims-that-are-not-a-list-refused = {
+      expr = didThrow (resolveClaims {
+        kinds = cascadeKinds;
+        claims = "not-a-list";
+      });
+      expected = true;
+    };
+    test-registry-registering-a-kind-with-no-depth-entry-refused = {
+      expr = didThrow (resolveClaims {
+        kinds = undepthedKinds;
+        claims = [
+          (mkClaim {
+            kind = "top";
+            subject = subjA;
+          })
+        ];
+      });
+      expected = true;
+    };
+    test-registry-with-a-non-integer-maxdepth-refused = {
+      expr = didThrow (resolveClaims {
+        kinds = nonIntegerMaxDepth;
+        claims = [
+          (mkClaim {
+            kind = "top";
+            subject = subjA;
+          })
+        ];
+      });
+      expected = true;
+    };
+    test-registry-that-is-not-a-kind-set-at-all-refused = {
+      expr = didThrow (resolveClaims {
+        kinds = "nope";
+        claims = [ ];
+      });
+      expected = true;
+    };
+    test-control-a-well-formed-registry-and-an-empty-claim-list-resolve = {
+      expr = succeeds (resolveClaims {
+        kinds = cascadeKinds;
+        claims = [ ];
+      });
+      expected = true;
+    };
+
+    # ── ONE RESOURCE KEY, TWO AUTHORS ──
+    # Under the refusal's absence the loser is `listToAttrs` first-wins: one contributor's
+    # resource disappears with no diagnostic, which is the vanishing class behind a guard.
+    test-resource-key-contributed-by-two-groups-refused = {
+      expr = didThrow collisionRun;
+      expected = true;
+    };
+    test-control-one-contributor-for-that-key-resolves = {
+      expr = singleContributorRun.resources.dup.same;
+      expected = "mine";
+    };
+    # A kind that declares a grouping and a merge puts both claims in ONE group, so there is one
+    # author and no collision: the refusal is about ungrouped co-authorship, not about arity.
+    test-control-two-claims-in-one-dedup-group-merge-instead-of-colliding = {
+      expr = foldedRun.resources.dup.same;
+      expected = "id-a+id-b";
+    };
+    test-control-the-merged-key-records-both-contributors = {
+      expr = foldedRun.trace.resources.dup.same.claims;
+      expected = [
+        [ 0 ]
+        [ 1 ]
+      ];
+    };
+
+    # ── A SHADOWING PAYLOAD IS REFUSED WHERE IT IS WRITTEN ──
+    # On the same terms as the three arms beside it, none of which holds a path either.
+    test-payload-shadowing-an-engine-field-refused-at-weak-head-normal-form = {
+      expr = survivesWhnf (mkClaim {
+        kind = "leaf";
+        subject = subjA;
+        _path = [ 9 ];
+      });
+      expected = false;
+    };
+    test-payload-shadowing-the-bookkeeping-channel-refused = {
+      expr = survivesWhnf (mkClaim {
+        kind = "leaf";
+        subject = subjA;
+        _reserved = [ "x" ];
+      });
+      expected = false;
+    };
+    test-control-an-ordinary-payload-key-is-carried = {
+      expr =
+        (mkClaim {
+          kind = "leaf";
+          subject = subjA;
+          extra = "payload";
+        }).extra;
+      expected = "payload";
+    };
+    test-a-built-claim-declares-no-violation = {
+      expr =
+        (mkClaim {
+          kind = "leaf";
+          subject = subjA;
+        })._reserved;
+      expected = [ ];
+    };
+
+    # ── A MEASURE THAT IS NOT THE RELATION'S RANK STRANDS CLAIMS, AND THEY ARE NAMED ──
+    # The marker vouches for provenance, not for agreement between `kinds`, `depth` and
+    # `maxDepth`. What the run reports is what it SETTLED, so a claim it created and left is
+    # named — the reading a stratum-membership proxy loses, because every stratum here is in the
+    # schedule and the proxy would call the stranded claims scheduled.
+    test-a-flattened-measure-strands-claims-and-names-them = {
+      expr = map (i: i.kind) flattenedRun.unrun;
+      expected = [
+        "a"
+        "b"
+      ];
+    };
+    # The pair of readings a caller needs to tell the two cases apart: the kind's entry is empty
+    # AND a claim of it is named. Under the proxy the first held and the second did not, which is
+    # byte-identical to a kind nobody claimed.
+    test-a-stranded-kind-is-empty-and-named-at-the-same-time = {
+      expr = [
+        (flattenedRun.resources.a == { })
+        (builtins.elem "a" (map (i: i.kind) flattenedRun.unrun))
+      ];
+      expected = [
+        true
+        true
+      ];
+    };
+    # A kind nobody claimed is empty and NOT named, which is what makes the pair discriminating.
+    test-an-unclaimed-kind-is-empty-and-not-named = {
+      expr = [
+        (flattenedRun.resources.unused == { })
+        (builtins.elem "unused" (map (i: i.kind) flattenedRun.unrun))
+      ];
+      expected = [
+        true
+        false
+      ];
+    };
+    test-control-the-same-registry-built-properly-strands-nothing = {
+      expr = [
+        cascadeRun.unrun
+        (builtins.attrNames cascadeRun.resources.a)
+      ];
+      expected = [
+        [ ]
+        [ "at_0_0" ]
+      ];
     };
 
     # ── (e) THE SCHEDULE REACHES EVERY CLAIM ──
@@ -733,8 +1091,11 @@ in
         0
       ];
     };
-    # Global order across kinds, path-lexicographic within a stratum — including two paths of
-    # different lengths, which a comparison that stopped at the shorter one would misorder.
+    # Global order across kinds, path-lexicographic within a stratum. ★ WHAT THIS DOES NOT COVER:
+    # the comparator's prefix arm. Every different-length pair sorted together below differs at
+    # index 0, so the length comparison is never the deciding branch — and no fixture can make it
+    # one, because two paths are prefix-related only when one is an ancestor of the other and a
+    # child is created after the round that resolves its parent has already chosen its items.
     test-claims-are-emitted-in-global-schedule-order = {
       expr = map (c: c.path) cascadeRun.trace.claims;
       expected = [

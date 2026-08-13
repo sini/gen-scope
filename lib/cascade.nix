@@ -184,17 +184,36 @@
 # strictly smaller depth, hence a strictly later position in the schedule. There is no check to
 # meet or miss.
 #
-# A claim whose stratum is not in the schedule is RETURNED as `unrun`, never thrown. Over a registry
-# this library built the list is always empty — the measure is total on the registered names and the
-# schedule enumerates its whole range — so `unrun` is a fact the caller can read rather than a
-# coincidence they have to trust. It is non-empty only for a caller who supplied a kind-set record
-# by hand whose declared maximum does not cover its own measure, and for that caller a refusal would
-# destroy the very information they need.
+# A claim the run did not settle is RETURNED as `unrun`, never thrown. Over a registry this library
+# built the list is always empty — the measure is total on the registered names and the schedule
+# enumerates its whole range — so `unrun` is a fact the caller can read rather than a coincidence
+# they have to trust. For a caller whose registry says something the run cannot honour, a refusal
+# would destroy the very information they need.
+#
+# ── `unrun` IS WHAT THE LOOP DID NOT SETTLE, AND THAT IS NOT THE SAME AS AN UNSCHEDULED STRATUM ──
+# The registry the run is handed may be a record it did not build. The kind-set marker answers
+# PROVENANCE for a cooperative caller, exactly as the kind marker does, and what it does NOT
+# establish is that `depth` and `maxDepth` are the measure of the `kinds` beside them: a record can
+# carry the token and a depth map that no `below` relation would produce. Nothing here can check
+# that, and refusing every record that merely writes the token would remove the pass-through the
+# run exists to offer.
+#
+# What that costs is bounded by where the answer is read from. "Not settled" is a fact about the
+# LOOP — the claims it created minus the claims it resolved — and it is that difference that is
+# reported. Deriving it instead from stratum membership in the schedule would be a PROXY: equivalent
+# to the property only while the depth map really is the rank of the relation, and wrong in exactly
+# the case the paragraph above says cannot be checked. Under such a registry a claim could go
+# unresolved while the proxy called it scheduled, and its kind would report an empty entry —
+# indistinguishable from a kind nobody claimed, which is the one reading the totality rule exists to
+# rule out. The difference has no proxy in it, so the two ways a registry can be wrong — a maximum
+# that does not cover the measure, and a measure that is not the relation's — are both reported and
+# neither is silent.
 { prelude, graph }:
 let
   inherit (builtins)
     attrNames
     isAttrs
+    isInt
     isList
     isString
     length
@@ -359,18 +378,27 @@ let
   # Internal: the run needs it, and a caller reaching a registry through this instead of through
   # `mkKinds` would be relying on a shortcut whose whole purpose is that the run does not care
   # which of the two it was given.
+  #
+  # THE PASS-THROUGH IS THE SAME COOPERATIVE-CALLER BARGAIN THE KIND MARKER MAKES, AND IT HAS THE
+  # SAME LIMIT. A record that came out of `mkKinds` carries a `depth` that is the rank of its own
+  # `below` relation and a `maxDepth` that covers it; a record that merely writes the token has
+  # asserted that and nothing here can check it. So what the token does NOT establish is the
+  # agreement between `kinds`, `depth` and `maxDepth` — and the run is built so that a disagreement
+  # is REPORTED rather than absorbed: it reads what it settled, never what the record declared.
   asKindSet =
     kinds: if isAttrs kinds && (kinds._type or null) == kindSetMarker then kinds else mkKinds kinds;
 
   claimMarker = "gen-scope/claim";
 
-  # Reserved against payload shadowing. `kind` and `subject` are the semantic fields; `_type`,
-  # `_path` and `_reserved` are the engine's own. A payload attempting any of them is claiming a
-  # channel that is already spoken for, and silently letting it win would mean a resolver reading
-  # an engine field that an author wrote.
-  reservedKeys = [
-    "kind"
-    "subject"
+  # The engine's own field names, reserved against payload shadowing. A payload attempting any of
+  # them is claiming a channel that is already spoken for, and letting it win would mean a resolver
+  # reading an engine field that an author wrote.
+  #
+  # `kind` and `subject` are reserved too and are NOT in this list, because they are not shadowable:
+  # the payload is what remains after both are taken out of the arguments, so an author writing
+  # `kind` has set the kind rather than shadowed it. A check over a domain two of whose members no
+  # input can reach reads as coverage it does not have.
+  engineKeys = [
     "_type"
     "_path"
     "_reserved"
@@ -388,7 +416,7 @@ let
         "kind"
         "subject"
       ];
-      shadowed = filter (k: elem k reservedKeys) (attrNames payload);
+      shadowed = filter (k: elem k engineKeys) (attrNames payload);
       # Canonicalized in the CONDITION of the chain below, not in a field of the record it
       # returns. A record is already in weak head normal form before any of its fields is looked
       # at, so a malformed kind bound as a field is a refusal that travels — it fires wherever
@@ -402,17 +430,24 @@ let
       throw "gen-scope.mkClaim: missing required field `subject`"
     else if !isString kindName then
       throw "gen-scope.mkClaim: `kind` must be a kind value carrying a string `name`, or a kind-name string, not a ${typeOf args.kind}"
+    else if shadowed != [ ] then
+      # Refused HERE, where the author is, and on the same terms as the three arms above. The
+      # earlier reading — that a constructor holds no path and so should hand the violation on for
+      # the run to report with one — is contradicted by its own siblings: a missing `kind` is
+      # refused with no path at all, and nobody is worse off for it. A site an author can fix is
+      # the arguments they just wrote, not a coordinate in a run they have not started.
+      throw "gen-scope.mkClaim: payload shadows engine field(s) ${toJSON shadowed} (kind '${kindName}')"
     else
       # Payload first, fixed fields last: the marker, the kind and the subject are authoritative
-      # over anything an author wrote. `_reserved` carries the shadow violation for the run to
-      # report WITH a path — a constructor has no path context, and a violation reported without
-      # one names no site.
+      # over anything an author wrote. `_reserved` is written empty and stays the channel a record
+      # that did NOT come through here can declare a violation on — the run refuses on it, which is
+      # what keeps that refusal reachable for exactly the records the marker cannot vouch for.
       payload
       // {
         _type = claimMarker;
         kind = kindName;
         subject = args.subject;
-        _reserved = shadowed;
+        _reserved = [ ];
       };
 
   # A display string for a subject. Output only: identity is `id_hash` and never this.
@@ -434,6 +469,16 @@ let
   # by construction. Written as a scan over the common prefix rather than as a walk that calls
   # itself on the tail: a self-applying loop spends one evaluator frame per element and past the
   # call-depth guard it aborts uncatchably, and this comparison is the sort key of every stratum.
+  #
+  # ★ THE PREFIX ARM — the length comparison reached when neither path differs from the other
+  # inside the shared prefix — IS WHAT MAKES THIS COMPARATOR TOTAL, AND NO INPUT THE CASCADE CAN
+  # BUILD REACHES IT. Two paths are prefix-related only when one is an ancestor of the other, and
+  # a child's path is created DURING the round that resolves its parent, after that round's item
+  # set was selected — so no two items sorted together are ever prefix-related, whatever the
+  # registry says. The arm is therefore an obligation of the comparator rather than a reachable
+  # state of the run, and nothing in the suite pins it: `sort` is undefined on a partial order,
+  # so it is not removable, and it is not testable from outside this module either. Written down
+  # rather than left as a branch a reader assumes some fixture covers.
   pathLt =
     a: b:
     let
@@ -458,6 +503,33 @@ let
       kindSet = asKindSet kinds;
       ks = kindSet.kinds;
       inherit (kindSet) depth maxDepth;
+
+      # ── the registry's SHAPE, which is this run's precondition and not the registry's claim ──
+      # A record the run built satisfies all of this and pays nothing for the check. A record that
+      # merely carries the marker may not, and the three fields below are read where no refusal can
+      # follow: `maxDepth` enters integer arithmetic and a kind's `depth` entry is projected while
+      # a child is being built. Both are TYPE ERRORS if the shape is wrong, and a type error is not
+      # a value — it terminates the evaluation and `tryEval` around the call does not contain it,
+      # so a caller gets no name and no way to recover. Measured on this evaluator: `tryEval` holds
+      # a `throw` and does not hold a missing attribute.
+      #
+      # WHAT THIS DOES NOT CHECK, and the line is deliberate: whether `depth` is the RANK of the
+      # `below` relation. Deciding that means computing the rank, which is what registration is
+      # for, and a run that recomputed it would make the pass-through pointless. A depth map that
+      # is well-shaped and wrong is admitted — and the run reports what it did not settle, so the
+      # claims such a map strands are named rather than dropped.
+      registryDefect =
+        if !isAttrs (kindSet.kinds or null) then
+          "carries no `kinds` attribute set"
+        else if !isAttrs (kindSet.depth or null) then
+          "carries no `depth` attribute set"
+        else if !isInt (kindSet.maxDepth or null) then
+          "carries a `maxDepth` that is not an integer"
+        else
+          let
+            undepthed = filter (n: !(kindSet.depth ? ${n})) (attrNames kindSet.kinds);
+          in
+          if undepthed != [ ] then "registers kind(s) ${toJSON undepthed} with no `depth` entry" else null;
 
       # ── the refusal chain, shared by intake and emission ──
       # `chain` names the emitting claim for a sub-claim's errors, and is empty for a root. Each
@@ -603,12 +675,17 @@ let
         validated = foldl' (a: i: seq i a) true roots;
       } schedule;
 
-      # Claims the schedule never reaches. Empty over any registry this library built; returned
-      # rather than refused, because the caller for whom it is non-empty needs to know which.
-      unrun = filter (i: !(elem i.stratum schedule)) final.instances;
-
       # Already in global schedule order: stratum-major descending, path-lexicographic within.
       inherit (final) resolved;
+
+      # Claims the loop created and did not settle — the difference between the two lists it
+      # carried, and not a re-derivation from the strata the schedule holds. A claim's path is
+      # assigned once and never reused (roots by intake index, children by parent path plus
+      # emission index), so it identifies the instance and the difference is exact. Empty over any
+      # registry this library built; returned rather than refused, because the caller for whom it
+      # is non-empty is precisely the caller who needs to know which claim it was.
+      settledPaths = listToAttrs (map (r: nameValuePair (toJSON r.path) null) resolved);
+      unrun = filter (i: !(settledPaths ? ${toJSON i.path})) final.instances;
 
       # ── resource combination, per kind, per dedup group, per key ──
       # THEORY: stratum-local aggregation on a COMPLETE fact set — Apt, Blair & Walker (1988),
@@ -773,14 +850,29 @@ let
         groupKey = r.gk;
       }) resolved;
     in
-    seq final.validated {
-      inherit resources wiring unrun;
-      trace = {
-        claims = traceClaims;
-        resources = traceResources;
-        wiring = traceWiring;
+    # The argument's own shape is decided here, ahead of everything, and the result is built only
+    # inside the branch the refusal falls through to. `claims` is walked by index, so a value that
+    # is not a list reaches a list position and aborts with a type error — and a type error is not
+    # a value: it terminates the evaluation, no `tryEval` around the call contains it, and the
+    # caller gets no name to act on. The registry decides its own argument's shape for the same
+    # reason; a run that did not would be the one door in this module a caller can fall through.
+    if !isList claims then
+      throw "gen-scope.resolveClaims: `claims` must be a list of claims, not a ${typeOf claims}"
+    else if registryDefect != null then
+      throw "gen-scope.resolveClaims: the kind set ${registryDefect}"
+    else
+      # Every field below forces the loop, so each one independently carries the run's refusals —
+      # including an emission made in the schedule's last round, which no field SELECTS. Wrapping
+      # the record in a forcing `seq` would add nothing to that and would make the record's own
+      # weak head normal form run every resolver, which is a cost no caller asked for.
+      {
+        inherit resources wiring unrun;
+        trace = {
+          claims = traceClaims;
+          resources = traceResources;
+          wiring = traceWiring;
+        };
       };
-    };
 in
 {
   inherit
