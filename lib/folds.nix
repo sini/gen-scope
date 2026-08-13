@@ -184,6 +184,13 @@ let
 
   firstSite = items: foldl' (found: it: if found != null then found else siteIn it.w it.v) null items;
 
+  # ★ THE REFUSAL IS ONE THROW OVER TWO GROUNDS, AND WHAT THE MESSAGE CELLS PIN IS ITS RENDERED
+  # TEXT, not the template that produces it. The template carries `what` and `because` from the
+  # hazard, so the shape of the string here can be re-parameterised without any cell noticing —
+  # which is correct, because a caller reads the rendered sentence and never the template. A cell
+  # asserting the template would fail on a refactor that changed nothing a caller can observe, and
+  # pass on one that changed the sentence while keeping the shape.
+  #
   # The first unusable value in a fragment list, as its position and its ground, or null.
   hazardSite =
     vs:
@@ -275,6 +282,28 @@ let
   # `outPath` that is an integer fails the skip predicate above, and is then ADMITTED and folded
   # like any other value — both readers cope with it. Excluding a shape from the shortcut is not the
   # same act as refusing it, and this file does the first far more often than the second.
+  #
+  # ── THE ALTERNATIVE THIS DOES NOT TAKE, AND THE PART OF IT THAT IS RIGHT ──
+  # The reporting half could be met from the other side: leave everything admitted and make the
+  # conflict message TOTAL, so no caller value is ever handed to a partial renderer. The strongest
+  # form of that is SELECTIVE rather than blanket — render a derivation by its string `outPath`,
+  # and a path or a function by a placeholder naming its type — and it keeps what a blanket total
+  # renderer would lose, which is that this engine's real fragments are store paths and a message
+  # naming them `<a set>` is worth less than the one it replaced. Nothing above argues against that
+  # form, and it is written down here so it is not re-proposed as though it were unconsidered.
+  #
+  # ★ TWO GROUNDS SURVIVE IT, and they are why the refusals stay where they are:
+  #
+  #   THE FUNCTION ARM IS NOT A RENDERING PROBLEM. It is a precondition on the COMPARISON, and no
+  #   renderer can supply it: `==` is not an equivalence over function-bearing values, so a fold
+  #   that rendered such a conflict politely would still be ANSWERING by value sharing. The
+  #   message would improve and the answer would remain unaccountable.
+  #
+  #   A PATH IN A FRAGMENT IS NOT PLAIN DATA. The constructional answer this library's design names
+  #   for that class is plain-data conformance of what a resolver may hand back — which makes such
+  #   a fragment INEXPRESSIBLE rather than well-rendered. Refusing it early is the same direction
+  #   arrived at earlier, so the refusal is a step toward that construction; rendering it politely
+  #   would be a step away, and a comfortable one that removes the pressure to build the real thing.
   same =
     key: vs:
     let
