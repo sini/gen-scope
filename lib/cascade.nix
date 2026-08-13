@@ -40,11 +40,20 @@
 # evaluation depends on cannot be delegated to a constructor its input may not have visited, so
 # the registry decides well-formedness itself, at intake, ahead of everything else.
 #
-# What it decides is both halves. The marker answers PROVENANCE — this came out of the
-# constructor, so everything the constructor refuses has already been refused, including the
-# absence of a resolver, which no field-shape check can see. The field checks answer USABILITY —
-# `name` is used as an attribute name and `below` as a list of them, and neither obligation is
-# discharged by a token a caller can also write by hand.
+# What it decides is both halves, and only one of them is a proof.
+#
+# The marker answers PROVENANCE, and it answers it for a COOPERATIVE CALLER: a record that came out
+# of the constructor has been through everything the constructor refuses, while a record that
+# merely writes the token has asserted something about its own origin that nothing here can check.
+# So what the token does NOT establish is exactly the three fields the constructor writes and the
+# intake never reads — `resolve`, `dedupKey` and `fold`. A record carrying `_type`, `name` and
+# `below` alone registers, and it has no resolver. ANYTHING DOWNSTREAM THAT NEEDS ONE MUST SAY SO
+# ITSELF: a registered kind is not evidence that one is there.
+#
+# The field checks answer USABILITY, and they are the half that holds against any input at all —
+# `name` is used as an attribute name and `below` as a list of them, and those obligations are the
+# registry's own whether or not the token in front of them is honest. That is why they sit beside
+# the marker rather than behind it.
 #
 # The stakes are what makes these refusals rather than documentation: a non-string reaching an
 # attribute position aborts with a type error, and a type error is not a value — it terminates the
@@ -52,15 +61,26 @@
 # recover from it, and gets no name to act on. So the shape is decided while it is still data.
 #
 # ── THE SUBSTRATE'S OWN GUARDS ARE NOT REACHED FOR, AND THE REASON IS RECORDED ──
-# The ordering arm this library reaches through publishes refusals for a non-string ordering key,
-# for two nodes sharing one key, and for an edge naming a node outside the set — three checks that
-# overlap this registry's. They are deliberately not consumed. Every one of them sits DOWNSTREAM
-# of an accessor, and an accessor cannot be constructed at all until the entries are known to be
-# attribute sets carrying the fields it reads: the registry has to decide well-formedness before
-# any graph call exists to delegate it to. Once it has, those three verdicts are already settled,
-# so calling for them would buy a second ordering pass for answers the registry is holding — and
-# would move a domain refusal about kind registration into a vocabulary of node indices and
-# ordering keys.
+# The ordering arm beneath the rank surface publishes refusals for a non-string ordering key, for
+# two nodes sharing one key, and for an edge naming a node outside the set — three checks that
+# overlap this registry's, and called directly it does refuse two of these cases by name and
+# catchably. They are still not consumed, on two grounds.
+#
+# THEY ARE UNREACHABLE THROUGH THE DOOR THE MEASURE COMES FROM. The rank surface sanitises before
+# the arm exists: it builds a membership set out of the cone it was handed and filters every edge
+# against it, so a node key that is not a string dies building that set and an edge target that is
+# not a string dies in the filter — both ahead of the arm, and both UNCATCHABLY. That is measured
+# on this library's own pin, and it is the same shape of defect this substrate has been recorded
+# carrying before: an exported ordering surface whose abort no caller can contain. Reaching the
+# arm's refusals would mean calling the arm instead of the door the measure is taken from, and
+# paying a second ordering pass for verdicts the registry is already holding.
+#
+# AND HALF OF WHAT IS BEING REFUSED IS UPSTREAM OF ANY ACCESSOR AT ALL. An entry that is not an
+# attribute set, or that lacks the fields the node list and the edge function are built out of, is
+# refused before either can be constructed — no graph surface, arm or door, could have seen it. So
+# this check is the registry's whatever the substrate publishes, and what delegation would change
+# is only what the caller is told: a refusal about kind registration, reported in a vocabulary of
+# node indices and ordering keys.
 #
 # ── ONLY THE MEASURE IS CONSUMED ──
 # The rank surface publishes a linearisation beside its depth map, and this construction reads the
@@ -68,6 +88,20 @@
 # element and both be correct, so a consumer that reads one has taken on a cross-library contract
 # about which valid answer it gets. The depth map carries no such freedom: it is a function of the
 # relation, identical under any tie-break.
+#
+# ── WHAT THIS REGISTRY DOES NOT ESTABLISH ──
+# Written down rather than left for the next construction to discover, because the next
+# construction is what builds on it.
+#
+# `resolve`, `dedupKey` and `fold` are not type-checked. The pairing between the last two is a
+# registration-time error, and that is all: a kind whose resolver is not a function registers here
+# and fails wherever it is finally applied. Nothing here constrains what a resolver may RETURN
+# either, so the conformance of a returned fragment is not a property this registry has
+# established — a consumer that needs plain data must obtain it somewhere else.
+#
+# And the marker's limit above is the scope of every completeness claim on this page. The intake is
+# total on the shapes an ordinary caller can reach; it is not total against a caller who writes the
+# constructor's token by hand, and no check on this page makes it so.
 #
 # THEORY. Acyclicity is the stratifiability condition made a definition-time error. The measure is
 # the longest path to a leaf: `depth k = 0` where `k` has no registered successor, else
