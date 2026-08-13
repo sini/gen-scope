@@ -147,6 +147,20 @@ let
       passthru = _: 2;
     }
   ];
+  # Marker and `outPath` both present, and the path's VALUE is a function. Both readers want that
+  # value: the comparison compares it by pointer and the rendering cannot coerce it at all.
+  nonStringPath = [
+    {
+      type = "derivation";
+      outPath = _: 1;
+      passthru = _: 1;
+    }
+    {
+      type = "derivation";
+      outPath = _: 2;
+      passthru = _: 2;
+    }
+  ];
   spec = {
     gen = folds.same;
   };
@@ -200,6 +214,11 @@ let
     marker-only-guarded-wrapped = didThrow (folds.same "k" markerOnly);
     unguarded-marker-only-wrapped = didThrow (unguardedSame "k" markerOnly);
     unguarded-marker-only-bare = unguardedSame "k" markerOnly;
+
+    # ── AND THE PATH'S OWN VALUE, WHICH BOTH READERS NEED ──
+    nonstring-path-guarded-wrapped = didThrow (folds.same "k" nonStringPath);
+    unguarded-nonstring-path-wrapped = didThrow (unguardedSame "k" nonStringPath);
+    unguarded-nonstring-path-bare = unguardedSame "k" nonStringPath;
 
     # ── THE KEY, WHICH EVERY DIAGNOSTIC INTERPOLATES ──
     # Both forms the defect named: fragments that would have conflicted, and no fragments at all.

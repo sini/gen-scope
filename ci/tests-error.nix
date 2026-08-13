@@ -137,6 +137,19 @@ let
     type = "derivation";
     passthru = _: 2;
   };
+  # Marker and `outPath` both present, and the path's VALUE is a function — which both readers need
+  # and neither can use. The refusal names `outPath` itself, which is what distinguishes this term
+  # of the rule from the two above it.
+  fnPath1 = {
+    type = "derivation";
+    outPath = _: 1;
+    passthru = _: 1;
+  };
+  fnPath2 = {
+    type = "derivation";
+    outPath = _: 2;
+    passthru = _: 2;
+  };
 
   # The comparison WITHOUT its precondition, built here to be measured and never used. It is what
   # the fold did before, and its failure is an error of a different CLASS: a `TypeError` from the
@@ -506,6 +519,20 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a function, at fragment-list position [0].passthru — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+      };
+    };
+
+    # ★ AND THE THIRD TERM, WHOSE POSITION IS ITS OWN EVIDENCE. The refusal points at `[0].outPath`
+    # rather than at the interior, so this cell says the scan entered the fragment AND found the
+    # defect in the path itself — the one term a marker-and-presence rule reports as satisfied.
+    test-a-store-path-that-is-not-a-string-is-refused-by-name = {
+      expr = folds.same "k" [
+        fnPath1
+        fnPath2
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a function, at fragment-list position [0].outPath — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
       };
     };
 

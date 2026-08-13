@@ -67,24 +67,36 @@ let
     unique
     ;
 
-  # A value the EVALUATOR treats as its store path rather than as its contents. The rule is a
-  # CONJUNCTION — the derivation marker AND an `outPath` — and it is deliberately not nixpkgs'
-  # `isDerivation`, which tests the marker alone and is a different predicate wearing a name close
-  # enough to be mistaken for this one.
+  # ── WHAT MAY BE SKIPPED, DERIVED FROM THE PROPERTY RATHER THAN FROM A LIST OF SHAPES ──
+  # THE PROPERTY: a fragment may be skipped only if BOTH readers still work on it — `==` must
+  # compare it without reaching a function, and `toJSON` must render it without aborting. Skipping
+  # is a promise about two readers, so the predicate is their INTERSECTION, and any term dropped
+  # from it hands the scan's own subject to whichever reader was not considered.
   #
-  # Measured on this evaluator, VARYING BOTH AXES, because a table that holds either one fixed
-  # cannot see that the rule is a conjunction at all — two distinct fragments, different functions
-  # inside, compared:
+  # That resolves to a three-term conjunction: the derivation MARKER, an `outPath`, and an `outPath`
+  # whose value is a STRING. It is deliberately not nixpkgs' `isDerivation`, which tests the marker
+  # alone and is a different predicate wearing a name close enough to be mistaken for this one.
   #
-  #   marker + `outPath`   ⇒ TRUE   — compared by path, the interiors never read
-  #   marker, no `outPath` ⇒ FALSE  — field by field, functions included
-  #   `outPath`, no marker ⇒ FALSE  — likewise
-  #   neither              ⇒ FALSE  — likewise
+  # Measured on this evaluator, VARYING EVERY TERM — a table that fixes any one of them cannot see
+  # the rule's ARITY, and each row below was a shape some earlier reading of this predicate skipped.
+  # Two distinct fragments, different functions in their interiors:
   #
-  # and `toJSON` follows the same conjunction: it renders a marker+`outPath` value by its path, and
-  # ABORTS on a marker-without-`outPath` value holding a function. So either half alone admits
-  # fragments whose comparison their interiors decide and whose diagnostic cannot be built.
-  comparedByPath = v: isAttrs v && (v.type or null) == "derivation" && v ? outPath;
+  #   marker + string `outPath`  ⇒ compared by path, rendered by path      — SAFE, and skipped here
+  #   marker, no `outPath`       ⇒ field by field; `toJSON` ABORTS
+  #   `outPath`, no marker       ⇒ field by field; the interior decides
+  #   `outPath` = a function     ⇒ the paths themselves compare by pointer; `toJSON` ABORTS
+  #   `outPath` = an attrs/list holding a function                        ⇒ `toJSON` ABORTS
+  #   `outPath` = a path literal ⇒ agrees quietly, and ABORTS on the conflict branch, where
+  #                                rendering it attempts a store path that does not exist
+  #   `outPath` = an integer     ⇒ both readers cope. It is EXCLUDED anyway, because the licence to
+  #                                skip is that the value STANDS FOR a store path, not that it
+  #                                happens to render — a predicate built by collecting shapes that
+  #                                survive is the enumeration this one exists not to be.
+  #
+  # ★ AND THE SECOND READER ONLY RUNS ON THE CONFLICT BRANCH, which is why agreement is an axis too:
+  # a fixture whose fragments agree never builds a diagnostic, so it reports every rendering hazard
+  # in this table as absent.
+  comparedByPath = v: isAttrs v && (v.type or null) == "derivation" && isString (v.outPath or null);
 
   # ── WHERE A FUNCTION SITS INSIDE A VALUE ──
   # The position of the first function anywhere in a value, rendered as a path expression, or null
@@ -92,17 +104,18 @@ let
   # NESTING DEPTH and not its size: siblings are independent applications that do not nest, and the
   # fold over them stops descending as soon as a site is found.
   #
-  # ★ IT STOPS ONLY WHERE THE EVALUATOR ALREADY STOPS, WHICH IS THE CONJUNCTION ABOVE AND NEITHER
-  # HALF OF IT. Every other attribute set — including one carrying a marker without a path, and one
-  # carrying a path without a marker — is compared FIELD BY FIELD, functions included, and rendered
-  # by walking it. A stop at either half alone therefore hands the scan's own subject straight to
-  # `==`: the fragments whose agreement a function decides, and whose conflict message cannot be
-  # built without aborting.
+  # ★ IT STOPS ONLY WHERE THE EVALUATOR ALREADY STOPS, WHICH IS THE WHOLE CONJUNCTION ABOVE AND NO
+  # PART OF IT. Every other attribute set is compared FIELD BY FIELD, functions included, and
+  # rendered by walking it — so a stop written on a subset of those terms hands the scan's own
+  # subject straight to `==`: the fragments whose agreement a function decides, and whose conflict
+  # message cannot be built without aborting.
   #
-  # ★ AND A PER-FRAGMENT TEST IS SOUND FOR A PAIRWISE RULE, which is worth one sentence because it
-  # is not obvious. The evaluator takes the shortcut only when BOTH sides satisfy the conjunction;
-  # when the other side does not, it is a value this scan DID enter, so a function able to decide
-  # that comparison is found there instead. Nothing is skipped on both sides at once.
+  # ★ AND A PER-FRAGMENT TEST IS SOUND FOR A PAIRWISE RULE, which is worth stating because it is not
+  # obvious. Two functions can only be compared with each other where BOTH sides were skipped — and
+  # both sides skipped is exactly the case the evaluator decides by path, never reading either
+  # interior. Where only one side is skipped, the other is a value this scan ENTERED, so a function
+  # able to decide that comparison is found there and refused. Neither case leaves a comparison for
+  # a function to settle.
   siteIn =
     where: v:
     if isFunction v then

@@ -125,6 +125,32 @@ let
     type = "derivation";
     passthru = _: "two";
   };
+  # A marker and an `outPath` that is not a STRING. Both readers need the path's VALUE: the
+  # comparison compares the values, and the rendering coerces them. A function there is compared by
+  # pointer and cannot be rendered at all.
+  fnPath1 = {
+    type = "derivation";
+    outPath = _: "one";
+    passthru = _: "one";
+  };
+  fnPath2 = {
+    type = "derivation";
+    outPath = _: "two";
+    passthru = _: "two";
+  };
+  # The shape that agrees quietly and only bites on the CONFLICT branch: two path literals compare
+  # fine and render by attempting a store path that is not there. A fixture whose fragments agreed
+  # would report this hazard as absent.
+  litPath1 = {
+    type = "derivation";
+    outPath = /x;
+    passthru = _: "one";
+  };
+  litPath2 = {
+    type = "derivation";
+    outPath = /y;
+    passthru = _: "two";
+  };
 
   # Every fold in the vocabulary, in one list, so a key-type cell reports WHICH member regressed
   # rather than that something did.
@@ -325,6 +351,30 @@ in
         folds.same "k" [
           markerOnly1
           markerOnly2
+        ]
+      );
+      expected = true;
+    };
+    # ★ THE THIRD TERM: A PATH THAT IS NOT A STRING. Both readers want the path's VALUE, so a marker
+    # and a present `outPath` are not enough — a function there is compared by pointer and cannot be
+    # rendered. Skipping these is the abort again, so the scan enters them and refuses by name.
+    test-a-store-path-that-is-not-a-string-is-refused = {
+      expr = didThrow (
+        folds.same "k" [
+          fnPath1
+          fnPath2
+        ]
+      );
+      expected = true;
+    };
+    # ★ AND THE SAME TERM ON THE BRANCH WHERE IT HIDES. Path literals compare cleanly, so a fragment
+    # pair that AGREED would take the quiet branch and report nothing; these differ, so the fold
+    # reaches the point where a skipped fragment would have to be rendered.
+    test-a-path-literal-store-path-is-refused-on-the-conflict-branch = {
+      expr = didThrow (
+        folds.same "k" [
+          litPath1
+          litPath2
         ]
       );
       expected = true;
