@@ -15,6 +15,7 @@ let
   wellFounded = import ./well-founded.nix { inherit prelude; };
   acceptance = import ./acceptance.nix { inherit prelude; };
   engine = import ./engine.nix { inherit prelude graph; };
+  cascade = import ./cascade.nix { inherit prelude graph; };
 in
 algebraicGraph
 // buildNodes
@@ -28,3 +29,4 @@ algebraicGraph
 // wellFounded
 // acceptance
 // engine
+// cascade

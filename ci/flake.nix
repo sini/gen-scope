@@ -30,6 +30,12 @@
       inherit inputs;
       name = "gen-scope";
       testModules = ./tests;
-      specialArgs = { inherit genScope; };
+      # `genGraph` is here for the armed negative controls: the registry's refusal cells are only
+      # meaningful beside a variant built the wrong way, and building that variant means calling
+      # the same graph surface the library calls.
+      specialArgs = {
+        inherit genScope;
+        genGraph = gen-graph.lib;
+      };
     };
 }

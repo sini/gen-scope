@@ -1,0 +1,454 @@
+# The demand cascade's kind registry: what the measure is, what the registry refuses, and in what
+# order it refuses it.
+#
+# ★ THE DEPTH CELLS ARE AN IDENTITY ORACLE AND THEY CANNOT PIN A RECURRENCE. The expected values
+# below are the output of the previous construction, read at its own pins, on four shapes — the
+# diamond is the discriminating one, since a chain agrees under a construction that re-walks
+# shared producers and under one that does not. Four equalities over finite fixtures say nothing
+# about a fifth shape, so the strict-decrease cells further down are quantified over the registry
+# and over generated lattices instead.
+#
+# ★★ THE REFUSAL CELLS CARRY ARMED NEGATIVE CONTROLS, because two of them are about ORDER and an
+# order cannot be observed from a cell that exercises one check on its own. The graph library's
+# rank surface drops an edge leaving its cone silently, so a registry that checks unregistered
+# names beside the measure rather than ahead of it answers depth 0 with no diagnostic — and an
+# isolated refusal cell passes against exactly that registry. The `nonDominating` variant below IS
+# that registry, built here so the cells can be measured against something that must fail them.
+{
+  genScope,
+  genGraph,
+  genPrelude,
+  lib,
+  ...
+}:
+let
+  inherit (genScope) mkKind mkKinds;
+
+  didThrow = e: !(builtins.tryEval (builtins.deepSeq e null)).success;
+  succeeds = e: (builtins.tryEval (builtins.deepSeq e null)).success;
+
+  leaf =
+    name:
+    mkKind {
+      inherit name;
+      resolve = _: _: { };
+    };
+  node =
+    name: below:
+    mkKind {
+      inherit name below;
+      resolve = _: _: { };
+    };
+
+  # ── FIXTURES ──
+  # `levels` × `width`, every node at level i pointing at EVERY node at level i−1. Generated
+  # rather than hand-written, so the shapes are not chosen to agree: `maxDepth == levels - 1` is
+  # asserted separately, which is the independent check that the generator built the lattice it
+  # claims and not a degenerate one.
+  latticeNames = l: w: builtins.genList (i: "n${toString l}_${toString i}") w;
+  lattice =
+    levels: width:
+    builtins.concatLists (
+      builtins.genList (
+        l: map (n: if l == 0 then leaf n else node n (latticeNames (l - 1) width)) (latticeNames l width)
+      ) levels
+    );
+
+  chain = [
+    (leaf "l0")
+    (node "l1" [ "l0" ])
+    (node "l2" [ "l1" ])
+    (node "l3" [ "l2" ])
+    (node "l4" [ "l3" ])
+  ];
+  diamond = [
+    (leaf "leaf")
+    (node "a" [ "leaf" ])
+    (node "b" [ "leaf" ])
+    (node "top" [
+      "a"
+      "b"
+    ])
+  ];
+  fan = [
+    (leaf "f0")
+    (leaf "f1")
+    (leaf "f2")
+    (leaf "f3")
+    (node "hub" [
+      "f0"
+      "f1"
+      "f2"
+      "f3"
+    ])
+  ];
+  lattice43 = lattice 4 3;
+
+  ghost = [ (node "a" [ "ghost" ]) ];
+  twoCycle = [
+    (node "a" [ "b" ])
+    (node "b" [ "a" ])
+  ];
+  selfLoop = [ (node "a" [ "a" ]) ];
+  duplicated = [
+    (leaf "a")
+    (leaf "a")
+  ];
+
+  # ── THE ARMED VARIANT ──
+  # The registry built the way the domination requirement forbids: the unregistered-name check is
+  # a sibling binding that reading the measure never forces. Everything else is identical. It is
+  # here to be measured, never to be used.
+  nonDominating =
+    kindList:
+    let
+      names = map (k: k.name) kindList;
+      kinds = builtins.listToAttrs (
+        map (k: {
+          inherit (k) name;
+          value = k;
+        }) kindList
+      );
+      allBelow = lib.unique (builtins.concatLists (map (k: k.below) kindList));
+      unresolved = builtins.filter (b: !(kinds ? ${b})) allBelow;
+      ranked = genGraph.coneRank {
+        nodes = names;
+        edges = n: kinds.${n}.below;
+      } names;
+    in
+    {
+      inherit unresolved;
+      inherit (ranked) depth;
+    };
+
+  # The composed predicate: does the registry refuse an unregistered `below` name ON THE PATH THAT
+  # ALSO READS THE MEASURE? Applied to both constructions in the same run.
+  refusesOnTheDepthPath = mk: didThrow (mk ghost).depth;
+
+  # ── THE STRICT-DECREASE PREDICATE ──
+  # Domain: every registered kind name, and for each, every one of its `below` names that is
+  # itself registered. Parameterised on the depth map so the same predicate can be aimed at a map
+  # known to violate it.
+  strictDecrease =
+    {
+      names,
+      belowOf,
+      depth,
+    }:
+    builtins.all (
+      k: builtins.all (b: depth.${k} > depth.${b}) (builtins.filter (b: depth ? ${b}) (belowOf k))
+    ) names;
+
+  overRegistry =
+    kindList: depthOf:
+    let
+      ks = mkKinds kindList;
+      names = map (k: k.name) kindList;
+    in
+    strictDecrease {
+      inherit names;
+      belowOf = n: ks.kinds.${n}.below;
+      depth = depthOf ks;
+    };
+
+  asBuilt = ks: ks.depth;
+  allZero = ks: lib.genAttrs (builtins.attrNames ks.depth) (_: 0);
+  reversed = ks: lib.mapAttrs (_: d: ks.maxDepth - d) ks.depth;
+
+  registeredNames = kindList: builtins.attrNames (lib.genAttrs (map (k: k.name) kindList) (_: null));
+  namesOf = kindList: builtins.attrNames (mkKinds kindList).depth;
+
+  # ── THE STRUCTURAL SCAN ──
+  # Comments dropped first, exactly as the purity scan drops them: what a comment says about a
+  # surface is not a consumption of it, and this cell is about consumption.
+  stripComments =
+    text:
+    lib.concatStringsSep "\n" (
+      map (line: lib.head (lib.splitString "#" line)) (lib.splitString "\n" text)
+    );
+  cascadeCode = stripComments (builtins.readFile ../../lib/cascade.nix);
+in
+{
+  flake.tests.cascade-kinds = {
+    # ── (a) THE MEASURE, BYTE-EQUAL TO THE PREVIOUS CONSTRUCTION'S ──
+    # Expected values are `builtins.toJSON` of the previous construction's own depth map, so the
+    # comparison is over bytes and not over a structural equality that could agree on a rounded
+    # reading.
+    test-depth-map-chain-byte-equal = {
+      expr = builtins.toJSON (mkKinds chain).depth;
+      expected = "{\"l0\":0,\"l1\":1,\"l2\":2,\"l3\":3,\"l4\":4}";
+    };
+    test-depth-map-diamond-byte-equal = {
+      expr = builtins.toJSON (mkKinds diamond).depth;
+      expected = "{\"a\":1,\"b\":1,\"leaf\":0,\"top\":2}";
+    };
+    test-depth-map-fan-byte-equal = {
+      expr = builtins.toJSON (mkKinds fan).depth;
+      expected = "{\"f0\":0,\"f1\":0,\"f2\":0,\"f3\":0,\"hub\":1}";
+    };
+    test-depth-map-shared-producer-lattice-byte-equal = {
+      expr = builtins.toJSON (mkKinds lattice43).depth;
+      expected = "{\"n0_0\":0,\"n0_1\":0,\"n0_2\":0,\"n1_0\":1,\"n1_1\":1,\"n1_2\":1,\"n2_0\":2,\"n2_1\":2,\"n2_2\":2,\"n3_0\":3,\"n3_1\":3,\"n3_2\":3}";
+    };
+
+    # ── (b) ACYCLICITY IS REACHABLE, WITH A LIVE ACYCLIC CONTROL ──
+    # The refusal's MESSAGE belongs to the graph library now, and the sweep that reads its text is
+    # an exit-code run; what these cells pin is that the refusal is reached at all, and that the
+    # instrument is not one that refuses everything.
+    test-two-cycle-refused = {
+      expr = didThrow (mkKinds twoCycle);
+      expected = true;
+    };
+    test-self-loop-refused = {
+      expr = didThrow (mkKinds selfLoop);
+      expected = true;
+    };
+    test-long-cycle-refused = {
+      expr = didThrow (mkKinds [
+        (node "a" [ "b" ])
+        (node "b" [ "c" ])
+        (node "c" [ "a" ])
+      ]);
+      expected = true;
+    };
+    test-acyclic-control-registers = {
+      expr = succeeds (mkKinds diamond);
+      expected = true;
+    };
+    # The refusal is a DEFINITION-TIME error: it fires on the registry record itself, without a
+    # reader ever asking for a field.
+    test-cycle-refused-at-the-registration-site = {
+      expr = didThrow (builtins.seq (mkKinds twoCycle) null);
+      expected = true;
+    };
+
+    # ── (c) THE PREVIOUS CONSTRUCTION'S ABORT IS GONE ──
+    # The exact shape that terminates evaluation under the retiring library at this graph
+    # revision. In-suite this can only say "returns"; the abort's uncatchability is why the
+    # companion arm is an exit-code sweep.
+    test-registry-returns-against-the-current-graph-record = {
+      expr = (mkKinds diamond).depth.top;
+      expected = 2;
+    };
+    test-registry-returns-under-a-catcher = {
+      expr = succeeds (mkKinds diamond).depth;
+      expected = true;
+    };
+
+    # ── (d) THE UNREGISTERED-NAME REFUSAL DOMINATES THE PATH TO THE MEASURE ──
+    # Composed, not isolated: the predicate reads `.depth`, which is the path the refusal has to
+    # dominate. The armed variant is the same predicate against a registry whose check is a
+    # sibling — it MUST fail the cell above, and the two cells below are that failure measured.
+    test-unregistered-below-name-refuses-on-the-depth-path = {
+      expr = refusesOnTheDepthPath mkKinds;
+      expected = true;
+    };
+    test-armed-non-dominating-variant-fails-the-domination-cell = {
+      expr = refusesOnTheDepthPath nonDominating;
+      expected = false;
+    };
+    test-armed-non-dominating-variant-answers-depth-zero-silently = {
+      expr = (nonDominating ghost).depth;
+      expected = {
+        a = 0;
+      };
+    };
+    # The armed variant is otherwise a working registry, so its failure above is about ORDER and
+    # not about it being broken.
+    test-armed-variant-agrees-on-a-well-formed-registry = {
+      expr = (nonDominating diamond).depth;
+      expected = {
+        leaf = 0;
+        a = 1;
+        b = 1;
+        top = 2;
+      };
+    };
+
+    # ── (e) THE RANK SURFACE'S LINEARISATION IS NOT CONSUMED ──
+    # Two topological linearisations of one relation can differ element for element and both be
+    # correct; the depth map admits no such freedom. The positive control is in the same run and
+    # over the same stripped source, so a scan that could not see either token fails visibly.
+    test-rank-linearisation-not-consumed = {
+      expr = genPrelude.hasInfix ".order" cascadeCode;
+      expected = false;
+    };
+    test-control-rank-depth-is-consumed = {
+      expr = genPrelude.hasInfix ".depth" cascadeCode;
+      expected = true;
+    };
+
+    # ── (f) THE CARRIED ITEMS, ONE CELL EACH ──
+    # Item 1 — name uniqueness, with a live control that distinct names register.
+    test-duplicate-name-refused = {
+      expr = didThrow (mkKinds duplicated);
+      expected = true;
+    };
+    test-control-distinct-names-register = {
+      expr = succeeds (mkKinds [
+        (leaf "a")
+        (leaf "b")
+      ]);
+      expected = true;
+    };
+    # Item 2 — `below`-name resolution, refused on its own as well as on the measure's path.
+    test-unregistered-below-name-refused = {
+      expr = didThrow (mkKinds ghost);
+      expected = true;
+    };
+    # Item 3 — acyclicity: the cells above.
+    # Item 4 — the per-kind measure: the byte-equalities above, and the registry field is present
+    # and typed.
+    test-registry-publishes-a-per-kind-depth-map = {
+      expr = builtins.isAttrs (mkKinds diamond).depth;
+      expected = true;
+    };
+    # Item 5 — `maxDepth`, over the same map, on every shape.
+    test-max-depth-chain = {
+      expr = (mkKinds chain).maxDepth;
+      expected = 4;
+    };
+    test-max-depth-diamond = {
+      expr = (mkKinds diamond).maxDepth;
+      expected = 2;
+    };
+    test-max-depth-fan = {
+      expr = (mkKinds fan).maxDepth;
+      expected = 1;
+    };
+    test-max-depth-shared-producer-lattice = {
+      expr = (mkKinds lattice43).maxDepth;
+      expected = 3;
+    };
+    # Item 6 — strict decrease: the property cells below.
+    # And the record's other carried shapes: the registration-time pairing check and the input
+    # form the previous construction accepted.
+    test-dedup-key-without-fold-refused = {
+      expr = didThrow (mkKind {
+        name = "x";
+        dedupKey = _: "k";
+        resolve = _: _: { };
+      });
+      expected = true;
+    };
+    test-fold-without-dedup-key-refused = {
+      expr = didThrow (mkKind {
+        name = "x";
+        fold = _: vs: builtins.head vs;
+        resolve = _: _: { };
+      });
+      expected = true;
+    };
+    test-control-both-dedup-key-and-fold-register = {
+      expr = succeeds (mkKind {
+        name = "x";
+        dedupKey = _: "k";
+        fold = _: vs: builtins.head vs;
+        resolve = _: _: { };
+      });
+      expected = true;
+    };
+    test-attrset-input-form-accepted = {
+      expr = succeeds (mkKinds {
+        b = leaf "b";
+        a = node "a" [ "b" ];
+      });
+      expected = true;
+    };
+
+    # ── (g) STRICT DECREASE, QUANTIFIED OVER THE REGISTRY ──
+    # ∀ registered k. ∀ registered b ∈ below(k). depth k > depth b — over the four fixtures above
+    # and over three generated lattices, so the property is not read off hand-picked shapes.
+    test-strict-decrease-chain = {
+      expr = overRegistry chain asBuilt;
+      expected = true;
+    };
+    test-strict-decrease-diamond = {
+      expr = overRegistry diamond asBuilt;
+      expected = true;
+    };
+    test-strict-decrease-fan = {
+      expr = overRegistry fan asBuilt;
+      expected = true;
+    };
+    test-strict-decrease-shared-producer-lattice = {
+      expr = overRegistry lattice43 asBuilt;
+      expected = true;
+    };
+    test-strict-decrease-lattice-6x4 = {
+      expr = overRegistry (lattice 6 4) asBuilt;
+      expected = true;
+    };
+    test-strict-decrease-lattice-10x3 = {
+      expr = overRegistry (lattice 10 3) asBuilt;
+      expected = true;
+    };
+    test-strict-decrease-lattice-3x7 = {
+      expr = overRegistry (lattice 3 7) asBuilt;
+      expected = true;
+    };
+    # The generators built the shapes they claim: maxDepth is levels − 1 on each.
+    test-generated-lattice-6x4-has-max-depth-5 = {
+      expr = (mkKinds (lattice 6 4)).maxDepth;
+      expected = 5;
+    };
+    test-generated-lattice-10x3-has-max-depth-9 = {
+      expr = (mkKinds (lattice 10 3)).maxDepth;
+      expected = 9;
+    };
+    test-generated-lattice-3x7-has-max-depth-2 = {
+      expr = (mkKinds (lattice 3 7)).maxDepth;
+      expected = 2;
+    };
+    # ARMED: the same predicate on maps measured to violate it. Without these the property cell
+    # would pass against a predicate that cannot say no.
+    test-armed-all-zero-depth-map-violates-strict-decrease = {
+      expr = overRegistry diamond allZero;
+      expected = false;
+    };
+    test-armed-reversed-depth-map-violates-strict-decrease = {
+      expr = overRegistry diamond reversed;
+      expected = false;
+    };
+    test-armed-all-zero-depth-map-violates-on-a-lattice = {
+      expr = overRegistry (lattice 6 4) allZero;
+      expected = false;
+    };
+    test-armed-reversed-depth-map-violates-on-a-lattice = {
+      expr = overRegistry (lattice 6 4) reversed;
+      expected = false;
+    };
+
+    # ── (h) THE MEASURE IS TOTAL ON THE REGISTERED NAMES ──
+    # Compared against the names read off the fixture's own kind list, not off a field the same
+    # call produced.
+    test-depth-total-on-names-chain = {
+      expr = namesOf chain;
+      expected = registeredNames chain;
+    };
+    test-depth-total-on-names-diamond = {
+      expr = namesOf diamond;
+      expected = registeredNames diamond;
+    };
+    test-depth-total-on-names-fan = {
+      expr = namesOf fan;
+      expected = registeredNames fan;
+    };
+    test-depth-total-on-names-shared-producer-lattice = {
+      expr = namesOf lattice43;
+      expected = registeredNames lattice43;
+    };
+    test-depth-total-on-names-lattice-6x4 = {
+      expr = namesOf (lattice 6 4);
+      expected = registeredNames (lattice 6 4);
+    };
+    test-depth-total-on-names-lattice-10x3 = {
+      expr = namesOf (lattice 10 3);
+      expected = registeredNames (lattice 10 3);
+    };
+    test-depth-total-on-names-lattice-3x7 = {
+      expr = namesOf (lattice 3 7);
+      expected = registeredNames (lattice 3 7);
+    };
+  };
+}
