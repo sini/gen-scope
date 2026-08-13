@@ -1420,10 +1420,17 @@ in
       expr = didThrow (runKindWith entryFunctorNestedBad);
       expected = true;
     };
-    # A value whose application diverges is refused by name instead of exhausting the call depth.
-    test-self-referential-functor-refused-rather-than-overflowing = {
-      expr = didThrow (runKindWith entryFunctorSelfReferential);
-      expected = true;
+    # A value whose application diverges is refused at REGISTRATION instead of exhausting the call
+    # depth. ★ ASSERTED AT WEAK HEAD NORMAL FORM, AND ON THE REGISTRY RATHER THAN ON A RUN, because
+    # both of the obvious spellings are unfalsifiable: deep-forcing the registry walks the
+    # self-reference forever, and running the cascade under a construction that ADMITTED this value
+    # overflows the evaluator — which `tryEval` does not contain, so the cell would not fail, it
+    # would vanish from the report along with everything after it. Forcing the registration chain
+    # alone reaches the refusal and nothing else, so a construction that admits this value makes
+    # this cell FAIL rather than disappear.
+    test-self-referential-functor-refused-at-registration = {
+      expr = survivesWhnf (kindWith entryFunctorSelfReferential);
+      expected = false;
     };
     # ★ THE BOUND, IN THE DIRECTION IT FALLS. A nested functor APPLIES — measured, it returns — and
     # the one-level check refuses it. Exact applicability is not decidable by any terminating
@@ -1523,6 +1530,22 @@ in
         ok = 1;
       };
     };
+    # ★ THE LIMIT ON THE OTHER SIDE OF THE SAME BOUNDARY, ASSERTED RATHER THAN ONLY WRITTEN DOWN.
+    # The answer's SHAPE is decided here; the VALUES inside it are not. A function-valued fragment
+    # is CARRIED, not refused — which is what "conformance of a fragment is not established here"
+    # means, stated as a cell so that building plain-data conformance later has to change something
+    # visible rather than quietly narrowing a documented limit.
+    test-a-function-valued-fragment-is-carried-and-that-is-the-limit = {
+      expr = builtins.isFunction (runReturning (_: _: { resources.frag = (x: x); })).resources.g.frag;
+      expected = true;
+    };
+    # The two halves of the boundary in one place: the same run that carries that fragment refuses
+    # a `resources` whose container is wrong.
+    test-control-the-shape-half-still-refuses-beside-it = {
+      expr = didThrow (runReturning (_: _: { resources = [ 1 ]; }));
+      expected = true;
+    };
+
     # CONTROL — the three containers in their legitimate forms, including `wiring` as a LIST, which
     # the accumulator accepts and a naive attrset-only check would have refused.
     test-control-wiring-as-a-list-is-accepted = {
