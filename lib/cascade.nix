@@ -249,6 +249,7 @@ let
   inherit (builtins)
     attrNames
     isAttrs
+    isBool
     isFunction
     isInt
     isList
@@ -340,11 +341,11 @@ let
   # followed the chain would diverge deciding it. A depth ceiling would be a number nobody can
   # justify. One level is what terminates on every input.
   #
-  # WHAT THAT COSTS, MEASURED AT TWO LEVELS AND AT THREE: a NESTED functor applies — two and three
-  # levels of `__functor` both evaluate to their innermost function — and this admits only one, so
-  # it refuses every deeper one. The approximation therefore errs toward refusing working input
-  # rather than admitting input that aborts, which is the direction where the caller gets a name
-  # instead of a dead evaluation.
+  # WHAT THAT COSTS: a NESTED functor applies, and this admits only the first level, so it refuses
+  # the deeper ones. Measured at TWO, THREE AND FOUR levels — each evaluates to its innermost
+  # function — which is a sample and not an induction; nothing here claims a depth that was not run.
+  # The approximation therefore errs toward refusing working input rather than admitting input that
+  # aborts, which is the direction where the caller gets a name instead of a dead evaluation.
   callable = v: isFunction v || (isAttrs v && v ? __functor && isFunction v.__functor);
 
   # The reason an entry is not a kind, or null. Total on any value: each arm establishes what the
@@ -522,16 +523,46 @@ let
       };
 
   # A display string for a subject. Output only: identity is `id_hash` and never this.
+  #
+  # ★★ TOTAL, AND ON A STRING — because every refusal in this module interpolates it, and a message
+  # is built at exactly the moment something has already gone wrong. Each arm below asked whether a
+  # field was PRESENT and then returned it unexamined, so a subject carrying a non-string `name`,
+  # `rendered` or `id_hash` made the DIAGNOSTIC coerce a non-string and terminate the evaluation —
+  # in place of the named refusal that was about to be thrown, and for exactly the inputs those
+  # refusals exist to catch. A refusal that cannot render its subject is not a refusal; it is the
+  # same abort wearing a different stack.
+  #
+  # So each arm asks whether the field can BE a rendering, not whether it is there, and the fallback
+  # is a literal. There is no input for which this returns a non-string.
   renderSubject =
     e:
+    let
+      shown = f: isAttrs e && isString (e.${f} or null);
+    in
     if !isAttrs e then
       "<non-entity>"
-    else if e ? name then
+    else if shown "name" then
       e.name
-    else if e ? rendered then
+    else if shown "rendered" then
       e.rendered
+    else if shown "id_hash" then
+      e.id_hash
     else
-      e.id_hash or "<no-id>";
+      "<unrenderable-subject>";
+
+  # Total rendering of an arbitrary caller value inside a diagnostic. `toJSON` ABORTS on anything
+  # containing a function, at any depth, so a message that renders a value it did not choose is a
+  # message that can kill the evaluation it was written to explain. Scalars and name lists render in
+  # full because those are the shapes a caller can act on; anything else is named by its type, which
+  # is total on every value.
+  renderValue =
+    v:
+    if isString v || isInt v || isBool v || v == null then
+      toJSON v
+    else if isList v && all isString v then
+      toJSON v
+    else
+      "<a ${typeOf v}>";
 
   hasId = e: isAttrs e && e ? id_hash;
 
@@ -645,10 +676,12 @@ let
         in
         if !(isAttrs c && (c._type or null) == claimMarker) then
           throw "gen-scope.resolveClaims: value at path ${pathStr} is not a claim (build it with `mkClaim`)${chain}"
+        else if !isString (c.kind or null) then
+          throw "gen-scope.resolveClaims: claim at path ${pathStr} carries a `kind` that is a ${typeOf (c.kind or null)} rather than a string${chain}"
         else if !(ks ? ${c.kind}) then
           throw "gen-scope.resolveClaims: unknown kind '${toString c.kind}' at path ${pathStr}${chain}"
         else if (c._reserved or [ ]) != [ ] then
-          throw "gen-scope.resolveClaims: claim at path ${pathStr} (kind '${c.kind}', subject '${rendered}') shadows reserved payload key(s) ${toJSON c._reserved}${chain}"
+          throw "gen-scope.resolveClaims: claim at path ${pathStr} (kind '${c.kind}', subject '${rendered}') shadows reserved payload key(s) ${renderValue c._reserved}${chain}"
         else if !(hasId (c.subject or null)) then
           throw "gen-scope.resolveClaims: claim at path ${pathStr} (kind '${c.kind}') has a subject without id_hash (renders as '${rendered}')${chain}"
         else if !(hasUsableId c.subject) then
@@ -707,7 +740,7 @@ let
             r = dk rv;
           in
           if !isString r then
-            throw "gen-scope.resolveClaims: dedupKey for kind '${i.kind}' at path ${toJSON i.path} returned a non-string: ${toJSON r}"
+            throw "gen-scope.resolveClaims: dedupKey for kind '${i.kind}' at path ${toJSON i.path} returned a non-string: ${renderValue r}"
           else
             r;
 

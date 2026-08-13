@@ -827,6 +827,23 @@ let
   # ── SUBJECT IDENTITY THAT IS PRESENT BUT NOT USABLE ──
   # `id_hash` becomes an attribute name in the result, so a non-string one is a type error where
   # the result is assembled — with no mention of the claim that supplied it.
+  runWithSubject =
+    subject:
+    resolveClaims {
+      kinds = mkKinds [
+        (mkKind {
+          name = "g";
+          resolve = _: _: { resources.ok = 1; };
+        })
+      ];
+      claims = [
+        (mkClaim {
+          kind = "g";
+          inherit subject;
+        })
+      ];
+    };
+
   runWithSubjectId =
     h:
     resolveClaims {
@@ -1538,6 +1555,153 @@ in
     test-control-a-string-id-hash-runs = {
       expr = builtins.attrNames (runWithSubjectId "id-a").wiring;
       expected = [ "id-a" ];
+    };
+
+    # ── A REFUSAL MUST BE ABLE TO RENDER ITS OWN SUBJECT ──
+    # ★★ EVERY SUBJECT IN THE FIVE CELLS BELOW CARRIES NO `name` AND NO `rendered` — unlike the
+    # identity cells further up, which supply a name and are the known-member controls. That is the shape the identity arm
+    # exists to catch, and it is the shape that makes the arm's own message unbuildable: the
+    # renderer fell through to the raw `id_hash`, so constructing the diagnostic coerced the very
+    # non-string the diagnostic was about. A refusal that cannot render its subject is the same
+    # abort wearing a different stack, and a fixture that supplies a `name` never sees it.
+    test-bare-subject-with-a-list-id-hash-refuses-rather-than-aborting = {
+      expr = didThrow (runWithSubject {
+        id_hash = [ 1 ];
+      });
+      expected = true;
+    };
+    test-bare-subject-with-an-int-id-hash-refuses-rather-than-aborting = {
+      expr = didThrow (runWithSubject {
+        id_hash = 42;
+      });
+      expected = true;
+    };
+    test-bare-subject-with-an-attrset-id-hash-refuses-rather-than-aborting = {
+      expr = didThrow (runWithSubject {
+        id_hash = {
+          a = 1;
+        };
+      });
+      expected = true;
+    };
+    test-bare-subject-with-a-null-id-hash-refuses-rather-than-aborting = {
+      expr = didThrow (runWithSubject {
+        id_hash = null;
+      });
+      expected = true;
+    };
+    # A non-string `name` is a SECOND route into the same interpolation: the renderer prefers `name`
+    # over `id_hash`, so a subject carrying both unrenderable reaches it through the earlier arm.
+    test-a-non-string-name-does-not-break-the-refusal = {
+      expr = didThrow (runWithSubject {
+        id_hash = [ 1 ];
+        name = [ 9 ];
+      });
+      expected = true;
+    };
+    # KNOWN-MEMBER CONTROLS — a renderable `name` or `rendered` makes the message buildable, which
+    # is why the with-`name` fixture never exposed the defect.
+    test-control-a-subject-with-a-name-still-refuses = {
+      expr = didThrow (runWithSubject {
+        id_hash = [ 1 ];
+        name = "has-a-name";
+      });
+      expected = true;
+    };
+    test-control-a-subject-with-rendered-still-refuses = {
+      expr = didThrow (runWithSubject {
+        id_hash = 42;
+        rendered = "has-rendered";
+      });
+      expected = true;
+    };
+
+    # ── A DIAGNOSTIC MUST NOT RENDER A VALUE IT DID NOT CHOOSE ──
+    # `toJSON` aborts on anything containing a function at any depth, so a message that renders
+    # caller data can kill the evaluation it was written to explain.
+    test-a-kind-that-is-not-a-string-refuses-before-the-lookup = {
+      expr = didThrow (runWith [
+        {
+          _type = "gen-scope/claim";
+          kind = [ 1 ];
+          subject = subjA;
+          _reserved = [ ];
+        }
+      ]);
+      expected = true;
+    };
+    test-a-reserved-channel-holding-a-function-still-refuses = {
+      expr = didThrow (runWith [
+        {
+          _type = "gen-scope/claim";
+          kind = "leaf";
+          subject = subjA;
+          _reserved = [ (x: x) ];
+        }
+      ]);
+      expected = true;
+    };
+    test-a-dedupkey-returning-a-function-still-refuses = {
+      expr = didThrow (resolveClaims {
+        kinds = mkKinds [
+          (mkKind {
+            name = "g";
+            dedupKey = _: (x: x);
+            fold = _: vs: builtins.head vs;
+            resolve = _: _: { resources.ok = 1; };
+          })
+        ];
+        claims = [
+          (mkClaim {
+            kind = "g";
+            subject = subjA;
+          })
+        ];
+      });
+      expected = true;
+    };
+    # CONTROL — a dedupKey returning a plain non-string still refuses, and one returning a string
+    # still runs, so the cell above is about the RENDERING and not about the check.
+    test-control-a-dedupkey-returning-an-int-refuses = {
+      expr = didThrow (resolveClaims {
+        kinds = mkKinds [
+          (mkKind {
+            name = "g";
+            dedupKey = _: 42;
+            fold = _: vs: builtins.head vs;
+            resolve = _: _: { resources.ok = 1; };
+          })
+        ];
+        claims = [
+          (mkClaim {
+            kind = "g";
+            subject = subjA;
+          })
+        ];
+      });
+      expected = true;
+    };
+    test-control-a-dedupkey-returning-a-string-runs = {
+      expr =
+        (resolveClaims {
+          kinds = mkKinds [
+            (mkKind {
+              name = "g";
+              dedupKey = _: "k";
+              fold = _: vs: builtins.head vs;
+              resolve = _: _: { resources.ok = 1; };
+            })
+          ];
+          claims = [
+            (mkClaim {
+              kind = "g";
+              subject = subjA;
+            })
+          ];
+        }).resources.g;
+      expected = {
+        ok = 1;
+      };
     };
 
     # ── A MEASURE THAT IS NOT THE RELATION'S RANK STRANDS CLAIMS, AND THEY ARE NAMED ──
