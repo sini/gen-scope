@@ -133,6 +133,20 @@ let
     { a = 1; }
     { a = 1; }
   ];
+  # The derivation marker WITHOUT an `outPath`. The evaluator's store-path shortcut is a
+  # conjunction, so these are compared field by field and rendered by walking them — which is to
+  # say they are ordinary function-bearing fragments wearing a marker, and a scan that read the
+  # marker alone would hand them to the abort.
+  markerOnly = [
+    {
+      type = "derivation";
+      passthru = _: 1;
+    }
+    {
+      type = "derivation";
+      passthru = _: 2;
+    }
+  ];
   spec = {
     gen = folds.same;
   };
@@ -181,6 +195,11 @@ let
 
     bykey-wrapped = didThrow (folds.byKey spec "k" [ (_: "not a fragment") ]);
     unguarded-bykey-wrapped = didThrow (unguardedByKey unguardedSpec "k" [ (_: "not a fragment") ]);
+
+    # ── THE MARKER WITHOUT A PATH, WHICH IS THE HALF AN EXIT CODE IS NEEDED FOR ──
+    marker-only-guarded-wrapped = didThrow (folds.same "k" markerOnly);
+    unguarded-marker-only-wrapped = didThrow (unguardedSame "k" markerOnly);
+    unguarded-marker-only-bare = unguardedSame "k" markerOnly;
 
     # ── THE KEY, WHICH EVERY DIAGNOSTIC INTERPOLATES ──
     # Both forms the defect named: fragments that would have conflicted, and no fragments at all.

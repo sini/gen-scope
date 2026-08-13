@@ -67,10 +67,24 @@ let
     unique
     ;
 
-  # A value the EVALUATOR treats as its store path rather than as its contents: `==` compares two
-  # of these by `outPath` alone, and `toJSON` renders one by its path. The marker is the whole of
-  # the test, because it is the whole of the evaluator's test.
-  isDerivation = v: isAttrs v && (v.type or null) == "derivation";
+  # A value the EVALUATOR treats as its store path rather than as its contents. The rule is a
+  # CONJUNCTION — the derivation marker AND an `outPath` — and it is deliberately not nixpkgs'
+  # `isDerivation`, which tests the marker alone and is a different predicate wearing a name close
+  # enough to be mistaken for this one.
+  #
+  # Measured on this evaluator, VARYING BOTH AXES, because a table that holds either one fixed
+  # cannot see that the rule is a conjunction at all — two distinct fragments, different functions
+  # inside, compared:
+  #
+  #   marker + `outPath`   ⇒ TRUE   — compared by path, the interiors never read
+  #   marker, no `outPath` ⇒ FALSE  — field by field, functions included
+  #   `outPath`, no marker ⇒ FALSE  — likewise
+  #   neither              ⇒ FALSE  — likewise
+  #
+  # and `toJSON` follows the same conjunction: it renders a marker+`outPath` value by its path, and
+  # ABORTS on a marker-without-`outPath` value holding a function. So either half alone admits
+  # fragments whose comparison their interiors decide and whose diagnostic cannot be built.
+  comparedByPath = v: isAttrs v && (v.type or null) == "derivation" && v ? outPath;
 
   # ── WHERE A FUNCTION SITS INSIDE A VALUE ──
   # The position of the first function anywhere in a value, rendered as a path expression, or null
@@ -78,19 +92,23 @@ let
   # NESTING DEPTH and not its size: siblings are independent applications that do not nest, and the
   # fold over them stops descending as soon as a site is found.
   #
-  # ★ IT STOPS AT A DERIVATION, AND AT NOTHING ELSE THAT CARRIES AN `outPath`. The evaluator's
-  # shortcut is narrower than its store-path rendering: `==` compares by `outPath` only when BOTH
-  # sides are marked derivations, and compares every other attribute set FIELD BY FIELD — functions
-  # included. So a bare `outPath` carrier is a value whose comparison the interior decides, and a
-  # scan that stopped there would hand exactly such fragments to `==`. Measured on this evaluator:
-  # two distinct carriers with one `outPath` and different functions compare FALSE, while the same
-  # pair marked `type = "derivation"` compares TRUE.
+  # ★ IT STOPS ONLY WHERE THE EVALUATOR ALREADY STOPS, WHICH IS THE CONJUNCTION ABOVE AND NEITHER
+  # HALF OF IT. Every other attribute set — including one carrying a marker without a path, and one
+  # carrying a path without a marker — is compared FIELD BY FIELD, functions included, and rendered
+  # by walking it. A stop at either half alone therefore hands the scan's own subject straight to
+  # `==`: the fragments whose agreement a function decides, and whose conflict message cannot be
+  # built without aborting.
+  #
+  # ★ AND A PER-FRAGMENT TEST IS SOUND FOR A PAIRWISE RULE, which is worth one sentence because it
+  # is not obvious. The evaluator takes the shortcut only when BOTH sides satisfy the conjunction;
+  # when the other side does not, it is a value this scan DID enter, so a function able to decide
+  # that comparison is found there instead. Nothing is skipped on both sides at once.
   siteIn =
     where: v:
     if isFunction v then
       where
     else if isAttrs v then
-      if isDerivation v then
+      if comparedByPath v then
         null
       else
         firstSite (
@@ -177,14 +195,14 @@ let
   # function-bearing fragment reaches the comparison, so nothing that reaches the diagnostic can
   # abort inside it.
   #
-  # ★ WHERE THE SCAN IS STRICTER THAN THE DIAGNOSTIC, AND WHAT THAT COSTS — measured, because the
-  # first version of this paragraph was wrong in both halves. The scan's domain is the COMPARISON's
-  # precondition, and it stops exactly where `==` stops: at a marked derivation, whose interior
-  # neither the comparison nor the message ever reads. It is stricter than what `toJSON` can RENDER,
-  # which is a wider set — a bare `outPath` carrier and a `__toString` carrier both render, and both
-  # are refused here when a function sits inside them. That direction is deliberate: their
-  # comparison is decided field by field, functions included, so admitting them would buy a rendered
-  # message at the price of an answer nobody can account for.
+  # ★ WHERE THE SCAN IS STRICTER THAN THE DIAGNOSTIC, AND WHAT THAT COSTS. The scan's domain is the
+  # COMPARISON's precondition, and it stops exactly where `==` stops — at the conjunction above,
+  # whose interior neither the comparison nor the message ever reads. It is stricter than what
+  # `toJSON` can RENDER, which is a wider set: a `__toString` carrier renders through its string
+  # coercion, and a marker-less `outPath` carrier renders by its path, and both are refused here
+  # when a function sits inside them. That direction is deliberate — their comparison is decided
+  # field by field, functions included — so admitting them would buy a rendered message at the price
+  # of an answer nobody can account for.
   #
   # ★ AND THE REFUSED SET IS NOT "what the comparison could only have accepted by accident". Some of
   # it would have produced a perfectly catchable conflict — two rendering-capable carriers with

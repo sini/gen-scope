@@ -103,12 +103,14 @@ let
     gen = _: "b";
   };
   # ── THE SCAN'S STOPPING RULE, WHICH ONLY A MESSAGE CAN REPORT ──
-  # Both pairs carry functions and share their shape; only the derivation marker differs. Marked,
-  # the fold reaches its COMPARISON and the conflict renders both by their paths. Unmarked, the
-  # comparison would be decided field by field — functions included — so the fold refuses first.
-  # `tryEval` cannot tell those apart, because BOTH throw: a fold that admitted the unmarked pair
-  # would report a conflict between two fragments that render IDENTICALLY, which is a throw and a
-  # useless one. The discrimination is the text.
+  # The evaluator compares by store path under a CONJUNCTION — the derivation marker AND an
+  # `outPath` — so the fixtures vary both terms. With both, the fold reaches its COMPARISON and the
+  # conflict renders each fragment by its path. With either one missing, the comparison would be
+  # decided field by field, functions included, so the fold refuses first.
+  #
+  # Why the text and not `tryEval`: for the marker-less pair BOTH outcomes throw — a fold that
+  # admitted them would report a conflict between two fragments that render IDENTICALLY, which is a
+  # throw and a useless one — so only the message says which fired.
   drvA = {
     type = "derivation";
     outPath = "/nix/store/aaaa";
@@ -125,6 +127,14 @@ let
   };
   bareA2 = {
     outPath = "/nix/store/aaaa";
+    passthru = _: 2;
+  };
+  markerOnly1 = {
+    type = "derivation";
+    passthru = _: 1;
+  };
+  markerOnly2 = {
+    type = "derivation";
     passthru = _: 2;
   };
 
@@ -480,6 +490,22 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.folds.byKey: key 'k' has a fragment that is a lambda rather than an attribute set, at fragment-list position [0]";
+      };
+    };
+
+    # ★ AND THE MARKER WITHOUT A PATH IS REFUSED TOO, WHICH IS THE OTHER TERM OF THE CONJUNCTION.
+    # The evaluator's shortcut needs both, so these are compared field by field and their conflict
+    # message would be assembled by a `toJSON` that ABORTS on the functions inside them. This cell
+    # asserting the GUARD's text is what says the scan entered them; a fold that skipped them on the
+    # marker alone would not fail this cell, it would end the evaluation.
+    test-a-derivation-marker-without-a-store-path-is-refused-by-name = {
+      expr = folds.same "k" [
+        markerOnly1
+        markerOnly2
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a function, at fragment-list position [0].passthru — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
       };
     };
 

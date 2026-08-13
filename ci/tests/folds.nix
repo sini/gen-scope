@@ -81,12 +81,19 @@ let
       v
       v
     ];
-  # ── THE SCAN'S STOPPING RULE, AS TWO PAIRS THAT DIFFER ONLY BY THE MARKER ──
-  # Both pairs are DISTINCT values sharing one store path and carrying DIFFERENT functions inside,
-  # so nothing about either pair can be explained by one value slot being compared with itself.
-  # Marked, the evaluator compares them by `outPath` alone and never reads the interior; unmarked,
-  # it compares them field by field, the functions included. The marker is the whole difference
-  # between the pairs, and it is the whole of what the scan tests.
+  # ── THE SCAN'S STOPPING RULE, AS THREE PAIRS THAT VARY BOTH OF ITS TERMS ──
+  # The evaluator's shortcut is a CONJUNCTION — the derivation marker AND an `outPath` — so a
+  # fixture set that holds either term fixed cannot observe the other, and would report a stopping
+  # rule that admits fragments the comparison decides by their interiors. All three pairs below are
+  # DISTINCT values carrying DIFFERENT functions inside, so nothing here can be explained by one
+  # value slot being compared with itself:
+  #
+  #   drvA/drvA2      marker + path  ⇒ the evaluator agrees by path; the scan must NOT descend
+  #   markerOnly1/2   marker, no path ⇒ compared field by field, and `toJSON` aborts on them
+  #   bareA/bareA2    path, no marker ⇒ compared field by field
+  #
+  # The last two are the fragments the scan must ENTER, and each is a shape a stop written on one
+  # term alone would have skipped.
   drvA = {
     type = "derivation";
     outPath = "/nix/store/aaaa";
@@ -108,6 +115,14 @@ let
   };
   bareA2 = {
     outPath = "/nix/store/aaaa";
+    passthru = _: "two";
+  };
+  markerOnly1 = {
+    type = "derivation";
+    passthru = _: "one";
+  };
+  markerOnly2 = {
+    type = "derivation";
     passthru = _: "two";
   };
 
@@ -300,8 +315,22 @@ in
       );
       expected = true;
     };
-    # Two marked derivations with DIFFERENT paths still conflict: stopping at the marker decides
-    # what is compared, not whether anything is.
+    # ★ THE MARKER WITHOUT A PATH IS THE OTHER HALF OF THE CONJUNCTION, and this cell is the one
+    # that fails LOUDEST when the stop is written on one term: a stop testing the marker alone
+    # skips these, hands them to a comparison their functions decide, and then to a `toJSON` that
+    # ABORTS — so this cell does not go red, it takes the runner's cell down with it (☢️). That is
+    # the same uncatchable failure the fold's whole precondition exists to remove.
+    test-a-derivation-marker-without-a-store-path-is-refused = {
+      expr = didThrow (
+        folds.same "k" [
+          markerOnly1
+          markerOnly2
+        ]
+      );
+      expected = true;
+    };
+    # Two marked derivations with DIFFERENT paths still conflict: where the scan stops decides what
+    # is compared, not whether anything is.
     test-two-derivations-with-different-store-paths-conflict = {
       expr = didThrow (
         folds.same "k" [
