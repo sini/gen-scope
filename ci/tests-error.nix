@@ -23,9 +23,17 @@
 #
 # ★★ `expectedError.msg` IS SEARCHED, NOT WHOLE-MATCHED, so a pattern that names a prefix of the
 # message passes against a message that says something else after it — which would make these cells
-# agree with the very rewording they exist to catch. Every pattern below is therefore anchored at
-# both ends and built by ESCAPING THE LITERAL TEXT rather than by hand: a hand-written pattern is
-# one forgotten backslash away from a metacharacter matching something it was meant to spell.
+# agree with the very rewording they exist to catch. Every pattern over a message THIS LIBRARY
+# COMPOSES is therefore anchored at both ends and built by ESCAPING THE LITERAL TEXT rather than by
+# hand: a hand-written pattern is one forgotten backslash away from a metacharacter matching
+# something it was meant to spell.
+#
+# ★ ONE CELL IS DELIBERATELY OUTSIDE THAT RULE, and it is the arity cell at the end. Its message is
+# the EVALUATOR'S, not this library's: it renders the offending value, including a thunk placeholder
+# and an attribute set whose printed form is the evaluator's business and not a contract anyone
+# here owns. Anchoring it would pin this suite to the internals of a renderer no clause in this
+# repository governs, so it matches on the invariant part — the error's own sentence — and says so.
+# The rule above is about messages we author; this cell asserts one we merely receive.
 {
   lib,
   genScope,

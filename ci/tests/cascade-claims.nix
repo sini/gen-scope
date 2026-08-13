@@ -738,6 +738,47 @@ let
     resolve = x: x;
   };
 
+  # ── CARRYING `__functor` IS NOT BEING APPLICABLE ──
+  # `v arg` on such a set evaluates `v.__functor v arg`, so what is applied is the ATTRIBUTE'S
+  # VALUE. A `__functor` holding an integer aborts at the call site exactly as a bare integer does.
+  entryFunctorHoldsAnInt = entryWellFormed // {
+    resolve = {
+      __functor = 42;
+    };
+  };
+  entryFunctorHoldsAString = entryWellFormed // {
+    resolve = {
+      __functor = "s";
+    };
+  };
+  entryFunctorNestedBad = entryWellFormed // {
+    resolve = {
+      __functor = {
+        __functor = 42;
+      };
+    };
+  };
+  # A value whose application diverges: applying it applies it again, forever. Refusing it turns a
+  # stack overflow into a named refusal.
+  entryFunctorSelfReferential =
+    let
+      selfRef = {
+        __functor = selfRef;
+      };
+    in
+    entryWellFormed // { resolve = selfRef; };
+  # THE SECOND BOUND, MEASURED IN THE DIRECTION IT ACTUALLY FALLS. A nested functor DOES apply —
+  # measured, it returns — and the one-level check refuses it. The approximation errs toward
+  # refusing working input rather than admitting input that aborts, and this cell is that cost
+  # stated rather than discovered.
+  entryFunctorNestedWorking = entryWellFormed // {
+    resolve = {
+      __functor = {
+        __functor = _: _: ghostResolve;
+      };
+    };
+  };
+
   kindWith =
     fields:
     mkKinds [
@@ -1292,6 +1333,45 @@ in
         true
         true
       ];
+    };
+
+    # ── CARRYING `__functor` IS NOT BEING APPLICABLE ──
+    # The attribute's VALUE is what gets applied, so a set carrying a non-function `__functor`
+    # aborts at the same site a bare integer does. Refusing on the attribute's presence alone was
+    # the same defect as `isFunction`, pointed the other way.
+    test-functor-holding-an-int-refused-at-the-registration-door = {
+      expr = didThrow (runKindWith entryFunctorHoldsAnInt);
+      expected = true;
+    };
+    test-functor-holding-an-int-refused-at-the-pass-through-door = {
+      expr = didThrow (runKindSetWith entryFunctorHoldsAnInt);
+      expected = true;
+    };
+    test-functor-holding-a-string-refused-at-the-registration-door = {
+      expr = didThrow (runKindWith entryFunctorHoldsAString);
+      expected = true;
+    };
+    test-functor-holding-a-string-refused-at-the-pass-through-door = {
+      expr = didThrow (runKindSetWith entryFunctorHoldsAString);
+      expected = true;
+    };
+    test-functor-nesting-a-non-function-refused = {
+      expr = didThrow (runKindWith entryFunctorNestedBad);
+      expected = true;
+    };
+    # A value whose application diverges is refused by name instead of exhausting the call depth.
+    test-self-referential-functor-refused-rather-than-overflowing = {
+      expr = didThrow (runKindWith entryFunctorSelfReferential);
+      expected = true;
+    };
+    # ★ THE BOUND, IN THE DIRECTION IT FALLS. A nested functor APPLIES — measured, it returns — and
+    # the one-level check refuses it. Exact applicability is not decidable by any terminating
+    # predicate: the `__functor` chain is unbounded and can refer to itself, so a walk would
+    # diverge and a depth ceiling would be a number nobody can justify. This cell is the cost of
+    # that choice, asserted rather than described; if the approximation ever changes it goes red.
+    test-a-nested-functor-that-would-apply-is-refused-and-that-is-the-bound = {
+      expr = didThrow (runKindWith entryFunctorNestedWorking);
+      expected = true;
     };
     # CONTROL — a hand-built kind-set record whose entries are well formed still passes through.
     # The pass-through is the door's whole purpose; the check is about what comes through it.

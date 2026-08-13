@@ -319,11 +319,26 @@ let
           ;
       };
 
-  # Whether a value can be APPLIED. `isFunction` alone is not that question: it is false for an
-  # attribute set carrying `__functor`, which this evaluator applies perfectly well (measured). A
-  # check that refused one would be refusing an input that works, which is the same defect as
-  # admitting one that does not, pointed the other way.
-  callable = v: isFunction v || (isAttrs v && v ? __functor);
+  # Whether a value can be APPLIED — approximated, because the exact property is not decidable by
+  # any terminating predicate and the approximation is chosen to err in the safe direction.
+  #
+  # `isFunction` alone is too NARROW: it is false for an attribute set carrying `__functor`, which
+  # this evaluator applies perfectly well. Carrying the attribute is too WIDE: applying such a set
+  # evaluates `v.__functor v arg`, so what gets applied is the attribute's VALUE, and a `__functor`
+  # holding an integer aborts at the call site exactly as a bare integer would. Both are the same
+  # defect — a predicate that does not decide the property it is named for — pointed in opposite
+  # directions.
+  #
+  # ★ WHY ONE LEVEL AND NOT A WALK. The `__functor` chain has no bound, and it can refer to itself:
+  # `let f = { __functor = f; }; in f` is a value whose application diverges, so a predicate that
+  # followed the chain would diverge deciding it. A depth ceiling would be a number nobody can
+  # justify. One level is what terminates on every input.
+  #
+  # WHAT THAT COSTS, MEASURED: a NESTED functor — `{ __functor = { __functor = g; }; }` — does
+  # apply, and this refuses it. The approximation therefore errs toward refusing working input
+  # rather than admitting input that aborts, which is the direction where the caller gets a name
+  # instead of a dead evaluation.
+  callable = v: isFunction v || (isAttrs v && v ? __functor && isFunction v.__functor);
 
   # The reason an entry is not a kind, or null. Total on any value: each arm establishes what the
   # next one needs, so nothing here reads a field it has not already found. The reason names the
