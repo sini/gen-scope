@@ -224,6 +224,57 @@ in
       };
     };
 
+    # ── APPLICABILITY IS NAMED AS SUCH, NOT AS A MISSING FIELD ──
+    # A caller whose resolver is an integer and one whose resolver is absent have different bugs
+    # and must not read the same message.
+    test-a-resolve-that-cannot-be-applied-says-so = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind";
+          name = "l";
+          below = [ ];
+          resolve = 42;
+          dedupKey = null;
+          fold = null;
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `resolve` that cannot be applied"]'';
+      };
+    };
+
+    # ── THE BOUND: ARITY, WHICH NO PREDICATE IN THIS LANGUAGE DECIDES ──
+    # A one-argument resolver is applicable, is applied, and its RESULT is applied again — so it
+    # fails with the same uncatchable type error a non-function does. It is the one member of the
+    # uncatchable class left open, and it is asserted here rather than described, because a bound
+    # nothing measures is a bound nobody notices closing or widening.
+    test-a-wrong-arity-resolver-is-not-refused-and-this-is-the-bound = {
+      expr = resolveClaims {
+        kinds = mkKinds [
+          (mkKind {
+            name = "l";
+            resolve = x: x;
+          })
+        ];
+        claims = [
+          (mkClaim {
+            kind = "l";
+            subject = {
+              id_hash = "id-a";
+            };
+          })
+        ];
+      };
+      # ★ `tryEval` does NOT hold this — that is the whole reason the class matters — but
+      # nix-unit's `expectedError` catches at a level `tryEval` does not reach, which is what
+      # makes the bound assertable instead of merely described.
+      expectedError = {
+        type = "TypeError";
+        msg = ".*attempt to call something which is not a function.*";
+      };
+    };
+
     # ── LIVE CONTROL, SAME INVOCATION ──
     # An `expected` cell inside an `expectedError` output on purpose: a control has to run in the
     # same invocation as the thing it controls, or it controls nothing. Without it the six cells

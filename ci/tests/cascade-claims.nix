@@ -707,6 +707,61 @@ let
     fold = null;
   };
 
+  # ── PRESENT BUT NOT APPLICABLE ──
+  # A field that exists but cannot be applied is projected, then APPLIED, and applying a
+  # non-function is a type error that `tryEval` does not hold. Same predicate as the missing-field
+  # class, one scoping on.
+  entryResolveNotCallable = entryWellFormed // {
+    resolve = 42;
+  };
+  entryResolveIsAString = entryWellFormed // {
+    resolve = "str";
+  };
+  entryDedupKeyNotCallable = entryWellFormed // {
+    dedupKey = 42;
+    fold = _: vs: builtins.head vs;
+  };
+  entryFoldNotCallable = entryWellFormed // {
+    dedupKey = _: "g";
+    fold = 42;
+  };
+  # `isFunction` alone would refuse this, and it APPLIES — measured. A check that refused it would
+  # be wrong about its own domain, which is the same defect as admitting what does not work.
+  entryResolveIsAFunctor = entryWellFormed // {
+    resolve = {
+      __functor = _: _: _: { resources.ghostRes = "ran"; };
+    };
+  };
+  # THE BOUND, ARMED. Applicable, applied, and still an uncatchable abort — because arity is not
+  # decidable in this language. The cell asserts the bound rather than pretending it is closed.
+  entryResolveWrongArity = entryWellFormed // {
+    resolve = x: x;
+  };
+
+  kindWith =
+    fields:
+    mkKinds [
+      (mkKind {
+        name = "host";
+        resolve = _: _: { resources.hostRes = "ran"; };
+      })
+      (forgedEntry fields)
+    ];
+
+  runKindWith =
+    fields:
+    resolveClaims {
+      kinds = kindWith fields;
+      claims = [
+        (mkClaim {
+          kind = "unused";
+          subject = subjA;
+        })
+      ];
+    };
+
+  runKindSetWith = fields: withForgedKindSet fields true;
+
   # ── A HAND-BUILT CLAIM DECLARING A VIOLATION THE CONSTRUCTOR WOULD HAVE REFUSED ──
   # `mkClaim` now refuses a shadowing payload where the author is, so the run's own reserved-key
   # arm is reachable only through a record that did not come from it — which is exactly the class
@@ -1189,6 +1244,54 @@ in
     test-kind-set-entry-with-no-below-refused-when-nothing-claims-it = {
       expr = didThrow (withForgedKindSet entryNoBelow false);
       expected = true;
+    };
+    # ── APPLICABILITY IS DECIDED WHERE PRESENCE IS ──
+    # Eight cells, four shapes × both doors. A field that exists but cannot be applied reproduces
+    # the missing-field predicate exactly: read where no refusal follows, type error, no name.
+    test-resolve-that-is-not-callable-refused-at-the-registration-door = {
+      expr = didThrow (runKindWith entryResolveNotCallable);
+      expected = true;
+    };
+    test-resolve-that-is-not-callable-refused-at-the-pass-through-door = {
+      expr = didThrow (runKindSetWith entryResolveNotCallable);
+      expected = true;
+    };
+    test-resolve-that-is-a-string-refused-at-the-registration-door = {
+      expr = didThrow (runKindWith entryResolveIsAString);
+      expected = true;
+    };
+    test-resolve-that-is-a-string-refused-at-the-pass-through-door = {
+      expr = didThrow (runKindSetWith entryResolveIsAString);
+      expected = true;
+    };
+    test-dedupkey-that-is-not-callable-refused-at-the-registration-door = {
+      expr = didThrow (runKindWith entryDedupKeyNotCallable);
+      expected = true;
+    };
+    test-dedupkey-that-is-not-callable-refused-at-the-pass-through-door = {
+      expr = didThrow (runKindSetWith entryDedupKeyNotCallable);
+      expected = true;
+    };
+    test-fold-that-is-not-callable-refused-at-the-registration-door = {
+      expr = didThrow (runKindWith entryFoldNotCallable);
+      expected = true;
+    };
+    test-fold-that-is-not-callable-refused-at-the-pass-through-door = {
+      expr = didThrow (runKindSetWith entryFoldNotCallable);
+      expected = true;
+    };
+    # CONTROL — a callable attribute set is NOT refused, at both doors. `isFunction` reports false
+    # for it and this evaluator applies it, so a check written on `isFunction` alone would refuse
+    # an input that works. These two cells are what stop that check from being written.
+    test-control-a-functor-resolver-is-not-refused-at-either-door = {
+      expr = [
+        (succeeds (runKindWith entryResolveIsAFunctor))
+        (succeeds (runKindSetWith entryResolveIsAFunctor))
+      ];
+      expected = [
+        true
+        true
+      ];
     };
     # CONTROL — a hand-built kind-set record whose entries are well formed still passes through.
     # The pass-through is the door's whole purpose; the check is about what comes through it.

@@ -114,13 +114,26 @@
 # Written down rather than left for the next construction to discover, because the next
 # construction is what builds on it.
 #
-# `resolve`, `dedupKey` and `fold` are PRESENT on anything that registers, and they are not
-# TYPE-CHECKED. The pairing between the last two is a registration-time error, and that is the
-# whole of it: a kind whose resolver is a string registers here and fails where it is applied.
-# Nothing here constrains what a resolver may RETURN either, so the conformance of a returned
-# fragment is not a property this registry has established — a consumer that needs plain data must
-# obtain it somewhere else. The line is between EXISTENCE, which a consumer cannot check without
-# already having aborted, and SHAPE, which a consumer can only judge at the point of application.
+# `resolve`, `dedupKey` and `fold` are PRESENT on anything that registers, and each is APPLICABLE —
+# a function, or an attribute set this evaluator applies. The pairing between the last two is a
+# registration-time error. What is NOT established is everything past the point of application, and
+# the boundary is drawn where a check stops being possible rather than where it stops being
+# convenient:
+#
+#   · ARITY IS NOT CHECKED, and it is not checkable. A resolver taking one argument is applicable,
+#     is applied, returns a value, and that value is then applied again — so it fails with the same
+#     uncatchable type error a non-function does. This language offers no predicate that decides
+#     how many arguments a value will accept, so this is a bound with a reason and not an omission.
+#     ★ It is the one member of the uncatchable class left open, and it is left open knowingly.
+#   · WHAT A RESOLVER RETURNS is unconstrained, so the conformance of a returned fragment is not a
+#     property established here — a consumer needing plain data must obtain it somewhere else.
+#   · WHAT A `dedupKey` RETURNS is checked, but at APPLICATION and not here: a non-string grouping
+#     key is a named refusal carrying the kind and the path, which is where the value first exists.
+#
+# ⇒ the line is not "existence, not shape". Two shape properties ARE decided — a `below` that is a
+# list of strings, and applicability — because both are decidable on any value, cheaply and totally,
+# and both are read where no refusal could follow. What sits past the line is what this evaluator
+# gives no predicate for, and what has no meaning until a value is in hand.
 #
 # And the marker's limit above is the scope of every completeness claim on this page. The intake is
 # total on the shapes an ordinary caller can reach; it is not total against a caller who writes the
@@ -230,6 +243,7 @@ let
   inherit (builtins)
     attrNames
     isAttrs
+    isFunction
     isInt
     isList
     isString
@@ -305,6 +319,12 @@ let
           ;
       };
 
+  # Whether a value can be APPLIED. `isFunction` alone is not that question: it is false for an
+  # attribute set carrying `__functor`, which this evaluator applies perfectly well (measured). A
+  # check that refused one would be refusing an input that works, which is the same defect as
+  # admitting one that does not, pointed the other way.
+  callable = v: isFunction v || (isAttrs v && v ? __functor);
+
   # The reason an entry is not a kind, or null. Total on any value: each arm establishes what the
   # next one needs, so nothing here reads a field it has not already found. The reason names the
   # defect and never renders the entry — a kind record holds its resolver, and rendering a
@@ -328,6 +348,12 @@ let
       "carries no `dedupKey` field"
     else if !(k ? fold) then
       "carries no `fold` field"
+    else if !(callable k.resolve) then
+      "carries a `resolve` that cannot be applied"
+    else if k.dedupKey != null && !(callable k.dedupKey) then
+      "carries a `dedupKey` that is neither null nor applicable"
+    else if k.fold != null && !(callable k.fold) then
+      "carries a `fold` that is neither null nor applicable"
     else
       null;
 
