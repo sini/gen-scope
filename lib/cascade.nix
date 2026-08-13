@@ -63,8 +63,8 @@
 # ── THE SUBSTRATE'S OWN GUARDS ARE NOT REACHED FOR, AND THE REASON IS RECORDED ──
 # The ordering arm beneath the rank surface publishes refusals for a non-string ordering key, for
 # two nodes sharing one key, and for an edge naming a node outside the set — three checks that
-# overlap this registry's, and called directly it does refuse two of these cases by name and
-# catchably. They are still not consumed, on two grounds.
+# overlap this registry's, and called directly it does refuse all three by name and catchably.
+# They are still not consumed, on two grounds.
 #
 # THEY ARE UNREACHABLE THROUGH THE DOOR THE MEASURE COMES FROM. The rank surface sanitises before
 # the arm exists: it builds a membership set out of the cone it was handed and filters every edge
