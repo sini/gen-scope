@@ -138,10 +138,12 @@
 # the schedule length times the size of the accumulated set. The dimension that could make that
 # quadratic is the SCHEDULE LENGTH, and it is bounded by the program rather than by the input: the
 # schedule is the DISTINCT DECLARED PASS INDICES, an author-written set that a large emitter list
-# does not enlarge. Adding hosts grows the set being copied; it does not add strata. The per-emitter
-# work is separately linear, because the placement is indexed once rather than re-scanned per stratum
-# (below). No number bounds either dimension and nothing is refused for being large — this is the
-# shape stated, not a threshold.
+# does not enlarge so long as emitters share pass indices — which is what a pass is for, a staging
+# device rather than a per-node attribute. An emitter set declaring one distinct pass per emitter
+# makes the two dimensions equal (measured at the W3 gate: 500 emitters at 500 declared passes ⇒ 500
+# strata), and nothing here refuses it. The per-emitter work is separately linear, because the
+# placement is indexed once rather than re-scanned per stratum (below). No number bounds either
+# dimension and nothing is refused for being large — this is the shape stated, not a threshold.
 #
 # ★ `graph` REACHES THIS FILE AND STOPS, AND THE ABSENCE IS THE POINT RATHER THAN AN OMISSION. No
 # line below applies it. What this entry publishes is the graph's CONTENT — vertices under their own
