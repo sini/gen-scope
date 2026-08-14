@@ -76,28 +76,34 @@
 # function of the kind, the identifier and the resolved relata, agreement on the identity IS
 # agreement on the kind and the relata, so no separate check for either exists to drift.
 #
-# ★★ THE CROSS-PASS ARM OF THAT RULE IS PROPOSED RATHER THAN SETTLED, AND A READER MUST NOT TAKE IT
-# FOR RULED LAW. A later pass naming an already-frozen identifier contributes content and never
-# yields a second node — that half is settled, and where the contribution AGREES or adds a key the
-# behaviour is indistinguishable from same-pass agreement and is uncontested. What is NOT settled is
-# the case where a later pass DISAGREES on a key an earlier pass had already settled. ADR-0016's
-# Consequences say so in its own words: two emitters of one identity yield "one node with
-# contributions from both", and "how those contributions compose is not settled here — that is the
-# substrate's general content rule". The same passage leaves the mechanism available rather than
-# closed: what it forecloses is refusal at MINTING, and "it does not foreclose refusal at content
-# merge, which remains available exactly as nixpkgs refuses two conflicting definitions of one
-# option."
+# ★★ THE CROSS-PASS ARM OF THAT RULE IS RULED, AND WHAT IT RULES IS THAT REPLACEMENT IS REFUSED BY
+# NAME. A later pass naming an already-frozen identifier contributes content and never yields a
+# second node. Where the contribution AGREES, or adds a key no earlier pass settled, it is
+# revision — indistinguishable from same-pass agreement, and uncontested. Where it DISAGREES on a
+# key an earlier pass already settled, the merge refuses by name, through the same message the
+# disagreement branch already writes. ADR-0016's Consequences leave exactly this room and no more:
+# two emitters of one identity yield "one node with contributions from both", what the passage
+# forecloses is refusal at MINTING, and "it does not foreclose refusal at content merge, which
+# remains available exactly as nixpkgs refuses two conflicting definitions of one option." This
+# refusal is that merge-time one.
 #
-# ⇒ THIS FILE REFUSES THERE, AS A PROPOSAL PENDING THE SUBSTRATE'S GENERAL CONTENT RULE. The argument
-# for it, offered rather than asserted: the freeze is over membership and the map's values may be
-# revisited, but a stratum's output is closed when the next begins and the standard model only ever
-# grows, so a later pass ADDING a key is revision while a later pass REPLACING one is retraction —
-# and retraction is the thing stratification exists to keep out of a fold. The argument against it is
-# equally available and is why this is not stated as law: pass order IS the contribution order, so a
-# later contribution is an ordered one, and the module-system analogy the ADR reaches for admits a
-# later definition winning. Nothing here decides between them. Whoever rules the general content rule
-# rules this line, and if the ruling goes the other way the change is the merge's disagreement branch
-# and nothing else — no other construction in this file reads it.
+# ⇒ ADDING IS REVISION, REPLACING IS RETRACTION, AND RETRACTION IS THE THING STRATIFICATION EXISTS TO
+# KEEP OUT OF THE FOLD. The freeze is over membership, so the map's VALUES may be revisited — but a
+# stratum's output is closed when the next begins, and the staged standard model only ever GROWS.
+# Apt, Blair & Walker compose the strata as M_n = T_{P_n}↑ω(M_{n-1}), each stratum starting from the
+# previous one's fixed point and the model being the last of them (printed p. 108); and the iterated
+# family that construction instantiates carries its growth in the same breath — "Clearly N_0 ⊆ N_1 ⊆
+# ... ⊆ N_n" (printed p. 102). A pass whose contribution REPLACED a settled value would be a step
+# that shrinks, and the staged construction has no room for one.
+#
+# ★ AND THE READING THAT SAYS LATER-WINS FAILS ON WHO WROTE THE OVERRIDE. Pass order IS an order,
+# so a later contribution is an ordered one, and the module-system analogy does admit a later
+# definition winning — but only under an AUTHORED override, a definition that states the intent to
+# override in itself. A pass index is positional and implicit; nobody wrote it as an override.
+# Later-wins would therefore perform a replacement no author asked for and drop a settled value
+# silently, which is the shape this construction exists to make impossible. An EXPLICIT
+# authored-override mechanism stays expressible — a different design, carrying the intent in the
+# contribution rather than in its position — and nothing here forecloses it.
 #
 # ── WHO OWNS THE WALK AND WHO OWNS THE SET ──
 # The driver walks the schedule; the frozen set is accumulated here. That split is not a preference:
