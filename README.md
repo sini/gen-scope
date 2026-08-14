@@ -758,7 +758,7 @@ Within a pass there is no order at all (ADR-0022), so the only outcomes an unord
 ### What the entry does not do
 
 - **It refuses nothing for being large.** No cap, no ceiling, no budget: the schedule is what the emitters declared and no number here refuses a program for its size. The frozen set is an attrset rather than a list of records because resolution is a membership test plus a lookup per relatum, and over a list that is a scan inside the pass loop — a cost argument, deliberately not a refusal.
-- **It does not rewire the kind cascade.** `resolveClaims` and the wiring surface run their own bounded loop over their own subject; nothing here calls them and nothing there calls this. The two are separate constructions that happen to share a library.
+- **It does not rewire the kind cascade.** `resolveClaims` runs its own bounded loop over its own subject and publishes its own wiring; nothing here calls it and nothing there calls this. The two are separate constructions that happen to share a library.
 - **It asks the graph nothing.** The `graph` formal reaches the module and stops — no line applies it. What the entry publishes is the graph's **content** as plain data; answering reachability and partition questions about a graph already built is a different phase's work, and the emptiness is what says the minting run asks none of them.
 - **It is not lazy in its result.** The whole result is forced before it is returned, and each stratum's output is forced in the round that produced it, so a refusal is a property of the **call** rather than of a consumer's reading pattern. A caller reading one field gets the same answer as a caller reading all of them.
 
