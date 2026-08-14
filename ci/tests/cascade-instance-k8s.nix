@@ -17,10 +17,10 @@ let
   inherit (genScope)
     mkClaim
     resolveClaims
-    spliceWiring
     folds
     ;
   k8s = import ./_fixtures/k8s.nix { inherit genScope; };
+  inherit (import ./_fixtures/consumer.nix { inherit lib; }) splice;
   r = k8s.resolution;
 
   entry = name: {
@@ -160,7 +160,7 @@ in
 
     # ── per-app wiring splice golden (explicit per-key combine) ──
     test-sonarr-wiring-splice = {
-      expr = spliceWiring {
+      expr = splice {
         resolution = r;
         subject = k8s.apps.sonarr;
         combine =

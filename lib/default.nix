@@ -42,14 +42,11 @@ let
     inherit (schema) hashIdentity;
     inherit (stratify) stratify;
   };
-  # A value algebra over fragments, which is why it takes the prelude and nothing else: the cascade
-  # is one of its consumers rather than its home — and it is a consumer twice over, since a kind's
-  # resource fold and a wiring splice both take the vocabulary as data.
+  # A value algebra over fragments, which is why it takes the prelude and nothing else. The cascade
+  # names it nowhere: a kind's resource fold arrives as a FIELD on the kind, so the vocabulary
+  # reaches the run as the author's data rather than as an import of this module.
   folds = import ./folds.nix { inherit prelude; };
-  cascade = import ./cascade.nix {
-    inherit prelude graph;
-    inherit (folds) folds;
-  };
+  cascade = import ./cascade.nix { inherit prelude graph; };
 in
 algebraicGraph
 // buildNodes

@@ -1,41 +1,76 @@
-# The cascade's consumer accessors — `wiringFor`, `spliceWiring` — and the fold vocabulary both
-# they and a kind's resource fold are written against.
+# The consumer side of the cascade's published wiring — `resolution.wiring.<id>.entries`, and the
+# splice a caller assembles from it — plus the fold vocabulary both that splice and a kind's
+# resource fold are written against.
 #
-# ★ THE ORDER CELL IS THE ONE THAT CANNOT BE WRITTEN ON A SMALL FIXTURE. What `wiringFor` exists
-# to preserve is GLOBAL SCHEDULE ORDER ACROSS KINDS, and the only construction that could get it
-# wrong in a way worth catching is one that reads the per-kind lists in kind order instead. On a
-# subject wired by one kind those two answers are identical, so a one-kind fixture pins nothing.
-# The fixture below wires `sonarr` from FIVE kinds whose emissions interleave — the composite
-# stratum's `route` and `database`, then the leaf stratum's `secret`, `connect` and `storage`,
-# including sub-claims each composite emitted — so the two answers DIFFER on it, and the expected
-# list below is the one that is not the concatenation of the per-kind lists.
+# ★ THE ORDER CELL IS THE ONE THAT CANNOT BE WRITTEN ON A SMALL FIXTURE. What the published field
+# exists to preserve is GLOBAL SCHEDULE ORDER ACROSS KINDS, and the only construction that could
+# get it wrong in a way worth catching is one that reads the per-kind lists in kind order instead.
+# On a subject wired by one kind those two answers are identical, so a one-kind fixture pins
+# nothing. The fixture below wires `sonarr` from FIVE kinds whose emissions interleave — the
+# composite stratum's `route` and `database`, then the leaf stratum's `secret`, `connect` and
+# `storage`, including sub-claims each composite emitted — so the two answers DIFFER on it, and the
+# expected list below is the one that is not the concatenation of the per-kind lists.
 #
 # ★ That difference is a claim about the fixture, so it is MEASURED rather than asserted here:
 # `ci/bench/wiring-scan.sh` computes the kind-grouped order over this same fixture and reports it
 # beside the global one, and calls the sweep INVALID if they agree. A cell cannot host that
 # control without changing what the suite counts, and the same sweep already has to exist for the
-# recursion arm below.
+# ill-formed-input arms below.
 #
-# ★ THE RECURSION ARM IS ALSO NOT A CELL, AND FOR A HARDER REASON. `wiringFor` is written as an
-# indexed scan rather than as a list walk that calls itself on the tail. What makes that a
-# construction rather than a preference is that the walk ABORTS on a long trace — and both of the
-# aborts it can reach (`max-call-depth exceeded`, and the C-stack overflow past a raised guard)
-# terminate the evaluation rather than producing a value, so `tryEval` holds neither and no
-# `didThrow` cell can observe either. That control is an exit-code arm in the same sweep.
+# ★ THE ILL-FORMED-INPUT ARMS ARE ALSO NOT CELLS, AND FOR A HARDER REASON. The field replaced an
+# accessor that rebuilt this list from two lossy views, and every way those two views could
+# disagree reached the evaluator rather than a refusal — a missing attribute, an out-of-range
+# `elemAt`, a list position holding a set. None of those is a value: each terminates the
+# evaluation, so `tryEval` holds none of them and no `didThrow` cell can observe one. What the
+# retirement buys is that there is no longer a function to hand such a resolution to, and an
+# absence is not something a cell can assert either. Both halves — the retired construction still
+# aborting, and the surface no longer being there — are exit-code arms in the same sweep.
 {
   genScope,
+  lib,
   ...
 }:
 let
-  inherit (genScope)
-    folds
-    wiringFor
-    spliceWiring
-    ;
+  inherit (genScope) folds;
   k8s = import ./_fixtures/k8s.nix { inherit genScope; };
+  consumer = import ./_fixtures/consumer.nix { inherit lib; };
+  inherit (consumer) wiringOf erasingWiringOf splice;
   r = k8s.resolution;
 
   didThrow = e: !(builtins.tryEval (builtins.deepSeq e null)).success;
+
+  # ── a run in which a subject IS claimed and IS NOT wired ──
+  # The k8s fixture cannot host this case: every one of its claim subjects is wired, so a subject
+  # drawn from it is FOREIGN to the run rather than unwired, and a cell pointed at one measures the
+  # never-claimed case twice. This kind set emits resources and no wiring, which is the only way to
+  # reach a subject the run registered and left empty.
+  unwiredKinds = genScope.mkKinds [
+    (genScope.mkKind {
+      name = "noWire";
+      resolve = c: _ctx: {
+        resources.${c.subject.name} = {
+          ok = true;
+        };
+      };
+    })
+  ];
+  unwiredSubject = {
+    id_hash = "id-q";
+    name = "q";
+  };
+  neverClaimedSubject = {
+    id_hash = "id-never-claimed";
+    name = "never";
+  };
+  unwiredRun = genScope.resolveClaims {
+    kinds = unwiredKinds;
+    claims = [
+      (genScope.mkClaim {
+        kind = "noWire";
+        subject = unwiredSubject;
+      })
+    ];
+  };
 
   # api-key secret fold spec, exercised directly.
   secretByKey = folds.byKey {
@@ -163,11 +198,11 @@ in
       expected = true;
     };
 
-    # ── wiringFor: global schedule order across kinds for one subject ──
+    # ── the published entry list: global schedule order across kinds for one subject ──
     # Five kinds, interleaved: `secret` appears at positions 2, 3 and 5 with `connect` between the
     # second and third, so this list is NOT the per-kind lists concatenated in any kind order.
-    test-wiringfor-global-order = {
-      expr = map (e: e.kind) (wiringFor r k8s.apps.sonarr);
+    test-published-entries-global-order = {
+      expr = map (e: e.kind) (wiringOf r k8s.apps.sonarr).entries;
       expected = [
         "route"
         "database"
@@ -178,9 +213,9 @@ in
         "storage"
       ];
     };
-    # each wiringFor entry carries its contributing claim path.
-    test-wiringfor-carries-claim-path = {
-      expr = map (e: e.claim) (wiringFor r k8s.apps.sonarr);
+    # each published entry carries its contributing claim path.
+    test-published-entries-carry-claim-path = {
+      expr = map (e: e.claim) (wiringOf r k8s.apps.sonarr).entries;
       expected = [
         [ 0 ]
         [ 1 ]
@@ -200,12 +235,120 @@ in
         [ 3 ]
       ];
     };
+    # ★ THE RELOCATION, PINNED WHOLE RATHER THAN BY PROJECTION. The two cells above assert the two
+    # projections a reconstructing accessor used to be checked on; this one asserts the entry list
+    # itself, VALUES INCLUDED, against the list that accessor returned over this same fixture. It is
+    # the cell that would redden if publishing the field had changed the answer rather than moved
+    # it, which the order and provenance projections alone cannot see.
+    test-published-entries-equal-the-retired-scan = {
+      expr = (wiringOf r k8s.apps.sonarr).entries;
+      expected = [
+        {
+          claim = [ 0 ];
+          kind = "route";
+          wiring.backendRef = {
+            name = "sonarr";
+            port = "http";
+          };
+        }
+        {
+          claim = [ 1 ];
+          kind = "database";
+          wiring.env = {
+            sonarr__POSTGRES__HOST = "media-pg";
+            sonarr__POSTGRES__PORT = "5432";
+          };
+        }
+        {
+          claim = [
+            0
+            1
+          ];
+          kind = "secret";
+          wiring.env.OIDC_CLIENT_SECRET = {
+            key = "sonarr";
+            secretKeyRef = "sonarr-oidc-client";
+          };
+        }
+        {
+          claim = [
+            1
+            0
+          ];
+          kind = "secret";
+          wiring.env.sonarr__POSTGRES__PASSWORD = {
+            key = "sonarr";
+            secretKeyRef = "sonarr-pg-password";
+          };
+        }
+        {
+          claim = [
+            1
+            1
+          ];
+          kind = "connect";
+          wiring.egress = {
+            port = 5432;
+            to = "media-pg";
+          };
+        }
+        {
+          claim = [ 2 ];
+          kind = "secret";
+          wiring.env.SONARR__AUTH__APIKEY = {
+            key = "sonarr";
+            secretKeyRef = "media-arr-api-keys";
+          };
+        }
+        {
+          claim = [ 3 ];
+          kind = "storage";
+          wiring.persistence."/data" = {
+            claim = "media-data-nfs";
+            mount = "/data";
+          };
+        }
+      ];
+    };
 
-    # ── spliceWiring: default folds.one is single-writer-per-key (disjoint splice) ──
+    # ── the record is TOTAL, and the read a consumer is told to use keeps that ──
+    # A subject a claim named but nothing wired KEEPS its key, carrying an empty entry list; a
+    # subject no claim ever named has no key at all. Absence therefore means NOT REGISTERED, and
+    # the two observations stay two at the surface a consumer reads.
+    test-registered-but-unwired-subject-keeps-its-record = {
+      expr = wiringOf unwiredRun unwiredSubject;
+      expected = {
+        registered = true;
+        entries = [ ];
+      };
+    };
+    test-never-claimed-subject-has-no-record = {
+      expr = wiringOf unwiredRun neverClaimedSubject;
+      expected = {
+        registered = false;
+      };
+    };
+    # ARMED: the distinction above is genuinely losable, so the cells claiming it are not reading a
+    # difference no construction could erase. Defaulting the record answers the same empty list for
+    # both subjects — which is the erasure the published field's totality exists to rule out,
+    # re-created one call outward by the caller.
+    test-armed-the-erasing-read-loses-the-distinction = {
+      expr = {
+        unwired = erasingWiringOf unwiredRun unwiredSubject;
+        neverClaimed = erasingWiringOf unwiredRun neverClaimedSubject;
+      };
+      expected = {
+        unwired = [ ];
+        neverClaimed = [ ];
+      };
+    };
+
+    # ── the consumer's splice: folds.one is single-writer-per-key (disjoint splice) ──
     test-splice-default-disjoint = {
-      expr = spliceWiring {
+      expr = splice {
         resolution = r;
         subject = k8s.apps.radarr;
+        combine = folds.one;
       };
       # radarr has only storage (persistence) + secret(api-key env) wiring — disjoint top-level keys.
       expected = {
@@ -223,11 +366,12 @@ in
         };
       };
     };
-    # default folds.one collision: sonarr multi-writes `env` (database + secret) ⇒ loud error.
+    # folds.one collision: sonarr multi-writes `env` (database + secret) ⇒ loud error.
     test-splice-default-collision-throws = {
-      expr = didThrow (spliceWiring {
+      expr = didThrow (splice {
         resolution = r;
         subject = k8s.apps.sonarr;
+        combine = folds.one;
       });
       expected = true;
     };
@@ -235,7 +379,7 @@ in
     test-splice-explicit-combine = {
       expr =
         let
-          s = spliceWiring {
+          s = splice {
             resolution = r;
             subject = k8s.apps.sonarr;
             combine =

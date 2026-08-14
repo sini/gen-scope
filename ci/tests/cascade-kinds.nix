@@ -207,13 +207,11 @@ let
       accessor: cone:
       genGraph.coneRank accessor cone // { order = throw "the rank linearisation was consumed"; };
   };
-  # The fold vocabulary is not what these cells poison — it is a value algebra the cascade takes as
-  # data — so it is injected real, and the only substituted surface stays the rank one.
-  foldsReal = (import ../../lib/folds.nix { prelude = genPreludeLib; }).folds;
+  # The graph surface is the ONLY substituted one: the cascade takes the prelude and this, so a
+  # reading here cannot be a second injection's doing.
   cascadeUnderPoison = import ../../lib/cascade.nix {
     prelude = genPreludeLib;
     graph = poisoned;
-    folds = foldsReal;
   };
 
   # The same substitution aimed at the field the registry DOES read. Without this arm the cell
@@ -227,7 +225,6 @@ let
   cascadeUnderDepthPoison = import ../../lib/cascade.nix {
     prelude = genPreludeLib;
     graph = depthPoisoned;
-    folds = foldsReal;
   };
 
   # The accessor the registry builds, rebuilt here so the poison can be aimed at the surface

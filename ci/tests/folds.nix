@@ -271,14 +271,17 @@ in
       expected = [ "prelude" ];
     };
     # The same predicate over a module that takes more, in the same run: without it, an empty or
-    # constant answer would satisfy the cell above. Three rather than two, and the third is this
-    # vocabulary: the cascade's wiring splice draws its default combine from `folds`, so the module
-    # that is a value algebra over fragments is a DEPENDENCY of the module that is not. That is the
-    # cell above's point stated from the other side.
+    # constant answer would satisfy the cell above.
+    #
+    # ★ AND `folds` IS NOT ONE OF THE TWO, WHICH IS THE STRONGER READING. The cascade names this
+    # vocabulary nowhere. A kind's resource fold arrives as a FIELD on the kind, so the algebra
+    # reaches a run as the author's data rather than as an import — the one place the cascade did
+    # import it was a retired accessor's default combine, and a consumer assembling its own splice
+    # chooses the rule itself. So the arm is a module that takes more, and it takes more without
+    # taking THIS.
     test-the-cascade-module-takes-more = {
       expr = builtins.attrNames (builtins.functionArgs (import ../../lib/cascade.nix));
       expected = [
-        "folds"
         "graph"
         "prelude"
       ];

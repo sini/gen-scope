@@ -248,7 +248,6 @@
 {
   prelude,
   graph,
-  folds,
 }:
 let
   inherit (builtins)
@@ -990,6 +989,35 @@ let
 
       entriesFor = id: byId.${id} or [ ];
 
+      # ── THE THIRD FIELD IS A GUARANTEE AND NOT A CONVENIENCE ──
+      # One list is published three ways here. `byKind` carries the VALUES grouped by the kind that
+      # emitted them, and has lost the order ACROSS kinds; `trace.wiring.<id>` below carries the
+      # EMISSIONS flat in the run's global schedule order, and carries no values; `entries` is the
+      # list neither of those alone recovers. A consumer holding one subject wants the third, and a
+      # consumer reaching for `byKind` instead gets a per-kind order silently in place of the global
+      # one — the ordering discipline the whole cascade exists to produce, dropped without a
+      # diagnostic. Publishing the list is what removes the reason to re-derive it: the two
+      # projections stay for the readers they suit, and nothing has to reassemble the whole from
+      # them.
+      #
+      # THEORY: why/derivation provenance in the sense of Cheney, Chiticariu & Tan (2009) — every
+      # entry names the claim that emitted it, so a consumer holding a wiring value can say which
+      # claim contributed it and where in the run. The Green–Karvounarakis–Tannen provenance
+      # SEMIRING — annotations carrying a `(+, ×)` algebra that composes under the query operators —
+      # is DELIBERATELY NOT REALIZED here and is not planned: these entries are records about a run,
+      # not algebraic values, and nothing in this library computes with them. The rider is part of
+      # the citation and travels with it, because a provenance citation arriving on its own reads as
+      # a claim that the receiving library implements the semiring algebra, which it does not and
+      # will not.
+      #
+      # ── HOW THIS IS READ, WHICH IS BY TESTING THE KEY AND NOT BY DEFAULTING IT ──
+      # A key sits here for every subject a claim was ABOUT, so a MISSING key means the subject was
+      # never registered and a present record with `entries = [ ]` means it was registered and
+      # nothing wired it. Those are two observations, not one. A consumer defaulting the record —
+      # `(wiring.${id} or { }).entries` — collapses them back together and re-creates one call
+      # outward the erasure this record's totality exists to rule out; a consumer reading
+      # `wiring.${id}.entries` without testing aborts on the unregistered subject with an
+      # interpreter error no `tryEval` contains. `if wiring ? ${id} then … else …` keeps both.
       wiring = listToAttrs (
         map (
           id:
@@ -999,6 +1027,10 @@ let
           nameValuePair id {
             subject = if es == [ ] then claimedSubjects.${id} else (head es).subject;
             byKind = mapAttrs (_: ek: map (e: e.wiring) ek) (groupBy (e: e.kind) es);
+            entries = map (e: {
+              inherit (e) kind wiring;
+              claim = e.path;
+            }) es;
           }
         ) wiredIds
       );
@@ -1058,85 +1090,6 @@ let
           wiring = traceWiring;
         };
       };
-  # ══ CONSUMER ACCESSORS OVER A RESOLUTION ══
-  #
-  # ── WHAT THESE EXIST FOR, WHICH IS A GUARANTEE AND NOT A CONVENIENCE ──
-  # A subject's wiring is published twice over. `wiring.<id>.byKind` carries the VALUES, grouped by
-  # the kind that emitted them; `trace.wiring.<id>` carries the EMISSIONS flat, in the run's global
-  # schedule order. Neither is what a consumer of one subject wants: the first has lost the order
-  # ACROSS kinds, and the second carries no values. A consumer reading `byKind` directly therefore
-  # gets a per-kind order silently in place of the global one — the ordering discipline the whole
-  # cascade exists to produce, dropped without a diagnostic. That is why this accessor is part of
-  # the library rather than something each caller re-derives.
-  #
-  # ── THE ALIGNMENT IS A FACT ABOUT THIS LIBRARY'S OUTPUT, NOT AN ASSUMPTION ABOUT ITS ARGUMENT ──
-  # `byKind.<k>` is the kind-filtered sublist of `trace.wiring.<id>`, in the same relative order,
-  # because both are built by grouping ONE list — the subject's entries in schedule order — and the
-  # grouping keeps input order inside each group. So the n-th trace entry of kind `k` and the n-th
-  # element of `byKind.<k>` are the same emission, and recovering the pairing is positional
-  # arithmetic rather than a search.
-  #
-  # THEORY: why/derivation provenance in the sense of Cheney, Chiticariu & Tan (2009) — every entry
-  # returned here names the claim that emitted it, so a consumer holding a wiring value can say
-  # which claim contributed it and where in the run. The Green–Karvounarakis–Tannen provenance
-  # SEMIRING — annotations carrying a `(+, ×)` algebra that composes under the query operators — is
-  # DELIBERATELY NOT REALIZED here and is not planned: these entries are records about a run, not
-  # algebraic values, and nothing in this library computes with them. The rider is part of the
-  # citation and travels with it, because a provenance citation arriving on its own reads as a
-  # claim that the receiving library implements the semiring algebra, which it does not and will
-  # not.
-  #
-  # ── WHY THIS IS AN INDEXED SCAN AND NOT A WALK ──
-  # The pairing above is what a list walk would recompute one element at a time: a function calling
-  # itself on the tail while carrying a per-kind counter it rebuilds with `counts // { … }` at every
-  # entry. That construction is two costs at once, and this engine builds neither. It spends one
-  # evaluator frame per entry, so its descent depth IS the trace length and past the call-depth
-  # guard it aborts uncatchably — `tryEval` holds neither that abort nor the C-stack overflow the
-  # same shape reaches when the guard is raised. And the counter copy is a whole record per element
-  # beside the frame. Written instead as a scan: the ranks come off the grouping in one pass, no
-  # state is carried between entries, and nothing here applies itself.
-  wiringFor =
-    resolution: subject:
-    let
-      id = subject.id_hash;
-      traceEntries = resolution.trace.wiring.${id} or [ ];
-      byKind = (resolution.wiring.${id} or { byKind = { }; }).byKind;
-      # Trace POSITIONS grouped by kind, order preserved inside each group — so the rank of a
-      # position within its own kind is its index in that group, and that rank is the index into
-      # `byKind.<k>`. This is the walk's counter, computed once for the whole list.
-      positionsByKind = groupBy (i: (elemAt traceEntries i).kind) (range 0 (length traceEntries - 1));
-      rankAt = listToAttrs (
-        concatMap (k: imap0 (rank: i: nameValuePair (toString i) rank) positionsByKind.${k}) (
-          attrNames positionsByKind
-        )
-      );
-    in
-    imap0 (i: e: {
-      inherit (e) kind claim;
-      wiring = elemAt byKind.${e.kind} rankAt.${toString i};
-    }) traceEntries;
-
-  # One subject's wiring entries spliced into a single record, per top-level key: the values
-  # contributed under a key — in global schedule order, which is what `wiringFor` returns — are
-  # handed to `combine`, whose `key: [v]: v` signature is the one a kind's resource fold already
-  # has. One vocabulary serves both because both are the same operation: several fragments arriving
-  # under one name with a declared rule for reconciling them.
-  #
-  # The default is single-writer-per-key. Two contributors to one key are two authors with no merge
-  # rule between them, and picking one silently is the failure this engine's result contract exists
-  # to rule out — so the default refuses loudly and a caller who wants a merge names it.
-  spliceWiring =
-    {
-      resolution,
-      subject,
-      combine ? folds.one,
-    }:
-    let
-      entries = map (x: x.wiring) (wiringFor resolution subject);
-      allKeys = unique (concatMap attrNames entries);
-      keyVal = k: combine k (concatMap (e: if e ? ${k} then [ e.${k} ] else [ ]) entries);
-    in
-    listToAttrs (map (k: nameValuePair k (keyVal k)) allKeys);
 in
 {
   inherit
@@ -1144,7 +1097,5 @@ in
     mkKinds
     mkClaim
     resolveClaims
-    wiringFor
-    spliceWiring
     ;
 }

@@ -899,10 +899,6 @@ let
     import ../../lib/cascade.nix {
       prelude = genPreludeLib;
       graph = genGraph;
-      # The fold vocabulary is a value algebra the cascade takes as data — `spliceWiring`'s
-      # default combine is drawn from it. Instantiated here the same way the library instantiates
-      # it, so the comparand is this module against a real dependency rather than a stub.
-      inherit (import ../../lib/folds.nix { prelude = genPreludeLib; }) folds;
     }
   );
   incumbentNames = builtins.filter (n: !(builtins.elem n cascadeNames)) (builtins.attrNames genScope);
@@ -1973,18 +1969,17 @@ in
       expr = builtins.length incumbentNames;
       expected = 83;
     };
-    # Six: the four the registration and run doors publish, plus the two consumer accessors over a
-    # resolution. The accessors are named here for the same reason the others are — this cell is
-    # the module's inventory, and an export it does not list is an export nothing measured.
-    test-this-module-exports-exactly-its-six-names = {
+    # Four: the registration and run doors, and nothing else. The consumer accessors that used to
+    # sit beside them reconstructed a list the run already computed, and the run publishes it now —
+    # so reading one subject's wiring is an attribute lookup with no surface of its own. This cell
+    # is the module's inventory, and an export it does not list is an export nothing measured.
+    test-this-module-exports-exactly-its-four-names = {
       expr = cascadeNames;
       expected = [
         "mkClaim"
         "mkKind"
         "mkKinds"
         "resolveClaims"
-        "spliceWiring"
-        "wiringFor"
       ];
     };
   };
