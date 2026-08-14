@@ -84,6 +84,11 @@ let
   ];
   lattice43 = lattice 4 3;
 
+  # The k8s registry, read for its measure only. The generated shapes above are chosen to
+  # discriminate constructions; this one is the shape a consumer actually writes, and its depth map
+  # is a golden carried over from the retiring library rather than derived here.
+  k8s = import ./_fixtures/k8s.nix { inherit genScope; };
+
   ghost = [ (node "a" [ "ghost" ]) ];
   twoCycle = [
     (node "a" [ "b" ])
@@ -467,6 +472,32 @@ in
     test-max-depth-shared-producer-lattice = {
       expr = (mkKinds lattice43).maxDepth;
       expected = 3;
+    };
+    # The same two fields over the k8s registry: leaves at 0, composites at 1, `maxDepth` 1. The
+    # leaf and composite cells are separate because a construction answering a constant 0 passes
+    # the first and fails the second, which one merged cell would not distinguish.
+    test-k8s-depth-leaves = {
+      expr = {
+        inherit (k8s.kinds.depth) connect secret storage;
+      };
+      expected = {
+        connect = 0;
+        secret = 0;
+        storage = 0;
+      };
+    };
+    test-k8s-depth-composites = {
+      expr = {
+        inherit (k8s.kinds.depth) database route;
+      };
+      expected = {
+        database = 1;
+        route = 1;
+      };
+    };
+    test-k8s-max-depth = {
+      expr = k8s.kinds.maxDepth;
+      expected = 1;
     };
     # Item 6 — strict decrease: the property cells below.
     # And the record's other carried shapes: the registration-time pairing check and the input
