@@ -47,6 +47,13 @@ let
   # reaches the run as the author's data rather than as an import of this module.
   folds = import ./folds.nix { inherit prelude; };
   cascade = import ./cascade.nix { inherit prelude graph; };
+  # The cold fold over a validated schedule, which takes the demand fixpoint and the declared-read
+  # projection from the module next door rather than reaching for a second evaluator: the entry is
+  # the evaluator's caller, and the one it calls is this library's own.
+  foldEquations = import ./fold-equations.nix {
+    inherit prelude;
+    inherit (eval) eval recordedDeps;
+  };
   # The surface is folded rather than chained with `//`, so a name contributed by two modules is a
   # throw naming both instead of a silent last-wins shadowing.
   mergeSurface = import ./merge-surface.nix { inherit prelude; };
@@ -69,5 +76,6 @@ mergeSurface {
     mint
     folds
     cascade
+    foldEquations
     ;
 }
