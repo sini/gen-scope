@@ -7,6 +7,15 @@
     # must see the revision that publishes it rather than whatever revision the hub happens to
     # carry.
     gen-graph.url = "github:sini/gen-graph";
+    # The identity authority, pinned here as well as at the root because this flake builds the
+    # library from its OWN inputs (`import ../lib` below): a pin declared only at the root would
+    # leave the suite asserting identity behaviour under a revision free to drift from the one the
+    # library ships. The `follows` is what keeps the two declarations one instance — two instances
+    # in one evaluation are two identity formulas for the same node.
+    gen-schema = {
+      url = "github:sini/gen-schema";
+      inputs.gen-prelude.follows = "gen-prelude";
+    };
     # nixpkgs is the CI runner's dependency (test harness, treefmt) and supplies the
     # `lib` the test modules use. The library itself (../lib) takes gen-prelude and gen-graph.
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
