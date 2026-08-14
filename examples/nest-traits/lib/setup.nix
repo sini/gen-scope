@@ -134,13 +134,13 @@ let
 
   mkRulesType =
     {
-      classes ? {
-        nixos = { };
-        homeManager = { };
+      keySemantics ? {
+        nixos.category = "class";
+        homeManager.category = "class";
       },
     }:
     aspects.aspectsType {
-      inherit classes;
+      inherit keySemantics;
       aspectModules = [
         {
           options.is = lib.mkOption {
@@ -154,9 +154,9 @@ let
   evalNestModules =
     {
       modules,
-      classes ? {
-        nixos = { };
-        homeManager = { };
+      keySemantics ? {
+        nixos.category = "class";
+        homeManager.category = "class";
       },
     }:
     let
@@ -169,7 +169,7 @@ let
               config.schema.trait = traitKind;
               options.traits = mkTraitRegistry config.schema config.traits;
               options.rules = lib.mkOption {
-                type = mkRulesType { inherit classes; };
+                type = mkRulesType { inherit keySemantics; };
                 default = { };
               };
             }
