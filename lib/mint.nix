@@ -32,22 +32,24 @@
 #               carries. One vocabulary, so choosing a label is choosing a traversal token.
 #
 # ★★ THE IDENTITY KEY SET IS THE RELATUM LABELS PLUS THE NODE'S OWN IDENTIFIER, AND THE SECOND HALF
-# IS THIS FILE'S OWN COMMITMENT RATHER THAN A CLAUSE IT INHERITS. Ruling 4 gives the binding case
-# whole — "a kind whose identity keys are its relatum labels and whose values are the relata's
-# identities" — and the authority refuses a preimage with NO keys by name ("identity: zero identity
-# keys"), on the ground that a binding relates at least one relatum. **But not every vertex of a
-# scope graph is a binding.** An entity emitter with no relata is admissible, is what most of a real
-# emitter set consists of, and under the relatum-labels-only reading it has no identity to mint at
-# all. Two further readings were available and both are refused here:
+# IS FORCED RATHER THAN CHOSEN. Ruling 4 gives the binding case whole — "a kind whose identity keys
+# are its relatum labels and whose values are the relata's identities" — and the authority refuses a
+# preimage with NO keys by name ("identity: zero identity keys"), on the ground that a binding
+# relates at least one relatum. **But not every vertex of a scope graph is a binding.** An entity
+# emitter with no relata is admissible, is what most of a real emitter set consists of, and under the
+# relatum-labels-only reading it has no identity to mint at all — while a relatum-free node that
+# other emitters name as a relatum must have one to resolve to. So some key is owed. The readings
+# this file weighed are refused with their reasons, so neither is re-proposed:
 #
 #   · KEY THE CONTENT. Refused because it is the one thing the staged construction forbids: a later
 #     pass CONTRIBUTES content to an already-minted identity, so an identity that moved when content
 #     arrived would re-mint on every contribution. Identity is content-independent, which is exactly
 #     what lets two emitters of one relation reach ONE node.
-#   · KEY THE KIND ALONE. Total, but it collapses every relatum-free node of a kind onto one
-#     identity — two distinct declared hosts would share it, and a relation minted over either would
-#     mint the same identity. That makes the identifier→identity map many-to-one and takes the
-#     information out of resolution, which is the map's whole job.
+#   · KEY THE KIND ALONE. Total, and refused on ADR-0016's own ground for the zero-relatum binding:
+#     it "would collapse every zero-relatum binding of a kind onto sha256(<kind>) — one node,
+#     silently". Two distinct declared hosts would share an identity and a relation minted over
+#     either would mint the same one, which makes the identifier→identity map many-to-one and takes
+#     the information out of resolution — the map's whole job.
 #
 # ⇒ the node's own identifier joins the key set under the reserved label below. The one property
 # ruling 4 states about VALUES is untouched: every relatum's value here is the relatum's resolved
@@ -74,14 +76,28 @@
 # function of the kind, the identifier and the resolved relata, agreement on the identity IS
 # agreement on the kind and the relata, so no separate check for either exists to drift.
 #
-# ★ AND THE RULE DOES NOT CHANGE AT A PASS BOUNDARY, WHICH IS A DECISION AND IS STATED AS ONE. A
-# later pass naming an already-frozen identifier contributes content and never yields a second node.
-# Where its contribution AGREES the two are indistinguishable from same-pass agreement; where it
-# DISAGREES on a key an earlier pass settled, this file refuses rather than letting the later value
-# win. The freeze is over membership and the map's values may be revisited, but a stratum's output is
-# closed when the next begins — the standard model only ever grows — so a later pass ADDING a key is
-# revision and a later pass REPLACING one is retraction, and retraction is the thing stratification
-# exists to keep out of a fold.
+# ★★ THE CROSS-PASS ARM OF THAT RULE IS PROPOSED RATHER THAN SETTLED, AND A READER MUST NOT TAKE IT
+# FOR RULED LAW. A later pass naming an already-frozen identifier contributes content and never
+# yields a second node — that half is settled, and where the contribution AGREES or adds a key the
+# behaviour is indistinguishable from same-pass agreement and is uncontested. What is NOT settled is
+# the case where a later pass DISAGREES on a key an earlier pass had already settled. ADR-0016's
+# Consequences say so in its own words: two emitters of one identity yield "one node with
+# contributions from both", and "how those contributions compose is not settled here — that is the
+# substrate's general content rule". The same passage leaves the mechanism available rather than
+# closed: what it forecloses is refusal at MINTING, and "it does not foreclose refusal at content
+# merge, which remains available exactly as nixpkgs refuses two conflicting definitions of one
+# option."
+#
+# ⇒ THIS FILE REFUSES THERE, AS A PROPOSAL PENDING THE SUBSTRATE'S GENERAL CONTENT RULE. The argument
+# for it, offered rather than asserted: the freeze is over membership and the map's values may be
+# revisited, but a stratum's output is closed when the next begins and the standard model only ever
+# grows, so a later pass ADDING a key is revision while a later pass REPLACING one is retraction —
+# and retraction is the thing stratification exists to keep out of a fold. The argument against it is
+# equally available and is why this is not stated as law: pass order IS the contribution order, so a
+# later contribution is an ordered one, and the module-system analogy the ADR reaches for admits a
+# later definition winning. Nothing here decides between them. Whoever rules the general content rule
+# rules this line, and if the ruling goes the other way the change is the merge's disagreement branch
+# and nothing else — no other construction in this file reads it.
 #
 # ── WHO OWNS THE WALK AND WHO OWNS THE SET ──
 # The driver walks the schedule; the frozen set is accumulated here. That split is not a preference:
@@ -115,6 +131,17 @@
 # test plus a lookup once per relatum per mint, and over a list that is a scan inside the pass loop —
 # which turns a per-mint constant into a cost quadratic in the node count. That is a cost argument
 # and deliberately not a refusal: no size of frozen set is inadmissible.
+#
+# ★ AND ONE COST TERM SURVIVES THAT CHOICE RATHER THAN BEING REMOVED BY IT, SO IT IS NAMED HERE
+# INSTEAD OF LEFT FOR A READER TO FIND. The accumulation extends the frozen set once per stratum, and
+# an attribute-set update copies both operands, so the run carries a residual term on the order of
+# the schedule length times the size of the accumulated set. The dimension that could make that
+# quadratic is the SCHEDULE LENGTH, and it is bounded by the program rather than by the input: the
+# schedule is the DISTINCT DECLARED PASS INDICES, an author-written set that a large emitter list
+# does not enlarge. Adding hosts grows the set being copied; it does not add strata. The per-emitter
+# work is separately linear, because the placement is indexed once rather than re-scanned per stratum
+# (below). No number bounds either dimension and nothing is refused for being large — this is the
+# shape stated, not a threshold.
 #
 # ★ `graph` REACHES THIS FILE AND STOPS, AND THE ABSENCE IS THE POINT RATHER THAN AN OMISSION. No
 # line below applies it. What this entry publishes is the graph's CONTENT — vertices under their own
@@ -395,10 +422,16 @@ in
         inherit (run) strata unrun;
       };
     in
-    # The schema stratum is forced and never read. Forcing it is what makes "already evaluated" a
-    # property of the dataflow instead of a hope: the call cannot proceed until the stratum that
-    # produced the kinds has closed. Not reading it is the rest of the clause — a later stratum holds
-    # no handle with which to re-open a kind's option set, so contributing an option after minting
-    # has begun is not a refused contribution but an expression with nowhere to attach.
+    # The schema stratum is forced and never read, and the forcing establishes LESS than a reader
+    # might take from it, so its reach is stated. `seq` forces to weak head normal form, which
+    # establishes that `kinds` is a VALUE this call received rather than a fixpoint it participates
+    # in — the property the argument boundary exists for. It does NOT establish that every option
+    # inside it evaluated: measured on this construction, a throw AS the kinds value fires while a
+    # throw as one option inside it passes. That gap is not closed here, because what is owed is
+    # dataflow and not a check: the entry is outside the fixpoint that produces kind options and
+    # holds no handle with which to re-open one, so contributing an option after minting has begun is
+    # not a refused contribution but an expression with nowhere to attach. Deepening the forcing
+    # would buy a different property — that the caller's options are total — which is the caller's
+    # own and is not what the argument boundary is for.
     builtins.seq kinds (builtins.deepSeq result result);
 }

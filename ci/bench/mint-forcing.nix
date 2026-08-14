@@ -32,6 +32,13 @@
 # update chain. A fixture whose frozen set grew a key per round would measure the cost of copying an
 # attribute set instead.
 #
+# ★★ WHICH MEANS THIS FILE MEASURES THE CHAIN AND SAYS NOTHING ABOUT THE ACCUMULATION'S COST, and
+# reading its arms as a cost result would be reading them as their own control. Holding the frozen
+# set at one key is exactly what REMOVES the entry's residual term — schedule length times the size
+# of the accumulated set, named at `lib/mint.nix` — from every row here. A returning `forced` row
+# says the per-round forcing keeps the chain flat at that round count; it does not say the run is
+# cheap, and no timing is read anywhere below. What these arms report is an exit code.
+#
 # ★ AND THE SHORT ARMS ARE THE CONTROL ON THE CONTROL. At a round count below the measured boundary
 # the unforced construction RETURNS, and returns the same value as the forced one — so the abort at
 # the long count is the chain and not a broken fixture. Measured on this machine: the unforced chain
