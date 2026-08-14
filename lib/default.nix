@@ -15,6 +15,13 @@ let
   wellFounded = import ./well-founded.nix { inherit prelude; };
   acceptance = import ./acceptance.nix { inherit prelude; };
   engine = import ./engine.nix { inherit prelude graph; };
+  # The stratification driver takes the round-loop forcing rather than defining a second copy of
+  # it: two copies of a discipline agree only for as long as someone keeps them in step, and this
+  # one already lives next door.
+  stratify = import ./stratify.nix {
+    inherit prelude;
+    inherit (leastModel) forceFields;
+  };
   # A value algebra over fragments, which is why it takes the prelude and nothing else: the cascade
   # is one of its consumers rather than its home — and it is a consumer twice over, since a kind's
   # resource fold and a wiring splice both take the vocabulary as data.
@@ -36,5 +43,6 @@ algebraicGraph
 // wellFounded
 // acceptance
 // engine
+// stratify
 // folds
 // cascade
