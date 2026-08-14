@@ -1,6 +1,11 @@
 # THE SECOND TEST OUTPUT — cells whose subject is an ERROR MESSAGE, and why they cannot live in
 # `flake.tests`.
 #
+# Two subjects are here, split from their own suites' non-refusal cells by the SHAPE of the
+# assertion rather than by what they are about: the cascade's five refusals, argued below, and the
+# minting entry's, whose non-refusal cells are `flake.tests.minting` in `tests/mint.nix` and whose
+# fixtures both files read from `tests/_fixtures/mint.nix`.
+#
 # The cascade refuses five different things about a claim, and a caller must act differently on
 # each: a value that is not a claim is a construction bug, an unknown kind is a registration bug, a
 # shadowed engine field is a payload bug, a subject with no identity is a data bug, and an emission
@@ -38,6 +43,7 @@
   lib,
   genScope,
   genPreludeLib,
+  genGraph,
   ...
 }:
 let
@@ -205,6 +211,31 @@ let
       builtins.head vs
     else
       throw "unguarded.same: conflicting values for key '${key}': ${builtins.toJSON vs}";
+
+  # ── THE MINTING FIXTURES ──
+  # Shared with `tests/mint.nix`, which holds the same run's non-refusal cells. The two refusal
+  # TEXTS are defined there and read here, so the specification of those bytes has one copy.
+  mintFixtures = import ./tests/_fixtures/mint.nix {
+    inherit
+      lib
+      genScope
+      genPreludeLib
+      genGraph
+      ;
+  };
+  inherit (mintFixtures)
+    mint
+    mintUnderStubIdentity
+    mkEmitter
+    withKinds
+    db
+    conflictA
+    conflictB
+    conflictOtherA
+    conflictOtherB
+    unresolvedRelatum
+    conflictingContribution
+    ;
 in
 {
   # Same type as `flake.tests`, because it is the same kind of thing read by the same runner —
@@ -665,6 +696,114 @@ in
         1
       ];
       expected = 1;
+    };
+  };
+
+  # ── THE MINTING ENTRY'S REFUSALS ──
+  # The same staged run whose non-refusal cells are `flake.tests.minting` in `tests/mint.nix`. They
+  # are split by the shape of the assertion and not by subject: these name a MESSAGE, and a cell
+  # with a throwing `expr` crashes the batch asserter behind `checks.default` rather than failing.
+  config.flake.testsError.minting-refusals = {
+    # ── ONE REFUSAL, THREE REACHABLE CAUSES, EACH BY ITS OWN TEXT ──
+    # The three differ only in why the lookup misses, which is why they land on one mechanism; each
+    # message names the relatum, the label, the kind being minted and the emitting pass, so the three
+    # texts are distinct and no cell can pass on another's construction.
+    #
+    # A same-pass relatum: the node is not in the frozen set, because the set is accumulated from
+    # STRICTLY EARLIER strata only. Merging two adjacent strata turns an earlier-pass relatum into a
+    # same-pass one and turns success into refusal with no conflicting contribution anywhere — which
+    # is meaning being stratification-dependent by construction (ADR-0016 ruling 7).
+    test-a-same-pass-relatum-refuses-by-name = {
+      expr = mint (withKinds [
+        (mkEmitter {
+          pass = 0;
+          identifier = "db";
+          kind = "store";
+        })
+        (mkEmitter {
+          pass = 0;
+          identifier = "app";
+          kind = "service";
+          relata.backing = "db";
+        })
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (unresolvedRelatum "db" "backing" "service" 0);
+      };
+    };
+    # The root as a relatum: the root has an identifier by declaration and NO identity (ADR-0016
+    # ruling 5). Resolution is identifier-to-identity, so there is nothing for it to resolve to.
+    test-the-root-as-a-relatum-refuses-by-name = {
+      expr = mint (withKinds [
+        db
+        (mkEmitter {
+          pass = 1;
+          identifier = "app";
+          kind = "service";
+          relata.scope = "root";
+        })
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (unresolvedRelatum "root" "scope" "service" 1);
+      };
+    };
+    # A nonexistent identifier: no entry.
+    test-a-nonexistent-identifier-refuses-by-name = {
+      expr = mint (withKinds [
+        db
+        (mkEmitter {
+          pass = 1;
+          identifier = "app";
+          kind = "service";
+          relata.backing = "nosuchnode";
+        })
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (unresolvedRelatum "nosuchnode" "backing" "service" 1);
+      };
+    };
+
+    # ── WITHIN ONE PASS, CONFLICTING CONTRIBUTIONS REFUSE BY NAME ──
+    # Refusal at content merge, exactly as nixpkgs refuses two conflicting definitions of one option.
+    # It names the identity, the conflicting key and both emitters' sites, and it reads through a
+    # substituted authority so the identity in the message is a text a cell can anchor.
+    test-conflicting-same-pass-contributions-refuse-by-name = {
+      expr = mintUnderStubIdentity (withKinds [
+        conflictOtherA
+        conflictOtherB
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (conflictingContribution "host" "site-x" "site-y");
+      };
+    };
+
+    # ── PERMUTATION, ARM 1b: THE REFUSAL SET MOVES WITH ORDER OR IT DOES NOT ──
+    # A permutation cell that compares only successful output passes on a construction whose REFUSAL
+    # set moves with order. These two anchor the same literal on the two orders, so a refusal that
+    # named its sites in emitter order would fail one of them.
+    test-arm-1b-refusal-is-identical-under-within-pass-order-a = {
+      expr = mintUnderStubIdentity (withKinds [
+        conflictA
+        conflictB
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (conflictingContribution "port" "site-a" "site-b");
+      };
+    };
+    test-arm-1b-refusal-is-identical-under-within-pass-order-b = {
+      expr = mintUnderStubIdentity (withKinds [
+        conflictB
+        conflictA
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (conflictingContribution "port" "site-a" "site-b");
+      };
     };
   };
 }

@@ -58,7 +58,6 @@
       # is what keeps that structural rather than conventional.
       extraModules = [
         ./tests-error.nix
-        ./tests-pending.nix
       ];
     };
 }
