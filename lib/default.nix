@@ -47,20 +47,27 @@ let
   # reaches the run as the author's data rather than as an import of this module.
   folds = import ./folds.nix { inherit prelude; };
   cascade = import ./cascade.nix { inherit prelude graph; };
+  # The surface is folded rather than chained with `//`, so a name contributed by two modules is a
+  # throw naming both instead of a silent last-wins shadowing.
+  mergeSurface = import ./merge-surface.nix { inherit prelude; };
 in
-algebraicGraph
-// buildNodes
-// queries
-// resolve
-// structural
-// interface
-// eval
-// program
-// leastModel
-// wellFounded
-// acceptance
-// engine
-// stratify
-// mint
-// folds
-// cascade
+mergeSurface {
+  inherit
+    algebraicGraph
+    buildNodes
+    queries
+    resolve
+    structural
+    interface
+    eval
+    program
+    leastModel
+    wellFounded
+    acceptance
+    engine
+    stratify
+    mint
+    folds
+    cascade
+    ;
+}

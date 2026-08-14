@@ -59,6 +59,11 @@ let
   # is byte-identical to nixpkgs', so what is anchored below is the text as written above it.
   exactly = msg: "^" + genPreludeLib.escapeRegex msg + "$";
 
+  # The assembly's own fold, over module sets the cell builds: the real module set has no duplicate
+  # to refuse, so what the library's evaluation shows is that the merge MERGES, and a synthetic set
+  # is what shows it refuses — and names both contributors while doing it.
+  mergeSurface = import ../lib/merge-surface.nix { prelude = genPreludeLib; };
+
   subjA = {
     id_hash = "id-a";
     name = "a-subject";
@@ -803,6 +808,28 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly (conflictingContribution "port" "site-a" "site-b");
+      };
+    };
+  };
+
+  # ── THE ASSEMBLY'S REFUSAL ──
+  # A duplicated export is refused by the fold that builds the library's surface. `tryEval` can say
+  # THAT it refused, and `ci/tests/merge-surface.nix` does; WHICH name and WHICH two modules is a
+  # claim about the text, and a shadowing whose message named only the key would leave a reader
+  # hunting sixteen modules for the second contributor.
+  config.flake.testsError.assembly-refusal = {
+    test-a-duplicated-export-names-the-key-and-both-modules = {
+      expr = builtins.attrNames (mergeSurface {
+        alpha = {
+          one = 1;
+        };
+        beta = {
+          one = 2;
+        };
+      });
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: 'one' is exported by both 'alpha' and 'beta', and the library's assembly refuses a duplicate export rather than resolving it by position";
       };
     };
   };
