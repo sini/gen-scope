@@ -41,10 +41,18 @@
 # position, so a recursive walk's descent depth is its iteration count and past the call-depth guard
 # it aborts — an abort `tryEval` does not contain. The per-round forcing is `forceFields`, PASSED IN
 # rather than defined again here, and it is derived from the accumulator's own fields, so a field
-# added later is forced without anyone re-applying the discipline. That forcing is also what makes
-# an instance's own refusal fire in the round that provoked it: both of `advance`'s results feed a
-# forced accumulator field, so a round cannot leave its work as a thunk for a later round to trip
-# over.
+# added later is forced without anyone re-applying the discipline.
+#
+# ★ THE DISCIPLINE REACHES THE ACCUMULATOR'S FIELDS AND STOPS THERE, AND THE DIFFERENCE IS AN
+# INSTANCE'S TO KNOW. Each field is forced to weak head normal form once per round, which is what
+# keeps the loop from carrying a thunk chain; for a list field that means the spine, NOT the
+# elements. So `advance`'s work fires in the round that produced it exactly when it is the field's
+# own value — a refusal written as `settled = throw …` ends the run at that round, even for a
+# caller who only reads `unrun`. A refusal written as an ELEMENT of that list — `settled = [ (throw
+# …) ]` — survives the whole run and fires only when some consumer forces the element, which may be
+# never. An instance whose refusals must fire when they are provoked owes itself that forcing;
+# nothing here can supply it, because forcing an instance's values to a depth it did not ask for is
+# an evaluation policy and not a loop invariant.
 #
 # ── NO REFUSALS LIVE HERE ──
 # The driver throws nowhere. An item whose stratum the schedule does not name is RETURNED as
@@ -54,6 +62,15 @@
 # edge leaves no such emission for an author to write. A detector would be a rule an author can
 # meet or miss where the construction leaves nothing to miss. Any refusal an instance needs is the
 # instance's own and rides on top of this one.
+#
+# ★ ONE REFUSAL IS REACHABLE HERE AND IT IS THE EVALUATOR'S, WHICH IS OUTSIDE WHAT "THROWS NOWHERE"
+# CLAIMS. The argument record below is a strict pattern, so a caller supplying a seventh field is
+# refused at application — `function 'stratify' called with unexpected argument '…'`, naming the
+# function and the field, and a missing field is refused the same way. It is NAMED and it is
+# UNCATCHABLE: `tryEval` reports `false` for a thrown value and does not contain this one at all,
+# so a caller cannot recover from it and no cell can observe it. That is a property of the arity
+# check rather than of anything written below, and it is worth knowing for a caller who wants to
+# hand this loop a parameter it does not take.
 { prelude, forceFields }:
 let
   inherit (prelude)
@@ -67,12 +84,21 @@ let
     ;
 in
 {
-  # `describe` is bound and not consumed, and that is its whole role: it travels in the same record
-  # as the items it describes so that an instance's OWN refusal names a site out of the vocabulary
-  # the driver was given, rather than out of a second one assembled beside it. It is required to be
-  # total — a description that throws on a malformed item turns a caller's diagnostic into an abort —
-  # and that totality is the instance's obligation, checked nowhere here, because checking it would
-  # be a refusal.
+  # `describe` REACHES THIS FILE AND STOPS. It is never handed to `advance`, it appears in no field
+  # of the result, and no line below applies it: it is a declaration in the signature and has no
+  # runtime role here. What it declares is that an instance placing items in strata owes a way to
+  # name one, and the live consumer of that obligation is the cascade's own `emittedBy`, which
+  # writes the site into the instance's refusals. It is required to be total — a description that
+  # throws on a malformed item turns a caller's diagnostic into an abort — and that totality is the
+  # instance's obligation, checked nowhere here, because checking it would be a refusal.
+  #
+  # ★ THE ONE STRUCTURAL PRECONDITION ON `schedule`, NAMED BECAUSE NOTHING ELSE NAMES IT: its
+  # members must be DISTINCT. A stratum appearing twice is walked twice, and the second visit
+  # re-selects the same items and settles them again — the loop asks membership questions and never
+  # asks whether it has been here before. Both derived instances exclude it by construction rather
+  # than by check: the cascade's schedule is consecutive integers from a depth measure, and the
+  # minting instance's is the declared passes deduplicated before they are ordered. A caller whose
+  # schedule is neither owes the distinctness itself.
   stratify =
     {
       schedule,

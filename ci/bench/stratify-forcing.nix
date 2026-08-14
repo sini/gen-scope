@@ -8,11 +8,16 @@
 # `nix-unit` that can host the cell — the runner itself is what stops. What can be read is the
 # evaluator's own exit code, which is what this pair reads.
 #
-# ★ THE UNFORCED ARM IS THE DRIVER'S OWN LOOP WITH ONE CHARACTER CHANGED. `unforcedRun` below is
-# `lib/stratify.nix`'s walk with the same step body, the same accumulator and the same bound; the
-# only difference is that it hands `iterateBounded` a strict function that forces nothing. A
-# control that differed in any other way would be measuring that difference. It is built here to be
-# measured and is never used.
+# ★ THE UNFORCED ARM IS THE DRIVER'S OWN LOOP, AND IT DIFFERS IN TWO PLACES RATHER THAN ONE.
+# `unforcedRun` below is `lib/stratify.nix`'s walk with the same step body, the same accumulator and
+# the same bound. (1) It hands `iterateBounded` a strict function that forces nothing — the
+# difference this file exists to measure. (2) Its result omits `unrun`, which the driver computes
+# by filtering the accumulated items. The second difference is stated rather than removed because
+# it is CONSERVATIVE in the direction that matters: the omitted field is work the driver does and
+# this arm does not, so the arm is handicapped toward returning and it ends the evaluation anyway.
+# An unstated second difference would be the thing that makes a control measure something other
+# than its subject; this one is named, and its direction is why it is tolerable. Everything here is
+# built to be measured and is never used.
 #
 # ★ AND WHICH FIELD IS THE ONE THAT CHAINS, SAID PLAINLY, because "unforced" is a property of the
 # loop and not of every field in it. `pending` is read by the step's own control flow and `items` is
