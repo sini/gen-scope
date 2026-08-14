@@ -32,7 +32,7 @@
 # ★★★ WHAT THIS FILE COMMITS TO THAT THE RULES DO NOT FIX, stated here rather than left for a reader
 # to reverse-engineer out of the fixtures. The entry's `Args`/`Result` records, the module's formals,
 # the driver's `Args`/`Result` and `advance`'s two-field per-stratum record are all specified
-# surfaces and the cells assert them directly. THREE THINGS ARE NOT, and the cells fix them by
+# surfaces and the cells assert them directly. FOUR THINGS ARE NOT, and the cells fix them by
 # construction because executable cells cannot avoid it:
 #
 #   1. THE EMITTER RECORD. An emitter must declare its own pass, the identifier of the node it
@@ -44,6 +44,18 @@
 #      NOT expose rather than what a kind contains; `kindStratum` is a placeholder value.
 #   3. THE REFUSAL TEXTS. Both refusals are required to name specific coordinates but neither text
 #      is fixed anywhere, so the literals below ARE the specification of those bytes.
+#   4. `unrun` AS A PASS-THROUGH. Six cells depend on the entry returning its driver's list VERBATIM:
+#      five read a substituted driver's report back through it, and the sixth is the arming for the
+#      emptiness theorem, which reads the REAL driver's leftovers and asserts them non-empty. The
+#      seventh cell that touches the field — the theorem itself — does NOT depend on it, because a
+#      constant empty list satisfies an assertion that the list is empty, which is precisely why the
+#      commitment cannot be inferred from the cells that look like its subject. The rules say
+#      the field is carried and say nothing stronger, and they separately say no behaviour may rest
+#      on a consumer reading it — under which returning a constant empty list is a defensible
+#      implementation and would leave those five cells permanently red inside assertion text that
+#      may not be rewritten. It is the only readout channel the specified result surface offers, so
+#      the commitment is unavoidable rather than chosen; it is flagged here and put to the rules
+#      rather than left as a silent dependency.
 #
 # ★ MESSAGE PATTERNS ARE ANCHORED AND MACHINE-ESCAPED. `expectedError.msg` is regex-SEARCHED, not
 # whole-matched, so a pattern naming a prefix passes against a message that says something else
@@ -58,8 +70,11 @@
   ...
 }:
 let
-  # The message, pinned to the byte. `escapeRegex` is the prelude's own and its metacharacter set is
-  # byte-identical to nixpkgs', so what is anchored below is the text as written above it.
+  # The message, pinned to the byte. `escapeRegex` is the prelude's own, and it escapes every
+  # metacharacter that occurs in the literals below — measured over them, the live set is `.`, `(`
+  # and `)`. The prelude's escape set and nixpkgs' are NOT identical: they disagree on `]`, which
+  # the prelude escapes and nixpkgs leaves bare. No literal here contains one, so the disagreement
+  # cannot reach these patterns; a literal that grows one should be re-measured rather than assumed.
   exactly = msg: "^" + genPreludeLib.escapeRegex msg + "$";
 
   # ── THE HANDLES ──
@@ -97,8 +112,10 @@ let
   #
   # A driver that reports rather than runs. It returns a well-formed driver result, so the entry's
   # own post-processing succeeds, and it carries what the cell wants to read out through `unrun` —
-  # the one result field that is a pass-through list. `unrun` is empty by theorem in a real run and
-  # is not a live channel any behaviour rests on, which is exactly what makes it usable as one here.
+  # the one result field the specified surface carries through from the driver rather than deriving.
+  # `unrun` is empty by theorem in a real run and no behaviour rests on a consumer reading it, which
+  # is what leaves it free to carry a readout here and is also why the pass-through it depends on is
+  # named as a commitment in this file's header rather than assumed.
   spy = report: args: {
     settled = [ ];
     strata = builtins.length args.schedule;
@@ -108,6 +125,15 @@ let
   # A stratum's items, as the driver would hand them to `advance`: the seed filtered by the
   # instance's own stratum assignment, ordered by the instance's own within-stratum order. Both come
   # out of the captured arguments, so nothing about the instance is assumed.
+  #
+  # ★★ APPLYING `advance` HERE APPLIES IT OUTSIDE THE FOLD, AND THAT CONSTRAINS WHICH FIXTURES MAY
+  # REACH IT. The frozen set is accumulated by the driver as it walks the schedule; a spy that
+  # reports instead of walking accumulates nothing, so at stratum N the instance sees an EMPTY
+  # earlier-strata set. On a fixture whose relata are cross-stratum that path constructs an
+  # unresolved-relatum refusal — the cell would go red for a reason that has nothing to do with what
+  # it asserts, and the arming control would look like it fired when it had merely thrown. Every
+  # fixture applied through `advanceAt` is therefore RELATUM-FREE: nothing resolves, so no refusal is
+  # reachable on the forced path.
   itemsAt = args: s: builtins.sort args.within (builtins.filter (i: args.stratumOf i == s) args.seed);
   advanceAt =
     args: s:
@@ -123,12 +149,18 @@ let
     spy (args: builtins.attrNames (builtins.functionArgs args.advance))
   );
 
-  # The arming for the emptiness theorem: a driver that drops the first declared stratum from the
+  # The arming for the emptiness theorem: a driver that drops the LAST declared stratum from the
   # schedule it was given. Items assigned to that stratum are then outside the schedule, which is
   # the only construction under which a run can report leftovers — and it must REPORT them rather
   # than throw, because leftovers are a fact a caller reads, not a refusal.
+  #
+  # ★★ THE LAST RATHER THAN THE FIRST, AND THE CHOICE IS LOAD-BEARING. Relata resolve against
+  # STRICTLY EARLIER strata, so dropping the HEAD unsettles everything the surviving strata depend
+  # on and the variant refuses by name — at exactly the assertion that demands it not throw, which
+  # would make a refusal read as a discharged arming. Dropping the tail leaves every surviving
+  # stratum's predecessors intact and leaves the highest declared pass as the leftover.
   mintShortSchedule = withDriver (
-    args: genScope.stratify (args // { schedule = builtins.tail args.schedule; })
+    args: genScope.stratify (args // { schedule = lib.init args.schedule; })
   );
 
   # ── THE FIXTURES ──
@@ -191,6 +223,22 @@ let
     midA
     midB
     top
+  ];
+
+  # The same three declared passes {0,3,7} with NO relata anywhere. This is the fixture for the two
+  # cells that apply `advance` directly, one stratum at a time, outside any fold: every stratum mints
+  # without resolving anything, so the refusal a fold-less path would otherwise construct has no
+  # subject. The schedule it derives is the same length as the fixture above, so the shapes the two
+  # cells assert are unchanged by the substitution.
+  unrelated =
+    pass: identifier:
+    mkEmitter {
+      inherit pass identifier;
+    };
+  fixtureUnrelated = withKinds [
+    (unrelated 0 "free-a")
+    (unrelated 3 "free-b")
+    (unrelated 7 "free-c")
   ];
 
   # Declared passes {0,7}. A contiguous range over the same declaration would run eight strata.
@@ -497,7 +545,7 @@ in
     # carrying a fresh declared pass, the schedule computed at the start would be incomplete and the
     # boundedness of the run would be delivering silence rather than a theorem.
     test-advance-emits-nothing-at-every-stratum = {
-      expr = (emittedSpy fixtureSchedule).unrun;
+      expr = (emittedSpy fixtureUnrelated).unrun;
       expected = [
         [ ]
         [ ]
@@ -506,7 +554,7 @@ in
     };
     # Without this the cell above passes on an `advance` that returns nothing at all.
     test-control-settled-is-non-empty-at-the-same-strata = {
-      expr = (settledSpy fixtureSchedule).unrun;
+      expr = (settledSpy fixtureUnrelated).unrun;
       expected = [
         true
         true
