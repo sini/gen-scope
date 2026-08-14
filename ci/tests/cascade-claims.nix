@@ -1964,13 +1964,14 @@ in
         "leastModel"
       ];
     };
-    # 82 rather than 80: the fold vocabulary and the stratification driver are each a module of
-    # their own, so `folds` and `stratify` are part of the library's surface WITHOUT being one of
-    # this module's names — which is exactly what an incumbent is. The figure is a baseline over
-    # the library's export surface and re-derives whenever that surface grows.
+    # 83 rather than 80: the fold vocabulary, the stratification driver and the minting entry are
+    # each a module of their own, so `folds`, `stratify` and `mintStrata` are part of the library's
+    # surface WITHOUT being one of this module's names — which is exactly what an incumbent is. The
+    # figure is a baseline over the library's export surface and re-derives whenever that surface
+    # grows.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 82;
+      expected = 83;
     };
     # Six: the four the registration and run doors publish, plus the two consumer accessors over a
     # resolution. The accessors are named here for the same reason the others are — this cell is

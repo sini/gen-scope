@@ -1,4 +1,16 @@
-{ prelude, graph }:
+# The library's assembly point, and the one place an outside authority is bound to a module.
+#
+# `schema` is the identity authority's library and it is taken as a value rather than imported: the
+# minting module below receives the ONE function it needs and never reaches for a library of its own,
+# so the count of minting authorities is a fact about the dataflow rather than a rule an author obeys
+# (ADR-0016 ruling 5). Nothing of it is re-exported under this library's name — re-exporting another
+# library's value re-exports its build (ADR-0014), and the surface this seam adds is the minting
+# entry and nothing else.
+{
+  prelude,
+  graph,
+  schema,
+}:
 let
   # The library's OWN algebraic-graph constructors, which are a different thing from the graph
   # library bound as `graph`: these build a scope graph out of vertices and overlays, that one
@@ -22,6 +34,14 @@ let
     inherit prelude;
     inherit (leastModel) forceFields;
   };
+  # The minting instance of that driver. The authority arrives here as a function and the driver as
+  # the module next door, which is what keeps the minting module free of both a library import and a
+  # second stratification loop.
+  mint = import ./mint.nix {
+    inherit prelude graph;
+    inherit (schema) hashIdentity;
+    inherit (stratify) stratify;
+  };
   # A value algebra over fragments, which is why it takes the prelude and nothing else: the cascade
   # is one of its consumers rather than its home — and it is a consumer twice over, since a kind's
   # resource fold and a wiring splice both take the vocabulary as data.
@@ -44,5 +64,6 @@ algebraicGraph
 // acceptance
 // engine
 // stratify
+// mint
 // folds
 // cascade

@@ -26,6 +26,7 @@
       gen-harness,
       gen-prelude,
       gen-graph,
+      gen-schema,
       ...
     }:
     let
@@ -33,6 +34,7 @@
       genScope = import ../lib {
         inherit prelude;
         graph = gen-graph.lib;
+        schema = gen-schema.lib;
       };
     in
     gen-harness.lib.mkCi {

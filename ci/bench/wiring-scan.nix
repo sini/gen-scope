@@ -53,7 +53,15 @@ let
     };
   prelude = import "${fetch "gen-prelude"}/lib";
   graph = import "${fetch "gen-graph"}/lib" { inherit prelude; };
-  s = import ../../lib { inherit prelude graph; };
+  # The identity authority the library injects into its minting module. Built on the prelude this
+  # file derives rather than on the one inside gen-schema's own lock, which is the same simplification
+  # the root shim states and is inert here: the authority's closure is `builtins`-only.
+  schema = import "${fetch "gen-schema"}/lib" {
+    inherit prelude;
+    merge = import "${fetch "gen-merge"}/lib" { inherit prelude; };
+    algebra = import "${fetch "gen-algebra"}/lib";
+  };
+  s = import ../../lib { inherit prelude graph schema; };
 
   inherit (builtins)
     elemAt

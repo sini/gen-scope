@@ -28,11 +28,17 @@
   };
 
   outputs =
-    { gen-prelude, gen-graph, ... }:
+    {
+      gen-prelude,
+      gen-graph,
+      gen-schema,
+      ...
+    }:
     {
       lib = import ./lib {
         prelude = gen-prelude.lib;
         graph = gen-graph.lib;
+        schema = gen-schema.lib;
       };
     };
 }
