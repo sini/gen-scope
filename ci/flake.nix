@@ -45,6 +45,9 @@
       # unconditionally, so a throwing one crashes that gate instead of failing a cell. They get
       # their own output, read by `nix-unit --flake ./ci#testsError`, and being outside this tree
       # is what keeps that structural rather than conventional.
-      extraModules = [ ./tests-error.nix ];
+      extraModules = [
+        ./tests-error.nix
+        ./tests-pending.nix
+      ];
     };
 }
