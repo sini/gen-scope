@@ -17,6 +17,18 @@
 # the same loop with its accumulator left unforced — ends the evaluation rather than producing a
 # value, so `tryEval` holds it and no `didThrow` cell can observe it. It is an exit-code arm in
 # `ci/bench/stratify-forcing.sh`, beside the forced arm on the same input in the same invocation.
+#
+# ── THE SECOND SUITE: THE DRIVER'S NON-REFUSALS ──
+# The driver throws nowhere, and the two conditions one might expect it to refuse are handled
+# without a refusal between them. An item whose stratum the schedule never names is RETURNED, so
+# the cells for it assert a value and a `tryEval` that reports success — a regression to a throw
+# fails them rather than passing quietly as a caught error. Emission into an already-run stratum
+# has NO cell at all, and that is the finding rather than a gap: it is inexpressible in the derived
+# instance, because every emission edge strictly decreases the measure the stratum is drawn from,
+# so a cell for it could only ever pass. What stands in its place is structural and lives outside
+# the suite, as `git grep -cE 'throw' -- lib/stratify.nix` against a live control over
+# `lib/cascade.nix` in the same run — a cell cannot assert the absence of a construct in a file it
+# does not read, and reading its own library's source to count tokens is the purity scan's job.
 { genScope, ... }:
 let
   inherit (genScope) stratify;
@@ -75,6 +87,51 @@ let
     (item 2 0)
     (item 1 1)
   ];
+
+  label = i: "${toString i.stratum}.${toString i.index}";
+
+  # ── THE MIXED FIXTURE ──
+  # Three scheduled strata and two items placed outside them, one above the schedule's range and
+  # one below it. Both halves of the partition are asserted against literals: a cell reading only
+  # that `unrun` is non-empty passes on a driver that dropped everything into it.
+  mixed = stratify {
+    schedule = [
+      2
+      1
+      0
+    ];
+    inherit stratumOf within describe;
+    seed = [
+      (item 2 0)
+      (item 9 0)
+      (item 1 0)
+      (item 0 0)
+      (item (-1) 0)
+      (item 1 1)
+    ];
+    advance =
+      { stratum, items }:
+      {
+        settled = map label items;
+        emitted = [ ];
+      };
+  };
+
+  # The per-stratum record as the driver hands it over, read by the only party that receives it.
+  # `functionArgs` cannot answer this — the question is what the record HOLDS, not what a formal
+  # list declares — so `advance` reports the names it was given and the run carries them out.
+  advanceRecordNames = stratify {
+    schedule = [
+      1
+      0
+    ];
+    inherit stratumOf within describe;
+    seed = [ (item 1 0) ];
+    advance = record: {
+      settled = [ (builtins.attrNames record) ];
+      emitted = [ ];
+    };
+  };
 in
 {
   flake.tests.stratify = {
@@ -216,6 +273,87 @@ in
         "1.1"
         "1.2"
         "0.0"
+      ];
+    };
+  };
+
+  flake.tests.stratify-non-refusals = {
+    # ── THE LEFTOVERS ARE A VALUE, NOT A REFUSAL ──
+    # The `tryEval` wrapper is the arming: a driver that refused an unscheduled stratum would be
+    # caught here and report `success = false`, where a cell reading only the list would never run
+    # to see it. `deepSeq` is what makes the read reach the items rather than the list's head.
+    test-an-item-outside-the-schedule-is-returned-rather-than-thrown = {
+      expr =
+        let
+          attempt = builtins.tryEval (
+            let
+              leftovers = mixed.unrun;
+            in
+            builtins.deepSeq leftovers leftovers
+          );
+        in
+        {
+          inherit (attempt) success;
+          leftoversReported = attempt.success && length attempt.value > 0;
+        };
+      expected = {
+        success = true;
+        leftoversReported = true;
+      };
+    };
+
+    # Both halves against literals, because the partition is the claim: exactly the two items whose
+    # stratum the schedule never named are leftovers, and exactly the rest were run. Seed order is
+    # what orders the leftovers — they were never sorted, having never belonged to a stratum.
+    test-unrun-holds-exactly-the-items-the-schedule-never-named = {
+      expr = {
+        unrun = map label mixed.unrun;
+        inherit (mixed) settled strata;
+      };
+      expected = {
+        unrun = [
+          "9.0"
+          "-1.0"
+        ];
+        settled = [
+          "2.0"
+          "1.0"
+          "1.1"
+          "0.0"
+        ];
+        strata = 3;
+      };
+    };
+
+    # ── NO VIEW OF IN-FLIGHT STATE ──
+    # The record is the stratum and its items and nothing else. A third field answering "is X
+    # settled yet?" would be a membership predicate over the accumulator as it stands mid-run,
+    # which user code may negate — and a predicate that is antitone in an accumulator still being
+    # built makes the answer depend on when it was asked.
+    test-the-record-handed-to-advance-is-exactly-stratum-and-items = {
+      expr = advanceRecordNames.settled;
+      expected = [
+        [
+          "items"
+          "stratum"
+        ]
+        [
+          "items"
+          "stratum"
+        ]
+      ];
+    };
+    # Without this the cell above passes on an instrument that cannot see a third field at all.
+    test-control-an-extra-per-stratum-field-is-visible-to-the-same-instrument = {
+      expr = builtins.attrNames {
+        stratum = 0;
+        items = [ ];
+        frozen = { };
+      };
+      expected = [
+        "frozen"
+        "items"
+        "stratum"
       ];
     };
   };
