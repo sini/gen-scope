@@ -179,11 +179,19 @@ in
       );
       expected = true;
     };
-    # The chain cells rest on the fixture BEING four deep. `maxDepth + 1 = 5` is the theorem's
-    # antecedent, so a fixture that collapsed would make the count cell assert a coincidence.
-    test-control-the-chain-fixture-is-four-deep = {
-      expr = chainKinds.maxDepth;
-      expected = 4;
+    # The chain cells rest on the fixture's depth, and the two ways of saying it are one apart:
+    # FIVE levels `l0`…`l4`, `maxDepth` FOUR, so `maxDepth + 1 = 5` strata. Both numbers are
+    # asserted here because either one alone reads as the other's off-by-one, and the theorem's
+    # antecedent is the depth while the count cell's expected value is the level count.
+    test-control-the-chain-fixture-is-five-levels-of-max-depth-four = {
+      expr = {
+        maxDepth = chainKinds.maxDepth;
+        levels = builtins.length (builtins.attrNames chainKinds.depth);
+      };
+      expected = {
+        maxDepth = 4;
+        levels = 5;
+      };
     };
   };
 }

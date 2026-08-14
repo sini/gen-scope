@@ -93,6 +93,51 @@ let
     _reserved = [ "_path" ];
   };
 
+  # ── THE EMISSION HALVES OF THE SAME TWO ARMS ──
+  # `validate` is shared by intake and emission, but it is CALLED TWICE — once at intake and once
+  # per emitted sub-claim (`lib/cascade.nix:756` and `:805`). The two intake cells enter it at the
+  # first call site; the two below enter it at the second, and the messages are what tell them
+  # apart: a sub-claim's path is `[0,0]` and its refusal carries the emitting claim's own chain.
+  #
+  # ★ THE SECOND CALL SITE WAS UNREACHED BY ANY CELL, AND THAT IS MEASURED RATHER THAN SUPPOSED:
+  # deleting it outright left every cell in `#tests` green, because the intake cells only ever
+  # exercise the first, and the below-membership cell above refuses at a later line on a sub-claim
+  # that has already passed `validate` cleanly.
+  emitKinds =
+    bad:
+    mkKinds [
+      (mkKind {
+        name = "b";
+        resolve = _: _: { };
+      })
+      (mkKind {
+        name = "a";
+        below = [ "b" ];
+        resolve = _: _: { claims = [ bad ]; };
+      })
+    ];
+  runEmit =
+    bad:
+    resolveClaims {
+      kinds = emitKinds bad;
+      claims = [
+        (mkClaim {
+          kind = "a";
+          subject = subjA;
+        })
+      ];
+    };
+
+  # Hand-built for the same reason `handBuiltShadowingClaim` is: the constructor refuses a
+  # shadowing payload where the author writes it, so a fixture built with `mkClaim` would refuse
+  # INSIDE the resolver and report the emission arm as covered without entering it.
+  handBuiltShadowingEmission = {
+    _type = "gen-scope/claim";
+    kind = "b";
+    subject = subjA;
+    _reserved = [ "_path" ];
+  };
+
   # ── FRAGMENTS FOR THE FOLD PRECONDITIONS ──
   # Two fragments carrying functions, built as DISTINCT values: two literals share no value slot,
   # so the comparison between them is decided by structure and reaches the arm under test.
@@ -215,6 +260,27 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.resolveClaims: claim at path [0] (kind 'l') has a subject without id_hash (renders as 'no-identity')";
+      };
+    };
+    # The same two arms, entered from the emission site instead. Each message carries the emitting
+    # claim's chain, which is what says the refusal came from `:805` and not from `:756`.
+    test-emitted-reserved-payload-key-names-the-keys-and-the-emitter = {
+      expr = runEmit handBuiltShadowingEmission;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.resolveClaims: claim at path [0,0] (kind 'b', subject 'a-subject') shadows reserved payload key(s) [\"_path\"] (emitted by claim at path [0], kind 'a', subject 'a-subject')";
+      };
+    };
+    test-emitted-subject-without-identity-names-how-it-renders-and-the-emitter = {
+      expr = runEmit (mkClaim {
+        kind = "b";
+        subject = {
+          name = "no-id";
+        };
+      });
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.resolveClaims: claim at path [0,0] (kind 'b') has a subject without id_hash (renders as 'no-id') (emitted by claim at path [0], kind 'a', subject 'a-subject')";
       };
     };
 
