@@ -10,6 +10,8 @@ gen-scope is generic. It has no knowledge of NixOS, aspects, policies, or system
 
 Beside the evaluator it carries a second, independent concern: **the well-founded engine**, which computes the meaning of a rule program with negation (Van Gelder, Ross & Schlipf 1991) — including the third verdict, `UNDEFINED`, for the contested cycles a stratified semantics leaves without one. See [The well-founded engine](#the-well-founded-engine).
 
+It also carries the **staged minting entry**, which builds a scope graph rather than evaluating one: a fixed emitter list in, vertices under their own identifiers and one labelled edge per relatum out, each relatum resolved against the identities that strictly earlier passes settled. See [Staged minting](#staged-minting).
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -35,6 +37,12 @@ Beside the evaluator it carries a second, independent concern: **the well-founde
   - [Ceilings](#ceilings)
   - [The partition, the bound, and the warning the result carries](#the-partition-the-bound-and-the-warning-the-result-carries)
   - [The ordered fold](#the-ordered-fold)
+- [Staged minting](#staged-minting)
+  - [The three vocabularies](#the-three-vocabularies)
+  - [The identity key set](#the-identity-key-set)
+  - [A pass is a stratum, and the set it resolves against is frozen](#a-pass-is-a-stratum-and-the-set-it-resolves-against-is-frozen)
+  - [The two refusals](#the-two-refusals)
+  - [What the entry does not do](#what-the-entry-does-not-do)
 - [Performance](#performance)
 - [Testing](#testing)
 - [Theoretical Foundations](#theoretical-foundations)
@@ -75,9 +83,9 @@ The tree is not fixed. The `children` and `derived-children` attributes **synthe
 
 ## Usage
 
-gen-scope is **Class B**: nixpkgs-lib-free, depending on [gen-prelude](https://github.com/sini/gen-prelude) (pure, zero-input) and [gen-graph](https://github.com/sini/gen-graph). Both halves are pure list/attr combinators + builtins — no module system, no `nixpkgs.lib`. The flake exposes a single `.lib` value output.
+gen-scope is **Class B**: nixpkgs-lib-free, depending on [gen-prelude](https://github.com/sini/gen-prelude) (pure, zero-input), [gen-graph](https://github.com/sini/gen-graph) and [gen-schema](https://github.com/sini/gen-schema). Every concern here is pure list/attr combinators + builtins — no module system, no `nixpkgs.lib`, enforced by the `purity` suite over the library source. The flake exposes a single `.lib` value output.
 
-The gen-graph dependency is the **engine's**, not the evaluator's: the well-founded engine consumes that library's one published SCC-partition front door rather than carrying a second partitioner, because reverse reachability and the condensation are its concern.
+Neither of the two siblings is the evaluator's. The **gen-graph** dependency is the engine's: the well-founded engine consumes that library's one published SCC-partition front door rather than carrying a second partitioner, because reverse reachability and the condensation are its concern. The **gen-schema** dependency is [staged minting](#staged-minting)'s: that library is the identity authority's home, and the one function it supplies reaches the minting module by injection from `lib/default.nix` rather than by that module importing a library of its own. Both sibling declarations carry a `follows` collapsing the inputs they share with this one, because two instances of a library in one evaluation are two formulas for the same node.
 
 ```nix
 # flake.nix
@@ -88,7 +96,7 @@ The gen-graph dependency is the **engine's**, not the evaluator's: the well-foun
     in { /* ... */ };
 }
 
-# Or without flakes (both inputs auto-derived from the pinned flake.lock):
+# Or without flakes (all three inputs auto-derived from the pinned flake.lock):
 let engine = import ./gen-scope { };
 in { /* ... */ }
 ```
@@ -694,6 +702,66 @@ Contributions combine in the order they were **declared**, and the fold reads no
 
 A contribution whose gating atom is **UNDEFINED** is not admitted and is not dropped either: it comes back in `contested`. A gate that is FALSE is neither — it did not happen, which is a different fact from being undecided.
 
+## Staged minting
+
+A third concern, and the only one that **builds** a graph rather than reading one. `mintStrata` takes the emitters a program declared and returns the scope graph they describe: a node map keyed by identifier, one labelled edge per relatum, the number of strata the run walked, and the driver's leftover partition carried through.
+
+```nix
+mintStrata {
+  emitters;   # [ { pass; identifier; kind; relata; content; site; } ] — the fixed item set
+  kinds;      # the schema stratum's already-evaluated output
+}
+# → { nodes  = { <identifier> = { identity; kind; content; }; };
+#     edges  = [ { from; to; label; } ];   # one per relatum, carrying the identity's own label
+#     strata;                              # the number of distinct declared passes the run walked
+#     unrun; }                             # the driver's leftovers — empty on every run, by theorem
+```
+
+**Neither the identity authority nor a frozen set is an argument, and both absences are load-bearing.** `hashIdentity` is [gen-schema](https://github.com/sini/gen-schema)'s and reaches the minting module by injection from `lib/default.nix`, which is what makes the count of minting authorities a fact about the dataflow rather than a rule an author obeys (ADR-0016 ruling 5) — the module has no library of its own to reach for and no second derivation to drift. Identity is minted inside the evaluation doing the constructing, which is ADR-0014's **constructing** arm: a constructor taking an authority as a parameter owns the value it emits rather than borrowing it. The rejected arm of the same ruling is why nothing of gen-schema is re-exported under this library's name — re-exporting another library's value re-exports *its* build — so what the seam adds to the export surface is this entry and nothing else. A caller-supplied frozen set is absent for a different reason: it would be forgeable, and a forgeable frozen set is a rule authors must obey rather than a construction. Stratum 0 therefore resolves against `{ }`.
+
+### The three vocabularies
+
+ADR-0016 ruling 5 separates them and the entry never merges them:
+
+| Term | What it is |
+|---|---|
+| **identifier** | A string — the scope graph's own vertex name. It is what an emitter writes when it names a relatum, what keys the node map, and what an edge endpoint names. The root has one and has no identity. |
+| **identity** | The authority's output, `"<kind>:" + digest`. Minted once per identifier, by `hashIdentity` and by nothing here. |
+| **label** | A relatum's role in the relation. It keys the identity *and* is the token the incident edge carries, so choosing a label is choosing a traversal token. |
+
+### The identity key set
+
+**The keys are the relatum labels plus the node's own identifier**, under a reserved label, and the second half is forced rather than chosen. ADR-0016 ruling 4 gives the binding case whole — *a kind whose identity keys are its relatum labels and whose values are the relata's identities* — and the authority refuses a preimage with no keys by name. But **not every vertex of a scope graph is a binding**: an emitter with no relata is admissible, is most of a real emitter set, and under the relatum-labels-only reading has no identity to mint at all — while a relatum-free node that other emitters name must have one to resolve to. So some key is owed. Two readings are refused with their reasons, so neither is re-proposed:
+
+- **Key the content.** Refused because it is the one thing the staged construction forbids: a later pass contributes content to an already-minted identity, so an identity that moved when content arrived would re-mint on every contribution. Content-independence is exactly what lets two emitters of one relation reach one node.
+- **Key the kind alone.** Total, and refused on ADR-0016's own ground for the zero-relatum binding: it would collapse every relatum-free node of a kind onto one identity, which makes the identifier→identity map many-to-one and takes the information out of resolution — the map's whole job.
+
+The one property ruling 4 states about **values** is untouched: every relatum's value is that relatum's resolved identity and never its identifier, because hashing a relatum's declared name would make one node's identity a function of another's spelling.
+
+### A pass is a stratum, and the set it resolves against is frozen
+
+Apt, Blair & Walker (1988) build the standard model of a stratified program one stratum at a time, each closed before the next begins. A minting pass is that stratum: when pass N runs, every earlier pass has finished and the identities it settled are closed, and a relatum resolves against **that** set and no other. ADR-0016 ruling 7 is the consequence a reader feels — **a cycle among minted nodes is inexpressible**, because writing one would require a pass to see its own output. There is nothing to detect because there is nothing to express.
+
+The schedule is the **distinct declared passes, ascending** — not a range over the declared maximum and not a topological sort. A program declaring passes 0 and 1000000 runs two strata, not a million empty ones. `strata` is reported and compared against nothing.
+
+### The two refusals
+
+They are different in kind, and both are `throw`, so both are catchable — a refusal a caller cannot catch is a refusal no test can assert on.
+
+- **An identifier that does not resolve** is refused at **mint** time, naming the relatum, its label, the kind being minted and the emitting pass. Three failures reach it and they differ only in why the lookup missed: a same-pass relatum (not in the set, which holds strictly earlier passes only), the root (an identifier with no identity), and a name with no entry.
+- **Contributions that disagree** are refused at **merge** time, after minting has already succeeded, exactly as a module system refuses two conflicting definitions of one option. That message names the identity, the key and both emitters' sites — ordered by their own text rather than by the order the emitters arrived in, since within a pass there is no order and a message that moved under a permutation would stop being a property of the program.
+
+Within a pass there is no order at all (ADR-0022), so the only outcomes an unordered fold may have are agreement and refusal. Each emitter naming an identifier contributes an identity and a set of content keys, and both merge by one rule: identical collapses, conflicting refuses. Because the identity is a total function of the kind, the identifier and the resolved relata, agreement on the identity **is** agreement on the kind and the relata, so no separate check for either exists to drift.
+
+★ **The cross-pass arm of that rule is PROPOSED rather than settled, and a reader must not take it for ruled law.** A later pass naming an already-frozen identifier contributes content and never yields a second node — that half is settled, and where the contribution agrees or adds a key the behaviour is indistinguishable from same-pass agreement. What is not settled is a later pass **disagreeing** about a key an earlier pass had already settled. ADR-0016 leaves it open in its own words: two emitters of one identity yield one node with contributions from both, and how those contributions compose *is not settled here — that is the substrate's general content rule*. The entry refuses there **as a proposal pending that rule**. The argument for it, offered rather than asserted: the freeze ranges over membership while the map's values may be revisited, but a stratum's output is closed when the next begins and the standard model only ever grows, so a later pass *adding* a key is revision while a later pass *replacing* one is retraction — and retraction is what stratification exists to keep out of a fold. The argument against is equally available and is why this is not stated as law: pass order **is** contribution order, so a later contribution is an ordered one, and the module-system analogy admits a later definition winning. Whoever rules the general content rule rules this line, and if it goes the other way the change is the merge's disagreement branch and nothing else.
+
+### What the entry does not do
+
+- **It refuses nothing for being large.** No cap, no ceiling, no budget: the schedule is what the emitters declared and no number here refuses a program for its size. The frozen set is an attrset rather than a list of records because resolution is a membership test plus a lookup per relatum, and over a list that is a scan inside the pass loop — a cost argument, deliberately not a refusal.
+- **It does not rewire the kind cascade.** `resolveClaims` and the wiring surface run their own bounded loop over their own subject; nothing here calls them and nothing there calls this. The two are separate constructions that happen to share a library.
+- **It asks the graph nothing.** The `graph` formal reaches the module and stops — no line applies it. What the entry publishes is the graph's **content** as plain data; answering reachability and partition questions about a graph already built is a different phase's work, and the emptiness is what says the minting run asks none of them.
+- **It is not lazy in its result.** The whole result is forced before it is returned, and each stratum's output is forced in the round that produced it, so a refusal is a property of the **call** rather than of a consumer's reading pattern. A caller reading one field gets the same answer as a caller reading all of them.
+
 ## Performance
 
 | Operation | Cost | Memoized? |
@@ -717,7 +785,9 @@ cd ci && just ci eval                       # run one suite
 cd ci && just ci eval.test-basic-root-attribute  # run one test
 ```
 
-Requires nix-unit. **288 tests across 32 suites** (19 test files). The evaluator's: `eval`, `eval-debug`, `eval-debug-trace`, `eval-warm`, `build-nodes`, `graph`, `hoag`, `circular`, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `recorded-deps`, `structural`, and the six `plane-*` suites. The engine's: `engine-program`, `engine-least-model`, `engine-well-founded`, `engine-door`. The `purity` suite asserts the library source never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant.
+Requires nix-unit. **623 tests across 45 suites** (30 suite files under `ci/tests/`; two further files sit in `ci/tests/_fixtures/`, which the tree importer skips because their path contains `/_`). The evaluator's: `eval`, `eval-debug`, `eval-debug-trace`, `eval-warm`, `build-nodes`, `graph`, `hoag`, `circular`, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `recorded-deps`, `structural`, and the six `plane-*` suites. The engine's: `engine-program`, `engine-least-model`, `engine-well-founded`, `engine-door`. Staged minting's: `minting`, plus `stratify`, `stratify-non-refusals` and `stratum-aggregation` for the driver it runs on. Nine further suites — `folds`, `dedup` and the seven `cascade-*` — cover the fold vocabulary and the kind cascade. The `purity` suite asserts the library source never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant.
+
+A cell whose subject is a refusal **message** cannot live under `flake.tests`: the batch asserter behind `checks.default` quantifies over that option and forces every `expr` unconditionally, so a throwing one crashes the gate instead of failing a cell. Those cells have their own output — **34 tests across `cascade-refusals`, `folds-refusals` and `minting-refusals`**, run with `nix-unit --flake ./ci#testsError`. Both minting refusals are asserted there — each of the unresolved-relatum causes and the merge conflict against its own message text, anchored end to end rather than checked for being non-empty, so neither cell can be satisfied by the other's refusal.
 
 **Two things the suite structurally cannot host**, and both are read off exit codes instead:
 
@@ -745,7 +815,7 @@ A stack overflow is an abort rather than a throw, so `tryEval` does not contain 
 | Van Gelder, Ross & Schlipf (1991) "The well-founded semantics for general logic programs" | **Implements** | The well-founded partial model at the ATOM level; `UNDEFINED` as a named third verdict for contested atoms; totality on locally stratified programs |
 | Van Gelder (1993) "The alternating fixpoint of logic programs with negation" | **Implements** | The construction: `S(J) = lfp T_{P/J}` antimonotone, `S²` monotone, `W⁺ = lfp(S²)` from ∅, `S(W⁺)` the true-or-undefined set |
 | Gelfond & Lifschitz (1988) "The stable model semantics for logic programming" | **Partial** | The reduct `P/J` the alternating fixpoint iterates over. Stable-model EXISTENCE as the refusal oracle is adopted as the companion criterion and is **not built here** — no construction in this library decides it |
-| Apt, Blair & Walker (1988) "Towards a theory of declarative knowledge" | **Informed by** | Why the third value is needed at all: the stratified semantics admits positive cycles and leaves a cycle through a negative edge without a meaning |
+| Apt, Blair & Walker (1988) "Towards a theory of declarative knowledge" | **Informed by** | Two uses at one label. For the engine: why the third value is needed at all — the stratified semantics admits positive cycles and leaves a cycle through a negative edge without a meaning. For [staged minting](#staged-minting): the standard model of a stratified program is built one stratum at a time, each closed before the next begins, and a minting pass is that stratum — which is what makes a cycle among minted nodes inexpressible rather than detected. The correspondence taken is the closure of earlier strata, not the per-stratum fixpoint iteration |
 | van Emden & Kowalski (1976) "The semantics of predicate logic as a programming language" | **Implements** | `T_P` and its least fixpoint as the meaning of a definite program — what both `leastModel` arms compute over the reduct |
 | Tarjan (1972) / Fleischer, Hendrickson & Pınar (2000) | **Consumes** | Strongly connected components and the condensation, through gen-graph's published partition front door. Not re-implemented here: the engine reads the reported condensation depth and nothing else |
 | Acar et al. (2006) "Adaptive functional programming" | **Informed by** | Warm-cache incremental re-evaluation (`evalWarm`): reusing clean prior results and recomputing only dirty nodes; `recordedDeps` as the declared read-edge projection of a dynamic dependence graph |
