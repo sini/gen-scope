@@ -12,6 +12,8 @@ Beside the evaluator it carries a second, independent concern: **the well-founde
 
 It also carries the **staged minting entry**, which builds a scope graph rather than evaluating one: a fixed emitter list in, vertices under their own identifiers and one labelled edge per relatum out, each relatum resolved against the identities that strictly earlier passes settled. See [Staged minting](#staged-minting).
 
+And it carries a fourth concern, **the demand cascade**, which resolves a multiset of claims down a kind registry's depth measure: claims in, provisioned resources and published wiring out, with the record of how. See [The demand cascade](#the-demand-cascade).
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -43,6 +45,15 @@ It also carries the **staged minting entry**, which builds a scope graph rather 
   - [A pass is a stratum, and the set it resolves against is frozen](#a-pass-is-a-stratum-and-the-set-it-resolves-against-is-frozen)
   - [The two refusals](#the-two-refusals)
   - [What the entry does not do](#what-the-entry-does-not-do)
+- [The demand cascade](#the-demand-cascade)
+  - [The registry, and what registration decides](#the-registry-and-what-registration-decides)
+  - [The claim](#the-claim)
+  - [The schedule is the measure](#the-schedule-is-the-measure)
+  - [What the result is total on](#what-the-result-is-total-on)
+  - [The trace](#the-trace)
+  - [What the registry does not establish](#what-the-registry-does-not-establish)
+- [The fold vocabulary](#the-fold-vocabulary)
+- [The stratification driver](#the-stratification-driver)
 - [Performance](#performance)
 - [Testing](#testing)
 - [Theoretical Foundations](#theoretical-foundations)
@@ -762,6 +773,176 @@ Within a pass there is no order at all (ADR-0022), so the only outcomes an unord
 - **It asks the graph nothing.** The `graph` formal reaches the module and stops — no line applies it. What the entry publishes is the graph's **content** as plain data; answering reachability and partition questions about a graph already built is a different phase's work, and the emptiness is what says the minting run asks none of them.
 - **It is not lazy in its result.** The whole result is forced before it is returned, and each stratum's output is forced in the round that produced it, so a refusal is a property of the **call** rather than of a consumer's reading pattern. A caller reading one field gets the same answer as a caller reading all of them.
 
+## The demand cascade
+
+A fourth concern, and the second stratified one. A **claim** is something an author asks for and a resolver satisfies; a **kind** says how a claim of that sort is resolved and what it may ask for in turn. `resolveClaims` runs the claim multiset down the kind registry's depth measure and returns what was provisioned, what was wired, and the record of how.
+
+The word "demand" here means demand-driven evaluation and it means only that. The request value is named for what it is.
+
+```nix
+resolveClaims {
+  kinds;        # a registry from `mkKinds`, or the raw kinds to build one from
+  claims;       # [ claim ] — a list, order significant
+  ctx ? { };    # the caller's constant context, handed to every resolver unchanged
+}
+# → { resources = { <kindName> = { <resourceKey> = value; }; };
+#     wiring    = { <id_hash> = { subject; byKind; entries; }; };
+#     unrun     = [ instance ];   # what the loop created and did not settle
+#     trace     = { claims; resources; wiring; }; }
+```
+
+**This construction imports one module of the library and only one.** `lib/cascade.nix` takes `forceFields` — the round-loop forcing — from `lib/least-model.nix`, which is the module staged minting takes it from as well, rather than either of them writing a second copy of a discipline that agrees only for as long as someone keeps two copies in step. Nothing else of the evaluator, the engine or staged minting is reached from here, and nothing there reaches this: the cascade is handed `{ prelude, graph }` and no more.
+
+### The registry, and what registration decides
+
+`mkKind` builds one kind record; `mkKinds` validates a whole collection — a list or an attribute set — and publishes the per-kind `depth` measure with its maximum.
+
+```nix
+mkKind {
+  name;              # a string; the registry's key and the claim's `kind`
+  below ? [ ];       # kind NAMES this kind's resolver may emit sub-claims of
+  resolve;           # applied to the resolver view and then to `ctx`; returns a record whose
+                     #   `resources` (a set), `wiring` (a set or a list) and `claims` (a list)
+                     #   are each optional
+  dedupKey ? null;   # groups claimants; required together with `fold`
+  fold ? null;       # merges a group's resource fragments; required together with `dedupKey`
+}
+```
+
+**`dedupKey` and `fold` are refused apart.** Grouping and merging are only meaningful together, so the pairing is a registration-time error rather than a resolution-time surprise.
+
+**The depth measure and the acyclicity verdict are one read, and the read is not this library's.** Both come out of [gen-graph](https://github.com/sini/gen-graph)'s cone-rank surface, over the relation the registry already describes. Nothing here re-implements the recurrence, and the reason is a cost fact rather than a preference: a plain per-node recursion over `below` never consults the map it is building, so a node reachable by several paths is re-expanded once per path and the walk is exponential on a shared producer. A cyclic `below` relation has no producers-first rank and the surface refuses it BY NAME rather than answering, so acyclicity is not a guard bolted onto the registry — it is what asking for the measure already costs. The ranked record is forced as the registry is built, which is what makes a cyclic set refuse where it is DEFINED and not where some later reader happens to touch a field.
+
+Only the measure is consumed. The surface publishes a linearisation beside its depth map and this construction reads the map alone: two topological linearisations of one relation can differ element for element and both be correct, so a consumer reading one has taken on a cross-library contract about which valid answer it gets. The depth map carries no such freedom — it is a function of the relation, identical under any tie-break.
+
+**An unregistered `below` name is refused by the registry itself, and the refusal DOMINATES the measure.** The rank surface restricts each node's producers to the cone it was handed, so an edge naming something unregistered is not an error there — it is ABSENT, and the node reports as a leaf at depth 0 with no diagnostic. That is a silent wrong answer. It is not enough for the check merely to exist, either: this is a lazy language and sibling bindings have no evaluation order, so a check bound beside the measure is one a reader can step around. The record carrying the measure is therefore constructed only inside the branch the refusal falls through to.
+
+**The registry validates its own intake and does not delegate that to the constructor.** `mkKind` refuses a non-string `name` and a `below` that is not a list of them, at the construction site where the author is. That is not enough on its own, because `mkKinds` receives whatever a caller hands it and a record that never passed through `mkKind` carries none of those guarantees. A precondition a function's OWN evaluation depends on cannot be delegated to a constructor its input may not have visited.
+
+### The claim
+
+```nix
+mkClaim {
+  kind;        # a kind record, or a kind NAME
+  subject;     # the thing claimed about; needs a string `id_hash`
+  # …payload   # everything else, passed through to the resolver
+}
+```
+
+The payload is what remains after `kind` and `subject` are taken out, and it may not shadow the engine's own field names — `_type`, `_path`, `_reserved`. A payload claiming one of those is claiming a channel already spoken for, and letting it win would mean a resolver reading an engine field an author wrote. `kind` and `subject` are reserved too and are NOT in that list, because they are not shadowable: an author writing `kind` has SET the kind rather than shadowed it, and a check over a domain two of whose members no input can reach reads as coverage it does not have.
+
+The kind is canonicalized in the refusal chain's condition rather than bound as a field of the record returned. A record is already in weak head normal form before any of its fields is looked at, so a malformed kind bound as a field is a refusal that TRAVELS — firing wherever something finally forces that field, arbitrarily far from the site an author can fix.
+
+**A resolver sees the claim's own fields plus `_path`, and `ctx`.** It receives no resolved state at all: no resources, no wiring, no trace, no partial view of the run. This is the emission ⊥ consumption invariant of the claim/provide design — what a resolver EMITS and what it CONSUMES are separated by the schedule rather than by a discipline an author keeps, so no resolver's answer can depend on where in a stratum it ran. The engine's bookkeeping channel is stripped; everything else the claim carries, including its type marker, is passed through, and that list is the whole of it.
+
+### The schedule is the measure
+
+The run visits strata in DESCENDING depth, `[ maxDepth … 0 ]`, because a kind at depth `d` emits only into strictly smaller depths: here EARLIER means LARGER. That list is consecutive integers read straight off the measure — no sort, no ties, no tie-break — so a claim's position in the run is a function of the relation and not of which valid answer an ordering algorithm happened to return.
+
+The schedule's LENGTH is the loop's bound, and it is a theorem rather than a budget. `depth k = 0` where `k` has no registered successor, else `1 + max { depth b : b ∈ below(k) registered }`; every `below` edge to a registered name therefore strictly decreases it, and a strictly decreasing natural-number measure exhausts in `maxDepth + 1` rounds by Noetherian induction on ℕ. Nothing here tests for convergence and nothing here caps the iteration.
+
+**Completeness is what stratification buys, and it is not a visibility rule.** When a stratum runs, every stratum earlier in the schedule has finished: its claims are resolved and its fact set is closed. That is what makes the per-stratum dedup fold over a kind's resource fragments meaningful, and it is the classical reason aggregation demands stratification. Apt, Blair & Walker (1988) stratify a program so that a relation occurring POSITIVELY in a stratum is defined within that stratum or below and one occurring NEGATIVELY strictly below (Definition 3, printed p. 96); the invariant that buys is the standard model built stratum by stratum, `M_i = T_{P_i}↑ω(M_{i-1})` (printed p. 108). Strictly-lower indexing is their rule for the NEGATIVE case and a sufficient condition for completeness, not the property itself — and this cascade has no negation anywhere, so what it takes from the construction is completeness alone. A resolver may read anything the caller handed it. If a negated read is ever added here, their second clause acquires a subject and the strictly-lower rule applies to it; that would be a change to this construction rather than something it absorbs quietly.
+
+**A backward or same-stratum emission is not detected, because it cannot be written.** A sub-claim's kind must be a registered member of the emitting kind's `below` set, and every such member has strictly smaller depth hence a strictly later position in the schedule. There is no check to meet or miss.
+
+### What the result is total on
+
+`resources` carries an entry for every REGISTERED kind and `wiring` a key for every subject a claim was ABOUT — empty ones included. So a consumer reading past a missing key learns something definite: the key was never registered, rather than registered and quiet. The alternative makes "no claims of this kind" and "no such kind" the same observation, and nothing else in the result carries that difference.
+
+That totality has to be READ by testing the key and not by defaulting it. Reading `wiring.${id}.entries` bare aborts on an unregistered subject with an interpreter error no `tryEval` contains. Defaulting the record with a shape that carries the field — `(wiring.${id} or { entries = [ ]; }).entries` — answers `[ ]` for BOTH cases and re-creates one call outward the very erasure the totality exists to rule out. Defaulting it with a bare `{ }` does not even reach that point: `{ }.entries` is the same uncatchable missing-attribute abort as the bare read, so it is not the milder of the two wrong reads. `if wiring ? ${id} then … else …` keeps both.
+
+**`unrun` is what the LOOP did not settle**, and that is not the same as an unscheduled stratum. The registry handed in may be a record the run did not build: the kind-set marker answers PROVENANCE for a cooperative caller and does not establish that `depth` and `maxDepth` are the measure of the `kinds` beside them. Nothing here can check that, and refusing every record that merely carries the token would remove the pass-through the run exists to offer. So "not settled" is reported as the difference between the claims the loop created and the claims it resolved — never as stratum membership in the schedule, which would be a PROXY: equivalent only while the depth map really is the rank of the relation, and wrong in exactly the case that cannot be checked. Under such a registry a claim could go unresolved while the proxy called it scheduled, and its kind would report an empty entry, indistinguishable from a kind nobody claimed.
+
+A claim the run did not settle is RETURNED, never thrown. Over a registry this library built the list is always empty — the measure is total on the registered names and the schedule enumerates its whole range — so `unrun` is a fact the caller can read rather than a coincidence they have to trust.
+
+### The trace
+
+Each resource key maps to the claims that produced it, each wiring entry to the claim that emitted it, and each claim to its parent chain, in global schedule order. This is why/derivation provenance in the sense of Cheney, Chiticariu & Tan (2009).
+
+★ **The Green–Karvounarakis–Tannen provenance SEMIRING — annotations carrying a `(+, ×)` algebra that composes under the query operators — is deliberately NOT realized here and is not planned.** These traces are records about a run, not algebraic values, and nothing in this library computes with them. The rider is part of the citation and travels with it, because a provenance citation arriving on its own reads as a claim that the receiving library implements the semiring algebra, which it does not and will not.
+
+### What the registry does not establish
+
+Written down rather than left for the next construction to discover, because the next construction is what builds on it. `resolve`, `dedupKey` and `fold` are PRESENT on anything that registers, and each is APPLICABLE — a function, or an attribute set this evaluator applies. Applicability is decided one `__functor` level deep and no further: the chain has no bound and can refer to itself, so a predicate that followed it would diverge deciding it, and a depth ceiling would be a number nobody can justify. The approximation errs toward refusing working input rather than admitting input that aborts.
+
+Past the point of application the line is drawn where a check stops being POSSIBLE rather than where it stops being convenient:
+
+- **Arity is not checked, and it is not checkable.** A resolver taking one argument is applicable, is applied, returns a value, and that value is then applied again — failing with the same uncatchable type error a non-function does. This language offers no predicate that decides how many arguments a value will accept. ★ It is the one member of the uncatchable class left open, and it is left open knowingly.
+- **What a resolver's answer CONTAINS is unconstrained.** Whether a resource fragment is plain data or a function is not a property established anywhere in this library, and a consumer needing it must obtain it elsewhere. The answer's own SHAPE is not left open and never was: the record itself and the three containers the run reads off it — `resources` a set, `wiring` a set or a list, `claims` a list — are decided where the resolver returns, and the answer is forced through one binding so no path reaches a field without that decision. ★ The record itself is the WORSE half of that check. A resolver returning a list, a number or null is a type error nowhere, because every field is read through an `or` default: all three defaults fire and the claim contributes nothing, silently and byte-identically to a resolver that returned an empty set on purpose. Checking only the loud half would leave the quiet one exactly as it was.
+- **What a `dedupKey` RETURNS is checked, but at application** — a non-string grouping key is a named refusal carrying the kind and the path, which is where the value first exists.
+
+And the marker's limit is the scope of every completeness claim above. The intake is total on the shapes an ordinary caller can reach; it is not total against a caller who writes the constructor's token by hand.
+
+## The fold vocabulary
+
+The vocabulary an aggregation is written in, under ONE signature: `key: [v]: v`.
+
+```nix
+folds.same        # key -> [v] -> v        all fragments agree; returns the first
+folds.one         # key -> [v] -> v        exactly one contributor
+folds.list        # key -> [v] -> [v]      the fragments, in pinned order
+folds.mergeAttrs  # key -> [attrs] -> attrs   shallow merge; disjoint sub-keys required
+folds.byKey       # spec -> key -> [attrs] -> attrs   a fold CONSTRUCTOR (see below)
+```
+
+The same shape serves both consumers, and BOTH are caller-side: a kind's resource `fold`, where `key` is the resource key and the fragments are what the claimants of one dedup group contributed under it, and a caller's own wiring-splice combine, where `key` is the top-level wiring key. A fold written for either is usable at the other, and neither consumer has a vocabulary of its own. The library publishes no splice entry point of its own — `spliceWiring` retired, and `ci/tests/_fixtures/consumer.nix` carries the worked form a caller assembles from the published `entries`.
+
+**It is a value algebra, which is why it is a module and not a section.** Nothing here knows about kinds, claims, strata or the run that schedules them. A fold is handed a key and a list and returns the one value that stands for the list. Two independent consumers reach it and neither is a `lib/` module: the cascade names it nowhere, and a kind's fold arrives as a FIELD on the kind, so the vocabulary reaches a run as the author's data rather than as an import.
+
+**What aggregation rests on is guaranteed by the caller's schedule, not here.** An aggregate is meaningful over a COMPLETE fact set: Apt, Blair & Walker (1988) build a stratified program's standard model stratum by stratum, `M_i = T_{P_i}↑ω(M_{i-1})` (printed p. 108), each stratum reaching its own fixed point before the next begins. ★ And nothing in this module enforces it, which is the point of saying so here. These are total functions of the list they are handed; no fold can tell a closed fact set from a prefix of one, and a fold applied to a prefix returns a confident answer about the prefix. The cascade folds a kind's fragments only once that kind's stratum has finished, so a consumer that folds outside such a schedule has not weakened a check here — it has stepped outside the only thing that made the answer mean what it reads as.
+
+**Order and arity.** Fragments arrive in the caller's pinned order and are never reordered or silently deduplicated; a fold wanting a canonical order imposes one itself. Every fold handles a one-element list, because a kind's fold is applied to singleton groups too: a group of one is still a group, and skipping the fold for it would make an aggregate's SHAPE depend on how many claimants there happened to be.
+
+**Every fold refuses its precondition by name, and decides its KEY first.** The alternative to refusing by name is not a milder failure but a worse one — an evaluator type error, or a `toJSON` that cannot render what it was asked to. Neither is a value: `tryEval` holds neither, so what surfaces terminates the evaluation carrying no fold, no key and no fragment position. The key check runs at every fold including `list`, which raises nothing to interpolate, because the signature belongs to the VOCABULARY rather than to its members: a fold that quietly accepted what the others refuse would make the one contract a caller is given untrue at the member they happened to pick.
+
+★ **Every refusal that reaches a FRAGMENT names the key; the key check itself names the fold and the type it got instead.** That asymmetry is the point rather than an omission: a key that cannot be rendered is exactly the case where naming it is what would kill the evaluation, so the one refusal that cannot interpolate the key is the refusal about the key.
+
+**`same`'s guard is a precondition of the comparison, not a repair of its diagnostic.** Nix's `==` is not an equivalence relation over values containing functions — it is not even reflexive there. A lambda reached through two evaluations compares FALSE against itself, while the same value slot compared with itself is TRUE by pointer identity. So over function-bearing fragments the fold would not answer "do these agree"; it would answer "did these arrive as one value slot", which is a fact about how the caller built the list. A PATH compares perfectly well and cannot be REPORTED: `toJSON` on a path that is not there aborts uncatchably, and on one that IS there it copies the caller's path into the store and renders the store path it just created. Both are refused where they sit, by a scan that descends into attribute sets and lists and skips only a value carrying the derivation marker, an `outPath`, and an `outPath` that is a STRING — deliberately not nixpkgs' `isDerivation`, which tests the marker alone and is a different predicate wearing a name close enough to be mistaken for this one.
+
+★ The path arm is refused **even when the fragments AGREE** and no conflict message would ever have been built. The fold could have returned those; it does not, because the alternative is a precondition that holds only until two fragments differ — and a fold whose safety depends on its inputs agreeing has no precondition at all.
+
+**`byKey` is a fold CONSTRUCTOR.** Each top-level fragment key `k` is folded by its own named sub-fold `spec.${k}`, under the diagnostic sub-key `<key>.<k>`. Fragments not defining `k` are skipped and pinned order is preserved among those that do. A fragment key the spec does not declare is a loud error — an undeclared key has no merge rule, and admitting it would mean picking one. It declares ONE level of nesting, which is the stock answer to "a shared resource with a per-claimant sub-entry"; deeper nesting is another `byKey` in the spec, written by the caller who knows the shape.
+
+## The stratification driver
+
+A schedule of strata walked once each, taking the instance's own stratum assignment as a parameter. It has one instance: **staged minting** applies it. The demand cascade, which is stratified the same way, does not go through this driver — it runs its own bounded loop over its own subject, and the two are separate constructions that happen to share a library.
+
+The driver knows nothing about what an item is. Demands, kinds, minting and nodes occur nowhere in its code — they appear in its commentary and nowhere below it — and it imports nothing but the prelude's list primitives and the round-loop forcing it is handed.
+
+```nix
+stratify {
+  schedule;    # the run order — the stratum universe, walked once each
+  stratumOf;   # item -> stratum
+  within;      # the order inside one stratum
+  seed;        # the starting item set
+  advance;     # { stratum, items } -> { emitted; settled; }
+  describe;    # item -> a name for it (see below)
+}
+# → { settled;   # every stratum's settled output, in global schedule order
+#     unrun;     # the items whose stratum the schedule never named
+#     strata; }  # how many strata ran
+```
+
+A stratum's items are selected from everything seen so far — the seed plus what earlier strata emitted — which is what makes cross-stratum emission the mechanism it is rather than a special case: an item emitted into a stratum that has not run yet is simply there when that stratum's turn comes. The global order is stratum-major with `within` inside, as the composition of the two rather than a re-sort of the result.
+
+**What stratification buys is completeness.** Apt, Blair & Walker (1988) build their standard model stratum by stratum — `M₁ = T_{P₁}↑ω(∅)`, `M_i = T_{P_i}↑ω(M_{i-1})`, `M_P = M_n` (printed p. 108) — and the content of that construction is that each stratum reaches its own fixed point before the next begins, which is the classical reason aggregation demands stratification, since a fold over a set still being added to answers about a prefix. This loop guarantees exactly that and nothing more.
+
+★ **What is deliberately not here is a VISIBILITY RULE.** Their strictly-lower indexing (Definition 3, printed p. 96) governs a relation symbol occurring NEGATIVELY; a symbol occurring positively has its definition within `⋃_{j ≤ i} P_j` — the same stratum included. In their own gloss, each stratum defines new relations in terms of itself only positively and in terms of the relations from the previous strata, possibly negatively. So strictly-below is a conservative SUFFICIENT CONDITION for a negated read to be sound, not the property stratification delivers, and a driver enforcing it would be stricter than the theorem and would refuse programs the theorem admits. This one imposes no restriction on what an instance may read and hands out no frozen set. An instance that acquires a negated read acquires their clause 2 with it, and that is a change to this file rather than something it absorbs silently.
+
+**`describe` reaches this file and stops.** It is never handed to `advance`, appears in no field of the result, and no line applies it: it is a declaration in the signature with no runtime role here. What it declares is that an instance placing items in strata owes a way to name one, and the live consumer of that obligation is the cascade's `emittedBy`, which writes the site into the instance's own refusals. It is required to be TOTAL — a description that throws on a malformed item turns a caller's diagnostic into an abort — and that totality is the instance's obligation, checked nowhere here, because checking it would be a refusal.
+
+**The bound is a theorem about the measure, and nothing here ceilings it.** The loop runs once per element of `schedule`, and `schedule` is the stratum universe derived from the instance's own well-founded measure. Termination is Noetherian induction on that measure: an instance whose edges strictly decrease it has a finite stratum universe, and the loop visits each member once. No number here bounds a cost, nothing is refused for being large, and `strata` is reported rather than compared against anything. A ceiling would be the other thing — a number chosen to bound cost, which makes cost into correctness and constrains what a caller may express.
+
+**The walk is a fold, and every accumulator field is forced per round.** Nix does not reuse the frame of a call in tail position, so a recursive walk's descent depth is its iteration count and past the call-depth guard it aborts — an abort `tryEval` does not contain. The forcing is derived from the accumulator's own fields, so a field added later is forced without anyone re-applying the discipline.
+
+★ **That discipline reaches the accumulator's FIELDS and stops there, and the difference is an instance's to know.** Each field is forced to weak head normal form once per round, which for a list field means the spine and NOT the elements. So a refusal written as `settled = throw …` ends the run at that round, even for a caller who only reads `unrun`; a refusal written as an ELEMENT of that list — `settled = [ (throw …) ]` — survives the whole run and fires only when some consumer forces the element, which may be never. An instance whose refusals must fire when they are provoked owes itself that forcing; nothing here can supply it, because forcing an instance's values to a depth it did not ask for is an evaluation policy and not a loop invariant.
+
+**No refusals live here.** The driver throws nowhere. An item whose stratum the schedule does not name is RETURNED as `unrun` — nothing vanishes, nothing is refused, and the caller reads a fact instead of catching one. Emission into an already-run stratum is not detected either, because in the instances this serves it is inexpressible: a well-founded measure that strictly decreases across an emission edge leaves no such emission for an author to write. Any refusal an instance needs is the instance's own and rides on top of this one.
+
+★ **One refusal IS reachable here and it is the evaluator's**, which is outside what "throws nowhere" claims. The argument record is a strict pattern, so a caller supplying a seventh field is refused at application — `function 'stratify' called with unexpected argument '…'`, naming the function and the field — and a missing field is refused the same way. It is NAMED and it is UNCATCHABLE: `tryEval` reports `false` for a thrown value and does not contain this one at all, so a caller cannot recover from it and no cell can observe it.
+
+**One structural precondition on `schedule`, named because nothing else names it: its members must be DISTINCT.** A stratum appearing twice is walked twice, and the second visit re-selects the same items and settles them again — the loop asks membership questions and never asks whether it has been here before. Both derived instances exclude it by construction rather than by check — the cascade's schedule is consecutive integers from a depth measure, and the minting instance's is the declared passes deduplicated before ordering. A caller whose schedule is neither owes the distinctness itself.
+
 ## Performance
 
 | Operation | Cost | Memoized? |
@@ -785,7 +966,7 @@ cd ci && just ci eval                       # run one suite
 cd ci && just ci eval.test-basic-root-attribute  # run one test
 ```
 
-Requires nix-unit. **647 tests across 47 suites** (32 suite files under `ci/tests/`; five further files sit in `ci/tests/_fixtures/`, which the tree importer does not import: the five files contribute no suite, and 47 suites come from the 32 files outside that directory). The evaluator's: `eval`, `eval-debug`, `eval-debug-trace`, `eval-warm`, `build-nodes`, `graph`, `hoag`, `circular`, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `recorded-deps`, `structural`, and the six `plane-*` suites. The engine's: `engine-program`, `engine-least-model`, `engine-well-founded`, `engine-door`. Staged minting's: `minting`, plus `stratify`, `stratify-non-refusals` and `stratum-aggregation` for the driver it runs on. Nine further suites — `folds`, `dedup` and the seven `cascade-*` — cover the fold vocabulary and the kind cascade. `fold-equations` covers the cold fold's seal, its entry-time forcing of the schedule and its collision guard; `merge-surface` covers the assembly's refusal over module sets it builds itself, since the real module set has no duplicate to refuse. The `purity` suite asserts the library source never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant — and asserts the instrument that says so, since a scan reports "clean" just as loudly when it is dead: the detector is exercised over the real source list with a planted tether appended; the source list is pinned along both of its axes, membership as a written-down label list rather than as a count and content against a token the library really carries at the labels where it really occurs; and the recursive descent is run against a fixture tree nested on purpose, `lib/` being flat.
+Requires nix-unit. **647 tests across 47 suites** (32 suite files under `ci/tests/`; five further files sit in `ci/tests/_fixtures/`, which the tree importer does not import: the five files contribute no suite, and 47 suites come from the 32 files outside that directory). The evaluator's: `eval`, `eval-debug`, `eval-debug-trace`, `eval-warm`, `build-nodes`, `graph`, `hoag`, `circular`, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `recorded-deps`, `structural`, and the six `plane-*` suites. The engine's: `engine-program`, `engine-least-model`, `engine-well-founded`, `engine-door`. Staged minting's: `minting`, plus `stratify`, `stratify-non-refusals` and `stratum-aggregation` for the driver it runs on. Nine further suites cover the fold vocabulary and the kind cascade. `folds` covers what each fold is defined over and what it refuses when handed something else; `dedup` (the suite `ci/tests/cascade-dedup.nix` declares, which is why its name carries no prefix) covers grouping as a pure function of a claim's own fields, fragments reaching a fold in pinned schedule order, and a singleton group still passing through. The seven `cascade-*`: `cascade-kinds` covers the registry — what the measure is, what registration refuses, and in what ORDER; `cascade-claims` covers the run — what a resolver is handed, what the constructor refuses and when, and what the result says about things that produced nothing; `cascade-termination` covers quiescence, a `below` relation of depth `d` resolving in exactly `d+1` strata, and the refusal chain guarding emission as well as intake; `cascade-determinism` covers purity — repeated evaluation byte-identical, claim order significant, and no value manufactured by the engine; `cascade-provenance` covers the trace — every parent chain reaching a root, every artifact mapping to a contributing path, and the global order being stratum-major rather than path-lexicographic; `cascade-helpers` covers the consumer side of the published wiring and the splice a caller assembles from it; and `cascade-instance-k8s` is the end-to-end golden, the only suite that reads the composite stratum's own artifacts. `fold-equations` covers the cold fold's seal, its entry-time forcing of the schedule and its collision guard; `merge-surface` covers the assembly's refusal over module sets it builds itself, since the real module set has no duplicate to refuse. The `purity` suite asserts the library source never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant — and asserts the instrument that says so, since a scan reports "clean" just as loudly when it is dead: the detector is exercised over the real source list with a planted tether appended; the source list is pinned along both of its axes, membership as a written-down label list rather than as a count and content against a token the library really carries at the labels where it really occurs; and the recursive descent is run against a fixture tree nested on purpose, `lib/` being flat.
 
 A cell whose subject is a refusal **message** cannot live under `flake.tests`: the batch asserter behind `checks.default` quantifies over that option and forces every `expr` unconditionally, so a throwing one crashes the gate instead of failing a cell. Those cells have their own output — **35 tests across `cascade-refusals`, `folds-refusals`, `minting-refusals` and `assembly-refusal`**, run with `nix-unit --flake ./ci#testsError`. Both minting refusals are asserted there — each of the unresolved-relatum causes and the merge conflict against its own message text, anchored end to end rather than checked for being non-empty, so neither cell can be satisfied by the other's refusal.
 
@@ -815,7 +996,7 @@ A stack overflow is an abort rather than a throw, so `tryEval` does not contain 
 | Van Gelder, Ross & Schlipf (1991) "The well-founded semantics for general logic programs" | **Implements** | The well-founded partial model at the ATOM level; `UNDEFINED` as a named third verdict for contested atoms; totality on locally stratified programs |
 | Van Gelder (1993) "The alternating fixpoint of logic programs with negation" | **Implements** | The construction: `S(J) = lfp T_{P/J}` antimonotone, `S²` monotone, `W⁺ = lfp(S²)` from ∅, `S(W⁺)` the true-or-undefined set |
 | Gelfond & Lifschitz (1988) "The stable model semantics for logic programming" | **Partial** | The reduct `P/J` the alternating fixpoint iterates over. Stable-model EXISTENCE as the refusal oracle is adopted as the companion criterion and is **not built here** — no construction in this library decides it |
-| Apt, Blair & Walker (1988) "Towards a theory of declarative knowledge" | **Informed by** | Two uses at one label. For the engine: why the third value is needed at all — the stratified semantics admits positive cycles and leaves a cycle through a negative edge without a meaning. For [staged minting](#staged-minting): the standard model of a stratified program is built one stratum at a time, each closed before the next begins, and a minting pass is that stratum — which is what makes a cycle among minted nodes inexpressible rather than detected. The correspondence taken is the closure of earlier strata, not the per-stratum fixpoint iteration |
+| Apt, Blair & Walker (1988) "Towards a theory of declarative knowledge" | **Informed by** | Five uses at one label. For the engine: why the third value is needed at all — the stratified semantics admits positive cycles and leaves a cycle through a negative edge without a meaning. For [staged minting](#staged-minting): the standard model of a stratified program is built one stratum at a time, each closed before the next begins, and a minting pass is that stratum — which is what makes a cycle among minted nodes inexpressible rather than detected; the correspondence taken there is the closure of earlier strata, not the per-stratum fixpoint iteration. For [the demand cascade](#the-demand-cascade): completeness alone — that construction has no negation anywhere, so the strictly-lower indexing of Definition 3, which governs the negative case, is deliberately not imposed on it. For [the fold vocabulary](#the-fold-vocabulary): the same completeness, as the CALLER's precondition, which no fold enforces. For [the stratification driver](#the-stratification-driver): the stratum-by-stratum model as what its loop guarantees and the whole of what it guarantees |
 | van Emden & Kowalski (1976) "The semantics of predicate logic as a programming language" | **Implements** | `T_P` and its least fixpoint as the meaning of a definite program — what both `leastModel` arms compute over the reduct |
 | Tarjan (1972) / Fleischer, Hendrickson & Pınar (2000) | **Consumes** | Strongly connected components and the condensation, through gen-graph's published partition front door. Not re-implemented here: the engine reads the reported condensation depth and nothing else |
 | Acar et al. (2006) "Adaptive functional programming" | **Informed by** | Warm-cache incremental re-evaluation (`evalWarm`): reusing clean prior results and recomputing only dirty nodes; `recordedDeps` as the declared read-edge projection of a dynamic dependence graph |
