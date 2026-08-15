@@ -252,7 +252,7 @@ in
   };
 
   config.flake.testsError.cascade-refusals = {
-    # ── THE FOUR ARMS OF THE CLAIM CHAIN, EACH BY ITS OWN TEXT ──
+    # ── THE FIVE ARMS OF THE CLAIM CHAIN, EACH BY ITS OWN TEXT ──
     test-value-that-is-not-a-claim-names-the-constructor = {
       expr = run [
         {
@@ -263,6 +263,25 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.resolveClaims: value at path [0] is not a claim (build it with `mkClaim`)";
+      };
+    };
+    # A `kind` that is not a string is refused BEFORE the registry lookup, and the message says
+    # which type arrived: the lookup would otherwise index an attribute set by a list and end the
+    # evaluation in the evaluator's words rather than the library's. Hand-built, because `mkClaim`
+    # canonicalizes the field and refuses there — a fixture built with the constructor would never
+    # reach this arm.
+    test-a-kind-that-is-not-a-string-is-named-before-the-lookup = {
+      expr = run [
+        {
+          _type = "gen-scope/claim";
+          kind = [ 1 ];
+          subject = subjA;
+          _reserved = [ ];
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.resolveClaims: claim at path [0] carries a `kind` that is a list rather than a string";
       };
     };
     test-unknown-kind-names-the-kind-and-the-path = {
@@ -320,7 +339,7 @@ in
       };
     };
 
-    # ── THE CASCADE'S OWN REFUSAL, WHICH MUST NOT READ LIKE ANY OF THE FOUR ──
+    # ── THE CASCADE'S OWN REFUSAL, WHICH MUST NOT READ LIKE ANY OF THE FIVE ──
     # It names the emitting kind, the path and the `below` set, because a caller told only "bad
     # emission" has to re-derive all three from a topology the engine has already walked.
     test-emission-outside-below-names-the-emitter-the-path-and-the-set = {
@@ -420,6 +439,135 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `resolve` that cannot be applied"]'';
+      };
+    };
+    # ── THE OTHER NINE REASONS THE REGISTRY CAN GIVE, EACH BY ITS OWN TEXT ──
+    # `notAKind` is an eleven-arm chain and its answer is the whole of what either registry door
+    # renders, so an arm whose text no cell reads can be reworded into any other arm's and
+    # nothing here notices. Each arm names a different field, or a different defect in the same
+    # field, and the repair differs with it — which is the rule that decides what gets a pin,
+    # applied arm by arm rather than to the chain as a whole.
+    test-a-non-record-entry-is-named-by-its-type = {
+      expr = mkKinds [ 42 ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 is a int rather than a kind record"]'';
+      };
+    };
+    # A record that could be a kind but never met the constructor, which is a different repair
+    # from a value that could not be one at all.
+    test-a-record-without-the-constructor-marker-says-so = {
+      expr = mkKinds [ { } ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 was not built by `mkKind`"]'';
+      };
+    };
+    test-a-name-that-is-not-a-string-is-named-as-such = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind";
+          name = 42;
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `name` that is not a string"]'';
+      };
+    };
+    # The container and its elements are two repairs, and the folds' refusals draw the same line
+    # for the same reason.
+    test-a-below-that-is-not-a-list-names-the-container = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind";
+          name = "l";
+          below = 42;
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `below` that is not a list"]'';
+      };
+    };
+    test-a-below-holding-a-non-string-names-the-element = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind";
+          name = "l";
+          below = [ 42 ];
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `below` holding a name that is not a string"]'';
+      };
+    };
+    # The other two missing-field arms. WHICH field is absent is the coordinate the caller acts
+    # on, and the three arms are interchangeable without it: a registry is a list, and a message
+    # naming the entry but not the field leaves the caller bisecting a record they already wrote.
+    test-a-missing-dedupkey-names-that-field = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind";
+          name = "l";
+          below = [ ];
+          resolve = _: _: { };
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries no `dedupKey` field"]'';
+      };
+    };
+    test-a-missing-fold-names-that-field = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind";
+          name = "l";
+          below = [ ];
+          resolve = _: _: { };
+          dedupKey = null;
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries no `fold` field"]'';
+      };
+    };
+    # ── THE APPLICABILITY ARMS, WHOSE RECORDS THE SUPPORTED CONSTRUCTOR ITSELF BUILDS ──
+    # `mkKind` decides that `name` is a string, that `below` is a list of them, and that
+    # `dedupKey` and `fold` are declared TOGETHER. It says nothing about what any of the three
+    # function-valued fields ARE, so a record carrying an integer where a resolver belongs is
+    # built by the constructor and refused after it — which is as true of the `resolve` arm
+    # pinned above as of these two. The fixtures below use `mkKind` rather than a forged record
+    # to keep that reachable-as-documented reading on the page.
+    test-a-dedupkey-that-cannot-be-applied-says-so = {
+      expr = mkKinds [
+        (mkKind {
+          name = "l";
+          resolve = _: _: { };
+          dedupKey = 42;
+          fold = _: _: { };
+        })
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `dedupKey` that is neither null nor applicable"]'';
+      };
+    };
+    test-a-fold-that-cannot-be-applied-says-so = {
+      expr = mkKinds [
+        (mkKind {
+          name = "l";
+          resolve = _: _: { };
+          dedupKey = _: "k";
+          fold = 42;
+        })
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `fold` that is neither null nor applicable"]'';
       };
     };
 
