@@ -370,6 +370,63 @@ in
       };
     };
 
+    # ── THE CONSTRUCTOR REFUSES A KIND WITH NO RESOLVER, BY NAME, AND CATCHABLY ──
+    # `resolve` used to be a bare required formal, so omitting it was refused by NIX at application
+    # — `called without required argument 'resolve'`, an EvalError that terminates the evaluation,
+    # that `tryEval` does not contain, and that arrives before any arm in `mkKind` can run. The
+    # caller got no name and no library text, at the ordinary door, for the most ordinary mistake.
+    # These cells exist because a `ThrownError` assertion is only expressible once the throw is the
+    # library's: the pre-fix behaviour could not be written as a cell at all, which is exactly what
+    # made it worth fixing rather than documenting.
+    test-constructor-refuses-a-kind-with-no-resolve = {
+      expr = mkKind { name = "k"; };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.mkKind: kind 'k' declares no `resolve` (a kind must say how a demand of its kind resolves)";
+      };
+    };
+    # An explicit null takes the same arm, and that is the sentinel's whole cost: `resolve = null`
+    # and an omitted `resolve` are one case here. Nothing legitimate is collapsed — null is not a
+    # resolver on any reading, and the registry already refuses it through `callable`.
+    test-constructor-refuses-an-explicitly-null-resolve-the-same-way = {
+      expr = mkKind {
+        name = "k";
+        resolve = null;
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.mkKind: kind 'k' declares no `resolve` (a kind must say how a demand of its kind resolves)";
+      };
+    };
+    # A PRESENT but unusable `resolve` is a different reason and says so, mirroring the registry's
+    # own two reasons at the construction site. Without this arm the constructor would build a
+    # record that its own registry then refuses — the door and the intake disagreeing about the
+    # same field.
+    test-constructor-refuses-a-resolve-that-cannot-be-applied = {
+      expr = mkKind {
+        name = "k";
+        resolve = 5;
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.mkKind: kind 'k' declares a `resolve` that cannot be applied (it is a int)";
+      };
+    };
+    # LIVE CONTROL, same suite, same constructor: an arm that was ALREADY named and catchable still
+    # is. Without it the three cells above are equally consistent with a constructor that refuses
+    # everything, and the fix would read as green while having broken the door.
+    test-constructor-still-refuses-dedupKey-without-fold-control = {
+      expr = mkKind {
+        name = "k";
+        resolve = _: { };
+        dedupKey = _: "d";
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.mkKind: kind 'k' declares `dedupKey` without `fold` (a fold is required to merge grouped fragments)";
+      };
+    };
+
     # ── THE REGISTRY NAMES THE ENTRY AND THE FIELD ──
     # A run projects `resolve`, `dedupKey` and `fold` at points where no refusal can follow, so
     # their absence is decided at registration. The message has to carry BOTH coordinates a caller

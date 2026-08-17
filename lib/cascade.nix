@@ -81,9 +81,14 @@
 # vouch for the fields' CONTENTS would be answering a question nobody asked.
 #
 # ★ AND THE ORDINARY DOOR ALREADY REQUIRES ALL THREE, so this costs a cooperative caller nothing:
-# `mkKind` gives `resolve` no default and writes `dedupKey` and `fold` as null when a kind declares
-# neither. No record it builds can fail these arms. What they reach is precisely the forged record
-# — the one case the marker was never able to speak for.
+# `mkKind` refuses a kind with no applicable `resolve` by name, and writes `dedupKey` and `fold` as
+# null when a kind declares neither. No record it builds can fail these arms. What they reach is
+# precisely the forged record — the one case the marker was never able to speak for.
+#
+# The constructor's `resolve` arm is written as a SENTINEL DEFAULT rather than a bare required
+# formal, and the reason is this same paragraph read one level down: a bare formal makes the omission
+# Nix's refusal instead of the library's, which is the uncatchable termination described above
+# happening at the door that exists to prevent it. See `mkKind` for the argument in full.
 #
 # The field checks answer USABILITY, and they are the half that holds against any input at all —
 # `name` is used as an attribute name and `below` as a list of them, and those obligations are the
@@ -310,11 +315,28 @@ let
   kindMarker = "gen-scope/kind";
   kindSetMarker = "gen-scope/kind-set";
 
+  # ★ `resolve` IS REQUIRED, AND THE NULL IS HOW THE REFUSAL GETS TO FIRE. Written as a formal with
+  # no default, an omitted `resolve` is refused by NIX, at application, with
+  # `called without required argument 'resolve'` — a termination this library never names, that
+  # `tryEval` does not contain, and that arrives BEFORE any arm below can run. That is the same
+  # uncatchable class the header above refuses on the registry's behalf, reaching the ordinary door:
+  # a caller who omits the field gets a dead evaluation instead of a name.
+  #
+  # So the formal carries a sentinel whose ONLY job is to let the arm underneath it decide. `null`
+  # can serve as that sentinel because it is not a resolver on any reading — the registry's
+  # `notAKind` already refuses a null `resolve` through `callable` — so nothing legitimate is being
+  # collapsed into the absent case, and the two arms below reproduce the registry's own two reasons
+  # ("carries no `resolve` field", "carries a `resolve` that cannot be applied") at the construction
+  # site, where the author is and where the kind can be named.
+  #
+  # THE PRESENCE CLAIM THE HEADER MAKES IS PRESERVED, and strengthened: no record this constructor
+  # builds can reach the registry without an APPLICABLE `resolve`, so the registry's presence arms
+  # still cannot fire on its output, and neither can its applicability arm.
   mkKind =
     {
       name,
       below ? [ ],
-      resolve,
+      resolve ? null,
       dedupKey ? null,
       fold ? null,
     }:
@@ -328,6 +350,10 @@ let
       throw "gen-scope.mkKind: kind '${name}' declares a `below` that is a ${typeOf below} rather than a list"
     else if !(all isString below) then
       throw "gen-scope.mkKind: kind '${name}' declares a `below` holding a name that is not a string"
+    else if resolve == null then
+      throw "gen-scope.mkKind: kind '${name}' declares no `resolve` (a kind must say how a demand of its kind resolves)"
+    else if !(callable resolve) then
+      throw "gen-scope.mkKind: kind '${name}' declares a `resolve` that cannot be applied (it is a ${typeOf resolve})"
     else if hasDedup && !hasFold then
       throw "gen-scope.mkKind: kind '${name}' declares `dedupKey` without `fold` (a fold is required to merge grouped fragments)"
     else if hasFold && !hasDedup then
