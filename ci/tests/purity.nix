@@ -190,6 +190,23 @@ in
     ];
   };
 
+  # Named because the subject-pinning pair is a COMPOSITION: this cell is the residual content floor
+  # for the labels the live list cannot reach — lib/graph.nix — whose text no other cell here pins.
+  # That file is the algebraic graph core (Mokhov, 2017), written in builtins alone and depending on
+  # nothing, so it names no prelude; its exclusion is exactly what makes the live list a proper
+  # subset of the manifest and so what gives that list its teeth, and it is the same exclusion that
+  # leaves this one file's text unpinned. The cell is here because the composition leaves that gap,
+  # NOT because a non-empty read is evidence of anything. What it closes is the empty-text case for
+  # that file; a non-empty constant substituted for its source passes this cell exactly as it passes
+  # every other cell here, and that residue is named rather than removed. The `sources != [ ]`
+  # conjunct is this cell's own vacuity guard — `all` over an empty list is true, so without it the
+  # floor would report clean on the very degeneracy it is written to bound — not a second copy of
+  # the manifest's literal.
+  flake.tests.purity.test-scan-reads-non-empty-sources = {
+    expr = sources != [ ] && lib.all (s: s.code != "") sources;
+    expected = true;
+  };
+
   # The detector has teeth, and it grows them on the real subject: the scan runs over exactly
   # the source list the cell above asserts, with one synthetic entry appended. So the firing is
   # proven by the same call that reports the tree clean, and the expectation states both halves
