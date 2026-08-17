@@ -2,9 +2,12 @@
 # in exactly d+1 strata with each kind resolving only in its own; and the refusal chain that guards
 # intake guards EMISSION too, from the emitting claim's own call site.
 #
-# THEORY: the descending-measure termination argument — Abiteboul, Beeri, Wong. The measure is the
-# registry's `depth`, the round bound is `maxDepth + 1`, and it is a THEOREM about that measure
-# rather than a cap the loop carries.
+# THEORY: Noetherian induction on ℕ over the registry's `depth` — the argument `lib/cascade.nix`
+# makes where that measure is defined. Every `below` edge to a registered name strictly decreases
+# it, and a strictly decreasing natural-number measure exhausts in `maxDepth + 1` steps because ℕ is
+# well-ordered. So the round bound is a THEOREM about the measure rather than a cap the loop
+# carries. No primary is claimed for the descent — it is classical mathematics, and what is this
+# library's own is the measure descended on, not the principle of descending.
 #
 # ★ THE TWO EMISSION-PATH REFUSAL CELLS CLOSE A MEASURED HOLE, and the measurement is the reason
 # they are here rather than assumed covered. `validate` is shared by intake and emission

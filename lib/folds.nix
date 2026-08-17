@@ -27,6 +27,17 @@
 # finished — so a consumer that folds outside such a schedule has not weakened a check here, it has
 # stepped outside the only thing that made the answer mean what it reads as.
 #
+# ── AND THE VOCABULARY ITSELF CLAIMS NO PRIMARY ──
+# The citation above is the PRECONDITION's, not the algebra's, and the difference is worth saying
+# because a citation standing this near the top reads as though it covered the file. Which
+# operators exist below, the single `key: [v]: v` shape they share, and the refuse-by-name
+# discipline each one carries are original to gen; no published result is being implemented here.
+# That is an absence claim, so the search behind it is named rather than implied: the literature a
+# construction of this shape would be expected to cite — catamorphisms and the Bird–Meertens
+# formalism, Meijer's banana/lens calculus, Hutton's universality-of-fold treatment — is not held
+# by this project, so no primary for it was available to verify a citation against and none is
+# written. If one is acquired, this paragraph is what it gets checked against.
+#
 # ── EVERY FOLD REFUSES ITS PRECONDITION BY NAME ──
 # A fold's fragments are values a caller chose, and each fold below is defined only over some of
 # them: `same` needs its fragments to be comparable, `mergeAttrs` and `byKey` need attribute sets.

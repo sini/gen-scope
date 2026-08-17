@@ -36,6 +36,13 @@
 # reported rather than compared against anything. A ceiling would be the other thing — a number
 # chosen to bound cost, which makes cost into correctness and constrains what a caller may express.
 #
+# ★ AND NO PRIMARY IS CLAIMED FOR THE DESCENT, WHICH IS A DIFFERENT ANSWER FROM THE ONE ABOVE.
+# Termination on a strictly decreasing measure with no infinite descending chain is classical
+# mathematics; it implements nobody's result and carries nobody's name. The citation above is
+# COMPLETENESS's and covers none of this: their construction fixes what a stratified schedule
+# MEANS, not that a given loop exhausts one. Two claims, two grounds, and stating them together
+# would let a reader take the round bound for a published theorem it is not.
+#
 # ── ITERATIVE ENCODING, AND TOTAL PER-ROUND FORCING ──
 # The walk is a fold, not a self-applying lambda: Nix does not reuse the frame of a call in tail
 # position, so a recursive walk's descent depth is its iteration count and past the call-depth guard

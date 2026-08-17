@@ -12,6 +12,20 @@
 # set — name uniqueness, `below`-name resolution, acyclicity — and publishes the per-kind `depth`
 # measure with its maximum.
 #
+# ── WHAT THIS FILE STANDS ON, AND THE THREE ANSWERS ARE DIFFERENT IN KIND ──
+# TERMINATION is classical mathematics and claims no primary: the round bound is Noetherian
+# induction on ℕ over a strictly decreasing measure, argued below where that measure is defined.
+# COMPLETENESS is a published result and carries its citation: Apt, Blair & Walker (1988), quoted
+# below against the printed pages named there. What is this library's OWN is neither — it is the
+# CONSTRUCTION that makes them apply here, and it is stated as original rather than left to read as
+# borrowed: a depth measure taken off the graph library's rank surface rather than recomputed, and
+# a schedule that IS that measure rather than a linearisation of it. That novelty is an absence
+# claim, so the search behind it is named. The stratification literature this project holds — Apt,
+# Blair & Walker (1988), Przymusinski (1988), Gelfond & Lifschitz (1988), Van Gelder, Ross &
+# Schlipf (1991) — fixes what a stratified schedule MEANS and what model it yields; none of them
+# derives a schedule from a registry's own relation, which is the step taken here. A primary that
+# does would falsify the claim, and this paragraph is where it would land.
+#
 # ── THE DEPTH MEASURE AND THE ACYCLICITY VERDICT ARE ONE READ, AND THE READ IS NOT THIS LIBRARY'S ──
 # Both come from the graph library's cone-rank surface, over the accessor the registry already
 # holds. Nothing here re-implements the recurrence, and the reason is a cost fact rather than a
