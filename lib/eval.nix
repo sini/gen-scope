@@ -424,7 +424,9 @@ let
   # inside the same evaluation — this reuse is INTRA-EVALUATION, over the override cone and
   # across targets composed within one evaluation. Nothing here persists from one invocation of
   # the evaluator to the next, and nothing here may claim to.
-  # (Informed by Acar's self-adjusting computation: reusing clean prior results.)
+  # (Informed by Acar, Blelloch & Harper 2002, *Adaptive functional programming*: reusing clean
+  # prior results is that paper's change propagation. The 2002 edition is the one this project
+  # holds, and it does not use the later "self-adjusting computation" name.)
   evalWarm =
     {
       roots,
@@ -449,8 +451,9 @@ let
   # zero memo cost (never runs through `get`). The dynamic read-set — the attributes
   # a node actually self.get's — is only recoverable via evalDebug's fresh-self-per-get,
   # which defeats the memo; there is no pure, memo-preserving way to capture it, so the
-  # declared edges are the inspectable contract. (Acar's self-adjusting computation:
-  # the read edges of a dynamic dependence graph.)
+  # declared edges are the inspectable contract. (Acar, Blelloch & Harper 2002: the read edges
+  # its change propagation walks. "Dynamic dependence graph" is the later editions' name for that
+  # structure and does not appear in the edition this project holds, so it is not used here.)
   recordedDeps = { declaredEdges }: id: declaredEdges id;
 in
 {

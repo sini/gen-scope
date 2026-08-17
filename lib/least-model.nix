@@ -3,7 +3,10 @@
 #
 # THEORY. van Emden & Kowalski 1976 give the immediate-consequence operator `T_P` and its least
 # fixpoint as the meaning of a definite (negation-free) program; Apt, Blair & Walker 1988 build
-# the stratified iteration on top of it. This surface computes only that least fixpoint. Negation
+# the stratified iteration on top of it. ★ THE FIRST ATTRIBUTION IS UNCHECKED — this project does
+# not hold van Emden & Kowalski, so the name is standard usage rather than a citation read against
+# a source. Apt, Blair & Walker IS held. What this surface computes is fixed by the code and the
+# suites either way; only the attribution is open. This surface computes only that least fixpoint. Negation
 # never reaches here: the alternating fixpoint hands this door a REDUCT, which is definite by
 # construction, so every rule below has a purely positive body.
 #

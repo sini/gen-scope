@@ -229,7 +229,10 @@
 # ── THE TRACE IS A RECORD, AND DELIBERATELY NOT AN ALGEBRA ──
 # Each resource key maps to the claims that produced it, each wiring entry to the claim that
 # emitted it, and each claim to its parent chain. THEORY: this is why/derivation provenance in the
-# sense of Cheney, Chiticariu & Tan (2009). The provenance SEMIRING of Green, Karvounarakis & Tannen
+# sense of Cheney, Chiticariu & Tan (2009) — a name taken from the literature rather than a citation
+# checked against a held copy; neither that survey nor the semiring paper is in the project archive,
+# which is stated because an unmarked citation reads as a checked one. The provenance SEMIRING of
+# Green, Karvounarakis & Tannen
 # — annotations carrying a `(+, ×)` algebra that composes under the query operators — is
 # DELIBERATELY NOT REALIZED here and is not planned: these traces are records about a run, not
 # algebraic values, and nothing in this library computes with them.
@@ -1040,8 +1043,9 @@ let
       # projections stay for the readers they suit, and nothing has to reassemble the whole from
       # them.
       #
-      # THEORY: why/derivation provenance in the sense of Cheney, Chiticariu & Tan (2009) — every
-      # entry names the claim that emitted it, so a consumer holding a wiring value can say which
+      # THEORY: why/derivation provenance in the sense of Cheney, Chiticariu & Tan (2009), named
+      # from the literature rather than checked against a held copy (neither primary is in the
+      # project archive) — every entry names the claim that emitted it, so a consumer holding a wiring value can say which
       # claim contributed it and where in the run. The Green–Karvounarakis–Tannen provenance
       # SEMIRING — annotations carrying a `(+, ×)` algebra that composes under the query operators —
       # is DELIBERATELY NOT REALIZED here and is not planned: these entries are records about a run,
@@ -1088,7 +1092,8 @@ let
       );
 
       # ── the claim trace, in global schedule order ──
-      # THEORY: why/derivation provenance in the sense of Cheney, Chiticariu & Tan (2009) — each
+      # THEORY: why/derivation provenance in the sense of Cheney, Chiticariu & Tan (2009), named
+      # from the literature rather than checked against a held copy — each
       # artifact maps to the claims that produced it, extended by parent chains to the roots. The
       # Green–Karvounarakis–Tannen provenance SEMIRING is DELIBERATELY NOT REALIZED: these are
       # records about a run, not annotations carrying an algebra that composes under operators,

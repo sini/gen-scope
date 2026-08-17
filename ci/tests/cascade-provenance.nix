@@ -5,7 +5,9 @@
 # THEORY: why/derivation provenance — Cheney, Chiticariu & Tan 2009, *Provenance in Databases: Why,
 # How, and Where* — each artifact maps to the claim instances that produced it, extended here with
 # parent chains to the roots. The engine records the chain; it does not compute a semiring
-# annotation, and the carried citation is to the why/derivation reading only.
+# annotation, and the carried citation is to the why/derivation reading only. The name is taken from
+# the literature rather than checked: that survey is not in the project archive, and what these cells
+# assert is the recorded chain, which needs no paper to be true.
 #
 # ★ FOUR OF THESE CELLS ARE UNIVERSALLY QUANTIFIED OVER A DOMAIN THE FIXTURE SUPPLIES, so each is
 # green on an empty domain. The three `test-control-…` cells below pin those domains by COUNT, not
