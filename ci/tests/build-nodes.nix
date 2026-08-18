@@ -42,6 +42,20 @@ let
     };
   };
 
+  # ── THE RESERVED-LABEL FIXTURE ──
+  # One shape, four readings: both privileged relations are supplied EXPLICITLY, so a caller label
+  # that reached them would be observable as a changed `parent` or a changed `I` edge set rather than
+  # as an absence. `collide` varies only the label the caller offers.
+  collide =
+    label:
+    genScope.buildNodes {
+      parentGraph = genScope.edge "a" "root";
+      importGraph = genScope.edge "a" "lib1";
+      edgeGraphs = {
+        ${label} = genScope.edge "a" "HIJACKED";
+      };
+    };
+
   # Multiple import edges
   multiImport = genScope.buildNodes {
     parentGraph = genScope.empty;
@@ -156,6 +170,36 @@ in
       expected = {
         z = 3;
       };
+    };
+
+    # ── THE RESERVED LABELS ──
+    # `P` and `I` name the constructor's own relations, and the caller's `edgeGraphs` merges LAST, so
+    # a caller offering either one used to replace the argument it passed in the same call with no
+    # diagnostic. The refusal is asserted here as a BOOLEAN and its text in `../tests-error.nix`,
+    # where `expectedError` can read what it says: `tryEval` discards a throw's message.
+    #
+    # The two control cells are the other half of these two. A refusal cell alone passes over a
+    # construction that refuses everything, and a fixture whose privileged relations never reached the
+    # node would show no hijack to refuse: `M` is an ordinary caller label carrying the SAME edge, and
+    # it leaves `parent` and the `I` set exactly as the arguments declared them.
+    test-control-an-ordinary-label-leaves-parent-alone = {
+      expr = (collide "M").a.parent;
+      expected = "root";
+    };
+
+    test-control-an-ordinary-label-leaves-the-I-edges-alone = {
+      expr = (collide "M").a.decls.__edges.I;
+      expected = [ "lib1" ];
+    };
+
+    test-reserved-label-P-is-refused = {
+      expr = !(builtins.tryEval (collide "P")).success;
+      expected = true;
+    };
+
+    test-reserved-label-I-is-refused = {
+      expr = !(builtins.tryEval (collide "I")).success;
+      expected = true;
     };
 
     test-custom-edge-graphs =

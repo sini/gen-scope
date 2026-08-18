@@ -64,6 +64,28 @@ let
   # is what shows it refuses — and names both contributors while doing it.
   mergeSurface = import ../lib/merge-surface.nix { prelude = genPreludeLib; };
 
+  # ── THE CONSTRUCTOR'S RESERVED-LABEL COLLISION ──
+  # Both privileged relations are supplied EXPLICITLY, so the label the caller offers has something
+  # to collide with. `collide` varies only that label; `ci/tests/build-nodes.nix` runs the same
+  # fixture for the boolean half and for the ordinary-label controls.
+  collide =
+    labels:
+    genScope.buildNodes {
+      parentGraph = genScope.edge "a" "root";
+      importGraph = genScope.edge "a" "lib1";
+      edgeGraphs = genPreludeLib.genAttrs labels (_: genScope.edge "a" "HIJACKED");
+    };
+
+  # The invariant frame of that refusal, with the two parts a cell varies left to the cell — the
+  # rendered label list and the per-label explanation, which are what a caller reads to learn WHICH
+  # of the two names they hit and WHICH argument owns it.
+  reservedLabelRefusal =
+    rendered: explained:
+    "gen-scope.buildNodes: `edgeGraphs` carries reserved label(s) ${rendered}: ${explained}. A reserved label is this library's own name for a relation it privileges, and `edgeGraphs` does not extend to it — supply those edges as the argument named, or relabel them.";
+
+  containment = "'P' is the containment relation, whose edges arrive as the `parentGraph` argument";
+  importing = "'I' is the import relation, whose edges arrive as the `importGraph` argument";
+
   subjA = {
     id_hash = "id-a";
     name = "a-subject";
@@ -1035,6 +1057,43 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope: 'one' is exported by both 'alpha' and 'beta', and the library refuses a duplicate export rather than resolving it by position";
+      };
+    };
+  };
+
+  # ── THE CONSTRUCTOR'S RESERVED LABELS ──
+  # `buildNodes` refuses a caller's `edgeGraphs` label that is one of its own two. `tryEval` can say
+  # THAT it refused, and `tests/build-nodes.nix` does; WHICH label was offered and WHICH argument
+  # already owns it is a claim about the text, and a caller told only that "a label is reserved" is
+  # sent to read the constructor for the pair — which is the reading the reservation exists to spare
+  # them. Two labels means two repairs (`parentGraph` or `importGraph`), so each is pinned on its own
+  # rather than through one cell standing for both.
+  config.flake.testsError.build-nodes-reserved-labels = {
+    test-a-reserved-P-names-the-label-and-the-argument-that-owns-it = {
+      expr = (collide [ "P" ]).a.parent;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (reservedLabelRefusal ''["P"]'' containment);
+      };
+    };
+    test-a-reserved-I-names-the-label-and-the-argument-that-owns-it = {
+      expr = (collide [ "I" ]).a.decls.__edges.I;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (reservedLabelRefusal ''["I"]'' importing);
+      };
+    };
+    # A caller who offered both is told about both. A refusal naming only the first would send them
+    # back for a second round over a defect they made once.
+    test-both-reserved-labels-are-named-in-one-refusal = {
+      expr =
+        (collide [
+          "P"
+          "I"
+        ]).a.parent;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (reservedLabelRefusal ''["P","I"]'' "${containment}; ${importing}");
       };
     };
   };
