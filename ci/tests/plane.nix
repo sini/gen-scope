@@ -17,24 +17,27 @@ let
   roots = {
     a = mkNode "a" null {
       owns = [ "b" ];
+      imports = [ "b" ];
       includes = [ "b" ];
       labels = [ "owns" ];
     };
     b = mkNode "b" null {
       owns = [ ];
+      imports = [ ];
       includes = [ ];
       labels = [ "owns" ];
     };
   };
 
-  # Four families of the partition — the two child attributes, an `edges-` label and `includes` —
-  # plus two resolutional attributes. The resolver's traversal vocabulary is the family this
-  # fixture does not carry; the import relation is covered where the warm branch is measured
-  # directly, in `eval-warm`.
+  # Every family of the partition — the two child attributes, an `edges-` label, the relation the
+  # resolver traverses and `includes` — plus two resolutional attributes. Read against
+  # `structural`'s clauses: a fixture short of a family leaves that family to a single instrument,
+  # and a partition one instrument holds is one edit from a partition nothing holds.
   attrs = {
     children = self: id: { };
     derived-children = self: id: { };
     "edges-owns" = self: id: (self.node id).decls.owns or [ ];
+    imports = self: id: (self.node id).decls.imports or [ ];
     includes = self: id: (self.node id).decls.includes or [ ];
     label = self: id: "fresh-${id}";
     owned = genScope.collectByLabel "owns" (self: id: [ id ]);
@@ -59,6 +62,7 @@ let
       else
         { };
     "edges-owns" = self: id: [ "POISON" ];
+    imports = self: id: [ "POISON" ];
     includes = self: id: [ "POISON" ];
     label = self: id: "cached-${id}";
   };
@@ -185,6 +189,17 @@ in
     # The edge-label name built at evaluation time, not written into the decision as a literal.
     test-dynamic-edge-label-recomputed = {
       expr = cell dynamicRow "edges-owns";
+      expected = {
+        value = [ "b" ];
+        coldValue = [ "b" ];
+        fired = true;
+      };
+    };
+    # The relation the RESOLVER traverses. It is reserved through `lib/traversal-names.nix` rather
+    # than by a clause of the classifier's own, so this row measures the binding's reservation and
+    # not a literal agreeing with one.
+    test-imports-recomputed = {
+      expr = cell (row [ "imports" ]) "imports";
       expected = {
         value = [ "b" ];
         coldValue = [ "b" ];
@@ -382,6 +397,12 @@ in
   flake.tests."plane-exposures" = {
     # The structural edge set the substrate constructed, readable without forcing any
     # resolutional attribute — pinned by making every resolutional attribute throw.
+    #
+    # The KEY SET is the whole partition as this fixture declares it, the resolver's traversed
+    # relation included: `structuralEdges` is `genAttrs` over the structural names of the
+    # consumer's attribute set, so a family entering the partition enters this accessor's key set.
+    # That makes the accessor's surface a consequence of the partition rather than a second list,
+    # and a cell reading the key set is what makes a family's arrival visible at all.
     test-structural-edges-force-no-resolutional-attribute = {
       expr =
         let
@@ -397,6 +418,7 @@ in
         {
           names = builtins.attrNames s;
           owns = s."edges-owns";
+          imports = s.imports;
           includes = s.includes;
         };
       expected = {
@@ -404,9 +426,11 @@ in
           "children"
           "derived-children"
           "edges-owns"
+          "imports"
           "includes"
         ];
         owns = [ "b" ];
+        imports = [ "b" ];
         includes = [ "b" ];
       };
     };
