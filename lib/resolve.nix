@@ -11,9 +11,29 @@
 # must be reserved as structural, or a warm evaluation may serve it from a prior graph and answer
 # over a stale import relation without saying so. Two agreeing literals would make that a
 # coincidence; one binding makes it a property.
+#
+# The EDGE NAMESPACE is not written down here either, and the argument runs the other way round.
+# Labelled edges are an OPEN family (Neron et al. 2015, Fig. 2), so the classifier reserves them by
+# a PREFIX predicate rather than by a list — and this module is what CONSTRUCTS the names that
+# predicate decides about, at `followEdge` and at `collectionAttr`'s `label:` traversal. The prefix
+# is a joint fact of the two modules, so it is taken from the one that owns and publishes it. A
+# classifier reserving one prefix while the resolver builds another fails exactly as a drifted
+# relation name does: the constructed name falls outside the reserved namespace, is classified
+# resolutional, and is served from a prior — a complete, well-typed answer over a stale edge set,
+# with nothing in the result saying so.
+#
+# WHAT THAT DOES NOT CLOSE, because the wide reading of it would be false: it makes the two
+# spellings one for the names THIS module builds, and for no others. A caller assembling the name
+# itself still escapes, since a predicate over attribute names has no access to a caller's
+# literals. That residual belongs to `structural`'s stated domain and is named at `interface.nix`'s
+# facade note; it is not closed here.
 { prelude }:
 let
   relations = import ./traversal-names.nix;
+
+  # The reserved structural namespace, read from the classifier that owns and publishes it rather
+  # than re-spelled — the prefix below and the prefix the partition tests are one value.
+  structural = import ./structural.nix { inherit prelude; };
 
   # Shadow: merge two declaration sets, inner shadows outer (Neron §5 Def. 1).
   shadow = inner: outer: inner // prelude.filterAttrs (k: _: !(inner ? ${k})) outer;
@@ -421,7 +441,7 @@ let
           in
           neronCollect { } id
         else if prelude.hasPrefix "label:" traverse then
-          self.get id "edges-${prelude.removePrefix "label:" traverse}"
+          self.get id (structural.edgePrefix + prelude.removePrefix "label:" traverse)
         else
           throw "gen-scope: collectionAttr: unknown traverse '${traverse}'";
       filtered = builtins.filter (tid: filter (self.node tid)) targets;
@@ -467,7 +487,7 @@ let
   # Follow a custom edge label from a node.
   followEdge =
     label: self: id:
-    self.get id "edges-${label}";
+    self.get id (structural.edgePrefix + label);
 
   # Collect data from nodes reachable via a custom edge label.
   collectByLabel =
