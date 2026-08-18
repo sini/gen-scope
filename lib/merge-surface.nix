@@ -28,7 +28,7 @@ let
         owner = acc.owner // prelude.genAttrs (prelude.attrNames exports) (_: moduleName);
       }
     else
-      throw "gen-scope: '${name}' is exported by both '${acc.owner.${name}}' and '${moduleName}', and the library's assembly refuses a duplicate export rather than resolving it by position";
+      throw "gen-scope: '${name}' is exported by both '${acc.owner.${name}}' and '${moduleName}', and the library refuses a duplicate export rather than resolving it by position";
 in
 (prelude.foldl' step {
   surface = { };

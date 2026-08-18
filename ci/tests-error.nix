@@ -1034,7 +1034,7 @@ in
       });
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope: 'one' is exported by both 'alpha' and 'beta', and the library's assembly refuses a duplicate export rather than resolving it by position";
+        msg = exactly "gen-scope: 'one' is exported by both 'alpha' and 'beta', and the library refuses a duplicate export rather than resolving it by position";
       };
     };
   };
