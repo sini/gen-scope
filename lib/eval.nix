@@ -52,7 +52,8 @@ let
         # not by a check. Structure is always recomputed, so dirty descendants stay reachable
         # and a labelled reachability relation is never read stale. That the branch tests the
         # PARTITION rather than two literal names is what extends the law from the child
-        # attributes to the whole `edges-*` family and to `includes`.
+        # attributes to the whole `edges-*` family, to the relations the resolver traverses, and
+        # to `includes`.
         #
         # THE COST OF THAT, ON THE RECORD: edge sets are never reused, so a warm evaluation
         # pays edge-set recomputation. That is a cost fact, not a correctness fact, and it is

@@ -27,7 +27,10 @@ let
     };
   };
 
-  # Every family of the partition, plus two resolutional attributes.
+  # Four families of the partition — the two child attributes, an `edges-` label and `includes` —
+  # plus two resolutional attributes. The resolver's traversal vocabulary is the family this
+  # fixture does not carry; the import relation is covered where the warm branch is measured
+  # directly, in `eval-warm`.
   attrs = {
     children = self: id: { };
     derived-children = self: id: { };

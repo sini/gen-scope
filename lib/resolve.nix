@@ -3,10 +3,18 @@
 # Neron (2015) and van Antwerpen (2018) resolution semantics.
 # Kiama-inspired vocabulary (Sloane et al., 2010) for attribute definitions.
 #
-# Key design: import edges are COMPUTED ATTRIBUTES (self.get id "imports"),
+# Key design: import edges are COMPUTED ATTRIBUTES (self.get id relations.imports),
 # not structural fields. This allows dynamic import resolution.
+#
+# The relation NAME is not written down here. It comes from `lib/traversal-names.nix`, the one
+# binding this module and the structural classifier both read: a relation this resolver traverses
+# must be reserved as structural, or a warm evaluation may serve it from a prior graph and answer
+# over a stale import relation without saying so. Two agreeing literals would make that a
+# coincidence; one binding makes it a property.
 { prelude }:
 let
+  relations = import ./traversal-names.nix;
+
   # Shadow: merge two declaration sets, inner shadows outer (Neron §5 Def. 1).
   shadow = inner: outer: inner // prelude.filterAttrs (k: _: !(inner ? ${k})) outer;
 
@@ -31,7 +39,7 @@ let
       inherited;
 
   # Generalized query combinator (van Antwerpen §2.1).
-  # Import edges come from self.get id "imports" (computed attribute).
+  # Import edges come from self.get id relations.imports (computed attribute).
   # _seen tracks visited scopes to prevent import self-resolution (Neron §2.4, rule X).
   query =
     {
@@ -45,7 +53,7 @@ let
     let
       node = self.node id;
       local = dataFilter node;
-      importIds = self.get id "imports";
+      importIds = self.get id relations.imports;
       unseenImports = builtins.filter (iid: !(_seen ? ${iid})) importIds;
       collectFromImport =
         seen: importId:
@@ -55,7 +63,7 @@ let
           transitive =
             if transitiveImports then
               let
-                nextImports = self.get importId "imports";
+                nextImports = self.get importId relations.imports;
                 nextUnseen = builtins.filter (iid: !(seen ? ${iid})) nextImports;
                 nextSeen = seen // {
                   ${importId} = true;
@@ -118,7 +126,7 @@ let
     let
       node = self.node id;
       local = dataFilter node;
-      importIds = self.get id "imports";
+      importIds = self.get id relations.imports;
       unseenImports = builtins.filter (iid: !(_seen ? ${iid})) importIds;
       collectFromImportAll =
         seen: importId:
@@ -128,7 +136,7 @@ let
           transitive =
             if transitiveImports then
               let
-                nextImports = self.get importId "imports";
+                nextImports = self.get importId relations.imports;
                 nextUnseen = builtins.filter (iid: !(seen ? ${iid})) nextImports;
                 nextSeen = seen // {
                   ${importId} = true;
@@ -199,7 +207,8 @@ let
     self: id:
     let
       allIds = self.allNodeIds;
-      importersOf = nid: builtins.filter (other: builtins.elem nid (self.get other "imports")) allIds;
+      importersOf =
+        nid: builtins.filter (other: builtins.elem nid (self.get other relations.imports)) allIds;
       collectFrom =
         seen: importerId:
         let
@@ -361,8 +370,8 @@ let
       targets =
         if builtins.isFunction traverse then
           traverse self id
-        else if traverse == "imports" then
-          self.get id "imports"
+        else if traverse == relations.imports then
+          self.get id relations.imports
         else if traverse == "children" then
           builtins.attrNames (self.get id "children")
         else if traverse == "siblings" then
@@ -392,7 +401,7 @@ let
                 selfSeen = seen // {
                   ${nid} = true;
                 };
-                importIds = self.get nid "imports";
+                importIds = self.get nid relations.imports;
                 unseenImports = builtins.filter (iid: !(selfSeen ? ${iid})) importIds;
                 newSeen =
                   selfSeen
@@ -434,7 +443,7 @@ let
   # Import-scoped collection: demand-driven (Neron §2.4, rule I).
   collectImports =
     extract: self: id:
-    prelude.concatMap (importId: extract self importId) (self.get id "imports");
+    prelude.concatMap (importId: extract self importId) (self.get id relations.imports);
 
   # Global collection (WARNING: forces full tree via allNodes — Tier 2).
   collect =

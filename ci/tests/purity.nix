@@ -161,12 +161,13 @@ let
   ];
 
   # The live counterpart to `forbidden`: the name this library reaches for where a tether would
-  # reach for nixpkgs. Every gen-scope source but one carries it — `lib/graph.nix` is the
-  # algebraic graph core (Mokhov, 2017), written in builtins alone and depending on nothing, so
-  # it names no prelude. That single exclusion is what gives the assertion its teeth: the
-  # expected list is a PROPER subset of the manifest, so a read returning one fixed text for
-  # every file lands outside it either way — without the token the list collapses toward empty,
-  # with it the list swells to every source.
+  # reach for nixpkgs. Every gen-scope source but two carries it, and both exclusions are files
+  # that depend on nothing and so name no prelude — `lib/graph.nix` is the algebraic graph core
+  # (Mokhov, 2017), written in builtins alone, and `lib/traversal-names.nix` is the traversal
+  # vocabulary, a bare attribute set of names taking no argument at all. Those exclusions are what
+  # give the assertion its teeth: the expected list is a PROPER subset of the manifest, so a read
+  # returning one fixed text for every file lands outside it either way — without the token the
+  # list collapses toward empty, with it the list swells to every source.
   liveToken = "prelude";
   liveReads = map (src: src.name) (lib.filter (src: genPrelude.hasInfix liveToken src.code) sources);
 
@@ -210,6 +211,7 @@ in
       "lib/resolve.nix"
       "lib/stratify.nix"
       "lib/structural.nix"
+      "lib/traversal-names.nix"
       "lib/well-founded.nix"
       "flake.nix"
       "default.nix"
@@ -249,14 +251,15 @@ in
   };
 
   # Named because the subject-pinning pair is a COMPOSITION: this cell is the residual content floor
-  # for the labels the live list cannot reach — lib/graph.nix — whose text no other cell here pins.
-  # That file is the algebraic graph core (Mokhov, 2017), written in builtins alone and depending on
-  # nothing, so it names no prelude; its exclusion is exactly what makes the live list a proper
-  # subset of the manifest and so what gives that list its teeth, and it is the same exclusion that
-  # leaves this one file's text unpinned. The cell is here because the composition leaves that gap,
-  # NOT because a non-empty read is evidence of anything. What it closes is the empty-text case for
-  # that file; a non-empty constant substituted for its source passes this cell exactly as it passes
-  # every other cell here, and that residue is named rather than removed. The `sources != [ ]`
+  # for the labels the live list cannot reach — lib/graph.nix and lib/traversal-names.nix — whose
+  # text no other cell here pins. Both depend on nothing and so name no prelude: the first is the
+  # algebraic graph core (Mokhov, 2017), written in builtins alone, the second the traversal
+  # vocabulary, a bare attribute set of names. Their exclusion is exactly what makes the live list a
+  # proper subset of the manifest and so what gives that list its teeth, and it is the same
+  # exclusion that leaves those files' text unpinned. The cell is here because the composition
+  # leaves that gap, NOT because a non-empty read is evidence of anything. What it closes is the
+  # empty-text case for those files; a non-empty constant substituted for a source passes this cell
+  # exactly as it passes every other cell here, and that residue is named rather than removed. The `sources != [ ]`
   # conjunct is this cell's own vacuity guard — `all` over an empty list is true, so without it the
   # floor would report clean on the very degeneracy it is written to bound — not a second copy of
   # the manifest's literal.

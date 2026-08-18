@@ -512,6 +512,65 @@ in
           builtins.attrNames (w.get "p" "children");
         expected = [ "c" ];
       };
+      # THE IMPORT RELATION IS NEVER SERVED FROM A PRIOR — AND THE CONTROL THAT ARMS THE READING.
+      #
+      # One construction, run twice over a graph whose import relation CHANGED between passes:
+      # the prior answers `n -> old`, the current program answers `n -> new`, and the decision
+      # calls the node clean and names the relation reusable. That decision is the plane
+      # behaviour that makes a stale serve possible at all, so it is supplied rather than
+      # avoided.
+      #
+      # The two arms differ in ONE thing, the NAME the relation is declared under.
+      #
+      #   `imports`    — the name the resolver traverses, reserved through the traversal binding
+      #                  the classifier reads. The always-recompute branch answers first and the
+      #                  reading is the CURRENT relation.
+      #   `my-imports` — the same relation, same prior, same decision, under a name outside the
+      #                  reserved namespace. It classifies resolutional, the prior is served, and
+      #                  the evaluation answers over a STALE IMPORT RELATION: complete,
+      #                  well-typed, wrong, and silent.
+      #
+      # The second arm is what makes the first a reading. A fixture that never reuses anything
+      # passes the first arm for a reason that has nothing to do with the partition, and a guard
+      # never observed failing is not armed. This is also the residual `structural`'s stated
+      # domain names: a relation the substrate cannot recognise by name is a relation it cannot
+      # protect.
+      test-the-import-relation-is-recomputed-and-the-stale-serve-is-live = {
+        expr =
+          let
+            iRoots = mkRoots {
+              n = { };
+              old = { };
+              new = { };
+            };
+            attrsUnder = relName: {
+              children = self: id: { };
+              ${relName} = self: id: if id == "n" then [ "new" ] else [ ];
+            };
+            priorUnder = relName: {
+              children = self: id: { };
+              ${relName} = self: id: if id == "n" then [ "old" ] else [ ];
+            };
+            readUnder =
+              relName:
+              (genScope.evalWarm {
+                roots = iRoots;
+                attributes = attrsUnder relName;
+                prior = priorOf iRoots (priorUnder relName);
+                decision = allClean [ relName ];
+              }).get
+                "n"
+                relName;
+          in
+          {
+            reserved = readUnder "imports";
+            seeded = readUnder "my-imports";
+          };
+        expected = {
+          reserved = [ "new" ];
+          seeded = [ "old" ];
+        };
+      };
       # a dirty GRANDCHILD is reachable through freshly-recomputed children
       test-dirty-grandchild-reachable = {
         expr =

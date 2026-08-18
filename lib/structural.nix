@@ -14,6 +14,16 @@
 # predicate over the name is TOTAL over any attribute set, including a caller's, which is the
 # property an enumeration cannot have.
 #
+# WHY THE RESOLVER'S RELATION NAMES ARRIVE AS A BINDING AND NOT AS CLAUSES. The import relation is
+# reached by the resolver under a NAME, and it has to be reserved here under the same one. Two
+# literals agreeing is a coincidence, and the failure when they stop agreeing is silent: the
+# traversed-but-unreserved name is served from a warm prior, so the evaluation completes over a
+# STALE import relation and nothing in the result says so. `traversedRelations` is the one binding
+# both modules read, and this predicate reserves its VALUES rather than restating a member — so a
+# relation the resolver adds there is reserved without a second edit here. Reserving them one
+# clause at a time would be the enumeration this file's first argument rejects, wearing a
+# binding's name.
+#
 # WHY THE PREDICATE IS DERIVED AND NOT DECLARED. A declared classification (an author-supplied
 # stratum) answers the same question, and the derived form governs: the burden of proof falls
 # on the declaration, which must carry an argument that derivation is impossible. Derivation
@@ -34,6 +44,10 @@
 # containment is not one of them.
 { prelude }:
 let
+  # The resolver's traversal vocabulary, taken as a value from the one module that binds it.
+  traversedRelations = import ./traversal-names.nix;
+  traversedRelationNames = builtins.attrValues traversedRelations;
+
   # The reserved structural namespace. Every attribute named into it is structural, and
   # therefore always recomputed and never reused.
   edgePrefix = "edges-";
@@ -43,10 +57,14 @@ let
     name == "children"
     || name == "derived-children"
     || prelude.hasPrefix edgePrefix name
-    # A consumer-level name: the imports relation is declared by the caller, not by this
-    # library, so the partition is partly defined by the caller's attribute set. Naming it in
-    # the substrate's own vocabulary is what puts a caller's boundary mark inside a rule the
-    # substrate can apply.
+    # The relations the resolver traverses, read as a SET. This clause holds no relation name of
+    # its own, which is what makes the classifier and the resolver one fact rather than two that
+    # happen to agree.
+    || builtins.elem name traversedRelationNames
+    # A consumer-level name: `includes` is a boundary mark this library never reads, declared by
+    # the layer above and reserved here on its behalf, so the partition is partly defined by the
+    # caller's attribute set. Naming it in the substrate's own vocabulary is what puts a caller's
+    # boundary mark inside a rule the substrate can apply.
     || name == "includes";
 
   # The complement over a set of names. The reuse vocabulary is this projection and nothing
