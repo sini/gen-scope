@@ -1,7 +1,7 @@
 { lib, genScope, ... }:
 let
   # Multi-level: env → host → user
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.overlays [
       (genScope.edge "host1" "env")
       (genScope.edge "user1" "host1")
@@ -31,9 +31,9 @@ let
   };
 
   result = genScope.eval {
-    inherit roots;
+    scope = roots;
     attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
       imports = self: id: [ ];
       label =
         self: id:
@@ -42,11 +42,11 @@ let
         in
         node.decls.hostname or node.decls.username or node.decls.name or id;
     };
-    parseParent = id: (roots.${id} or { parent = null; }).parent;
+    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
   };
 
   # Derived children: proxy nodes synthesized conditionally
-  proxyRoots = genScope.buildNodes {
+  proxyRoots = genScope.buildRoots {
     parentGraph = genScope.edge "svc" "cluster";
     importGraph = genScope.empty;
     decls = {
@@ -64,9 +64,9 @@ let
   };
 
   proxyResult = genScope.eval {
-    roots = proxyRoots;
+    scope = proxyRoots;
     attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) proxyRoots;
+      children = self: id: lib.filterAttrs (_: n: n.parent == id) proxyRoots.nodes;
       imports = self: id: [ ];
       derived-children =
         self: id:
@@ -90,8 +90,8 @@ let
     };
     parseParent =
       id:
-      if proxyRoots ? ${id} then
-        proxyRoots.${id}.parent
+      if proxyRoots.nodes ? ${id} then
+        proxyRoots.nodes.${id}.parent
       else
         # Derived children: parse parent from id suffix
         let

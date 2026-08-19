@@ -19,15 +19,15 @@ let
       id,
     }:
     let
-      roots = genScope.buildNodes { inherit parentGraph decls; };
+      roots = genScope.buildRoots { inherit parentGraph decls; };
       result = genScope.eval {
-        inherit roots;
+        scope = roots;
         attributes = {
-          children = _self: i: lib.filterAttrs (_: n: n.parent == i) roots;
+          children = _self: i: lib.filterAttrs (_: n: n.parent == i) roots.nodes;
           imports = _self: _i: [ ];
           ${attrName} = attr;
         };
-        parseParent = i: (roots.${i} or { parent = null; }).parent;
+        parseParent = i: (roots.nodes.${i} or { parent = null; }).parent;
       };
     in
     result.get id attrName;
@@ -130,7 +130,7 @@ in
 
     test-inherit-walks-parent =
       let
-        roots = genScope.buildNodes {
+        roots = genScope.buildRoots {
           parentGraph = genScope.edge "child" "parent";
           importGraph = genScope.empty;
           decls = {
@@ -142,15 +142,15 @@ in
           types = { };
         };
         result = genScope.eval {
-          inherit roots;
+          scope = roots;
           attributes = {
-            children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+            children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
             imports = self: id: [ ];
             resolved-val = inherit' {
               resolve = node: node.decls.val or null;
             };
           };
-          parseParent = id: (roots.${id} or { parent = null; }).parent;
+          parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
         };
       in
       {
@@ -160,7 +160,7 @@ in
 
     test-inherit-stops-at-first =
       let
-        roots = genScope.buildNodes {
+        roots = genScope.buildRoots {
           parentGraph = genScope.overlays [
             (genScope.edge "c" "b")
             (genScope.edge "b" "a")
@@ -178,15 +178,15 @@ in
           types = { };
         };
         result = genScope.eval {
-          inherit roots;
+          scope = roots;
           attributes = {
-            children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+            children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
             imports = self: id: [ ];
             resolved-val = inherit' {
               resolve = node: node.decls.val or null;
             };
           };
-          parseParent = id: (roots.${id} or { parent = null; }).parent;
+          parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
         };
       in
       {
@@ -196,7 +196,7 @@ in
 
     test-inheritAll-accumulates =
       let
-        roots = genScope.buildNodes {
+        roots = genScope.buildRoots {
           parentGraph = genScope.overlays [
             (genScope.edge "c" "b")
             (genScope.edge "b" "a")
@@ -216,15 +216,15 @@ in
           types = { };
         };
         result = genScope.eval {
-          inherit roots;
+          scope = roots;
           attributes = {
-            children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+            children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
             imports = self: id: [ ];
             all-tags = inheritAll {
               extract = node: node.decls.tags or null;
             };
           };
-          parseParent = id: (roots.${id} or { parent = null; }).parent;
+          parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
         };
       in
       {

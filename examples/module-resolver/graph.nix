@@ -49,7 +49,7 @@ let
     (genScope.edge "Cycle2" "Cycle1")
   ];
 
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     inherit parentGraph importGraph;
     decls = {
       root = { };

@@ -3,7 +3,7 @@ let
   inherit (genScope) evalDebug;
 
   # Simple case: no cycles
-  roots = genScope.buildNodes {
+  scope = genScope.buildRoots {
     parentGraph = genScope.vertex "a";
     importGraph = genScope.empty;
     decls = {
@@ -15,7 +15,7 @@ let
   };
 
   debugResult = evalDebug {
-    inherit roots;
+    inherit scope;
     attributes = {
       children = self: id: { };
       imports = self: id: [ ];
@@ -25,7 +25,7 @@ let
   };
 
   # Cycle case: a.x depends on a.y depends on a.x
-  cycleRoots = genScope.buildNodes {
+  cycleRoots = genScope.buildRoots {
     parentGraph = genScope.vertex "a";
     importGraph = genScope.empty;
     decls = {
@@ -35,7 +35,7 @@ let
   };
 
   cycleResult = evalDebug {
-    roots = cycleRoots;
+    scope = cycleRoots;
     attributes = {
       children = self: id: { };
       imports = self: id: [ ];
@@ -46,7 +46,7 @@ let
   };
 
   # Indirect cycle: a.p → b.q → a.p
-  indirectRoots = genScope.buildNodes {
+  indirectRoots = genScope.buildRoots {
     parentGraph = genScope.vertices [
       "a"
       "b"
@@ -60,7 +60,7 @@ let
   };
 
   indirectResult = evalDebug {
-    roots = indirectRoots;
+    scope = indirectRoots;
     attributes = {
       children = self: id: { };
       imports = self: id: [ ];

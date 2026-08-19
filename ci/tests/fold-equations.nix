@@ -13,7 +13,7 @@
 let
   inherit (genScope) foldEquations;
 
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.edge "child" "parent";
     decls = {
       parent = {
@@ -52,7 +52,7 @@ let
       kind = "nta";
       readsAttrs = [ ];
       stratum = "structural";
-      compute = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+      compute = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
     };
   };
 
@@ -61,8 +61,9 @@ let
   };
 
   ctx = foldEquations {
-    inherit roots schedule;
-    parseParent = id: roots.${id}.parent or null;
+    scope = roots;
+    inherit schedule;
+    parseParent = id: roots.nodes.${id}.parent or null;
   };
 
   # ── (g) THE COLLISION SET ──
@@ -72,6 +73,7 @@ let
     import ../../lib/fold-equations.nix {
       prelude = genPreludeLib;
       inherit (genScope) eval recordedDeps;
+      inherit (import ../../lib/require-scope.nix { prelude = genPreludeLib; }) requireScope;
     }
   );
   incumbentNames = builtins.filter (n: !(builtins.elem n foldNames)) (builtins.attrNames genScope);
@@ -119,8 +121,9 @@ in
     test-cyclic-declared-edges-leave-the-cold-path-alone = {
       expr =
         (foldEquations {
-          inherit roots schedule;
-          parseParent = id: roots.${id}.parent or null;
+          scope = roots;
+          inherit schedule;
+          parseParent = id: roots.nodes.${id}.parent or null;
           declaredEdges = id: if id == "child" then [ "parent" ] else [ "child" ];
         }).eval.get
           "child"
@@ -132,7 +135,7 @@ in
     test-a-throwing-schedule-is-refused-at-the-entry = {
       expr =
         (builtins.tryEval (foldEquations {
-          inherit roots;
+          scope = roots;
           parseParent = _: null;
           schedule = throw "the gate refused this grammar";
         })).success;
@@ -143,7 +146,8 @@ in
     test-control-a-schedule-that-does-not-throw-is-not-refused = {
       expr =
         (builtins.tryEval (foldEquations {
-          inherit roots schedule;
+          scope = roots;
+          inherit schedule;
           parseParent = _: null;
         })).success;
       expected = true;
@@ -170,7 +174,7 @@ in
     # surface and re-derives whenever that surface grows.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 87;
+      expected = 88;
     };
     # One: the fold's entry, and nothing else. This cell is the module's inventory, and an export it
     # does not list is an export nothing measured.

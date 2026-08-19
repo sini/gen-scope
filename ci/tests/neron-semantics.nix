@@ -3,8 +3,8 @@
 # custom edge labels, scoped relations, subtypeOf, ambiguity detection.
 { lib, genScope, ... }:
 let
-  # Helper: build roots from buildNodes output
-  mkRoots = args: genScope.buildNodes args;
+  # Helper: build the scope record from the constructor
+  mkRoots = args: genScope.buildRoots args;
 
   # Attributes that wire __edges.I as computed imports
   withImports =
@@ -35,7 +35,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.query { dataFilter = n: n.decls.x or null; } result "consumer";
       expected = "local";
@@ -59,7 +62,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.query { dataFilter = n: n.decls.x or null; } result "child";
       expected = "imported";
@@ -83,7 +89,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.query {
           dataFilter = n: n.decls.x or null;
@@ -111,7 +120,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.query {
           dataFilter = n: n.decls.x or null;
@@ -135,7 +147,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.query { dataFilter = n: n.decls.x or null; } result "child";
       expected = "from-parent";
@@ -163,7 +178,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.query {
           dataFilter = n: n.decls.value or null;
@@ -190,7 +208,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.query {
           dataFilter = n: n.decls.value or null;
@@ -217,7 +238,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.query { dataFilter = n: n.decls.y or null; } result "a";
       expected = "from-b";
@@ -239,7 +263,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
           # consumer imports provider; provider's PARENT has "secret"
           # Under P*I* WF: once you follow I edge, you don't follow P from there
           # query with default settings does NOT walk provider's parent
@@ -272,7 +299,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.ambiguous { dataFilter = n: n.decls.x or null; } result "consumer";
       expected = true;
@@ -292,7 +322,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.ambiguous { dataFilter = n: n.decls.x or null; } result "consumer";
       expected = false;
@@ -320,7 +353,10 @@ in
             };
           };
           attributes = withImports { };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
           # With local shadowing, query returns local — ambiguity in imports is moot
         in
         genScope.query { dataFilter = n: n.decls.x or null; } result "consumer";
@@ -336,7 +372,12 @@ in
       expr =
         let
           roots = mkRoots {
-            edgeGraphs.R = genScope.edge "record" "extension";
+            edgeGraphs = [
+              {
+                label = "R";
+                graph = genScope.edge "record" "extension";
+              }
+            ];
             decls = {
               record = {
                 base = true;
@@ -351,7 +392,10 @@ in
             children = _self: _id: { };
             "edges-R" = self: id: (self.node id).decls.__edges.R or [ ];
           };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.followEdge "R" result "record";
       expected = [ "extension" ];
@@ -362,9 +406,14 @@ in
       expr =
         let
           roots = mkRoots {
-            edgeGraphs.R = genScope.overlays [
-              (genScope.edge "base" "ext1")
-              (genScope.edge "base" "ext2")
+            edgeGraphs = [
+              {
+                label = "R";
+                graph = genScope.overlays [
+                  (genScope.edge "base" "ext1")
+                  (genScope.edge "base" "ext2")
+                ];
+              }
             ];
             decls = {
               base = { };
@@ -381,7 +430,10 @@ in
             children = _self: _id: { };
             "edges-R" = self: id: (self.node id).decls.__edges.R or [ ];
           };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         builtins.sort builtins.lessThan (
           genScope.collectByLabel "R" (
@@ -403,8 +455,16 @@ in
       expr =
         let
           roots = mkRoots {
-            edgeGraphs.R = genScope.edge "a" "b";
-            edgeGraphs.E = genScope.edge "a" "c";
+            edgeGraphs = [
+              {
+                label = "R";
+                graph = genScope.edge "a" "b";
+              }
+              {
+                label = "E";
+                graph = genScope.edge "a" "c";
+              }
+            ];
             decls = {
               a = { };
               b = { };
@@ -417,7 +477,10 @@ in
             "edges-R" = self: id: (self.node id).decls.__edges.R or [ ];
             "edges-E" = self: id: (self.node id).decls.__edges.E or [ ];
           };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         {
           r = genScope.followEdge "R" result "a";
@@ -454,7 +517,10 @@ in
             imports = _self: _id: [ ];
             children = _self: _id: { };
           };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.subtypeOf { } result "partial" "full";
       expected = true;
@@ -481,7 +547,10 @@ in
             imports = _self: _id: [ ];
             children = _self: _id: { };
           };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.subtypeOf { } result "extra" "base";
       expected = false;
@@ -505,7 +574,10 @@ in
             imports = _self: _id: [ ];
             children = _self: _id: { };
           };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
           # eq ignores values — only checks field existence
         in
         genScope.subtypeOf {
@@ -533,7 +605,10 @@ in
             imports = _self: _id: [ ];
             children = _self: _id: { };
           };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         genScope.subtypeOf { } result "empty" "full";
       expected = true;
@@ -568,7 +643,10 @@ in
             types = self: id: (self.node id).decls.__relations.types or { };
             values = self: id: (self.node id).decls.__relations.values or { };
           };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         {
           types = result.get "module-a" "types";
@@ -621,7 +699,10 @@ in
                 t;
             };
           };
-          result = genScope.eval { inherit roots attributes; };
+          result = genScope.eval {
+            scope = roots;
+            inherit attributes;
+          };
         in
         {
           # inner's own types

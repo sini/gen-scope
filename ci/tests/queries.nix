@@ -11,7 +11,7 @@ let
     ;
 
   # Tree: root → {a, b}; a → {c}
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.overlays [
       (genScope.edge "a" "root")
       (genScope.edge "b" "root")
@@ -33,12 +33,12 @@ let
   };
 
   result = genScope.eval {
-    inherit roots;
+    scope = roots;
     attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
       imports = self: id: [ ];
     };
-    parseParent = id: (roots.${id} or { parent = null; }).parent;
+    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
   };
 in
 {

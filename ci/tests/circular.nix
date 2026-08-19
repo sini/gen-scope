@@ -2,7 +2,7 @@
 let
   inherit (genScope) circular;
 
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.vertex "node";
     importGraph = genScope.empty;
     decls = {
@@ -16,7 +16,7 @@ let
 
   # Converging: increment until reaching target
   convergingResult = genScope.eval {
-    inherit roots;
+    scope = roots;
     attributes = {
       children = self: id: { };
       imports = self: id: [ ];
@@ -37,7 +37,7 @@ let
   };
 
   # Non-converging: always changes
-  divergingRoots = genScope.buildNodes {
+  divergingRoots = genScope.buildRoots {
     parentGraph = genScope.vertex "div";
     importGraph = genScope.empty;
     decls = {
@@ -47,7 +47,7 @@ let
   };
 
   divergingResult = genScope.eval {
-    roots = divergingRoots;
+    scope = divergingRoots;
     attributes = {
       children = self: id: { };
       imports = self: id: [ ];
@@ -66,7 +66,7 @@ let
 
   # Custom equality
   customEqResult = genScope.eval {
-    inherit roots;
+    scope = roots;
     attributes = {
       children = self: id: { };
       imports = self: id: [ ];

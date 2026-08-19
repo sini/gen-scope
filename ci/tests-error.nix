@@ -70,10 +70,13 @@ let
   # fixture for the boolean half and for the ordinary-label controls.
   collide =
     labels:
-    genScope.buildNodes {
+    genScope.buildRoots {
       parentGraph = genScope.edge "a" "root";
       importGraph = genScope.edge "a" "lib1";
-      edgeGraphs = genPreludeLib.genAttrs labels (_: genScope.edge "a" "HIJACKED");
+      edgeGraphs = map (label: {
+        inherit label;
+        graph = genScope.edge "a" "HIJACKED";
+      }) labels;
     };
 
   # The invariant frame of that refusal, with the two parts a cell varies left to the cell — the
@@ -81,7 +84,7 @@ let
   # of the two names they hit and WHICH argument owns it.
   reservedLabelRefusal =
     rendered: explained:
-    "gen-scope.buildNodes: `edgeGraphs` carries reserved label(s) ${rendered}: ${explained}. A reserved label is this library's own name for a relation it privileges, and `edgeGraphs` does not extend to it — supply those edges as the argument named, or relabel them.";
+    "gen-scope.buildRoots: `edgeGraphs` carries reserved label(s) ${rendered}: ${explained}. A reserved label is this library's own name for a relation it privileges, and `edgeGraphs` does not extend to it — supply those edges as the argument named, or relabel them.";
 
   containment = "'P' is the containment relation, whose edges arrive as the `parentGraph` argument";
   importing = "'I' is the import relation, whose edges arrive as the `importGraph` argument";
@@ -1094,16 +1097,131 @@ in
   # sent to read the constructor for the pair — which is the reading the reservation exists to spare
   # them. Two labels means two repairs (`parentGraph` or `importGraph`), so each is pinned on its own
   # rather than through one cell standing for both.
+  # ── THE VERTEX-ORDER REFUSALS ──
+  # `expr` here is a message, not a boolean, which is the whole reason these live in this output.
+  # The scope refusal is keyed on the FAILED CONJUNCT, so each limb gets its own cell: a roster of
+  # example shapes would leave gaps, and the count is whatever the predicate has.
+  config.flake.testsError.vertex-order-refusals =
+    let
+      pg = genScope.edge "a" "root";
+      built = genScope.buildRoots { parentGraph = pg; };
+      attrs = {
+        children = _self: _id: { };
+        imports = _self: _id: [ ];
+      };
+      scopeRefusal =
+        entry: detail:
+        exactly (
+          "gen-scope.${entry}: `scope` must be the record returned by `buildRoots` ({ nodes, nodeOrder }); "
+          + detail
+          + ". A node map alone no longer carries the declared order — pass the whole record."
+        );
+    in
+    {
+      # O12 — the retired NAME is a tombstone, so an un-migrated call cannot be written at all.
+      test-O12-the-retired-constructor-name-is-a-tombstone = {
+        expr = genScope.buildNodes { parentGraph = pg; };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: `buildNodes` is retired. Use `buildRoots`, which returns `{ nodes, nodeOrder }` — the node set together with its declared vertex order. Renaming the call is NOT sufficient: the evaluators take that whole record as `scope`, not a bare node map as `roots`, so `eval { roots = buildRoots {…}; }` is refused too.";
+        };
+      };
+
+      # O6 — a label names a DIMENSION. The list form makes a second claim on one label expressible
+      # where the attrset could not, so the list form owes the refusal.
+      test-O6-a-duplicate-label-is-refused-by-name = {
+        expr =
+          (genScope.buildRoots {
+            parentGraph = pg;
+            edgeGraphs = [
+              {
+                label = "M";
+                graph = genScope.edge "n" "m";
+              }
+              {
+                label = "M";
+                graph = genScope.edge "d" "c";
+              }
+            ];
+          }).nodeOrder;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope.buildRoots: `edgeGraphs` claims label(s) ["M"] more than once. A label names a dimension, not a node, so two contributions under one label is a collision with no order semantics to resolve it — merge them with `overlay` before contributing, or give each its own label.'';
+        };
+      };
+
+      # O14, limb 1 — a bare NODE MAP where the record belongs. This is the shape that used to be
+      # served silently on every enumerating read.
+      test-O14-a-node-map-is-refused-with-the-conjunct-named = {
+        expr =
+          (genScope.eval {
+            scope = built.nodes;
+            attributes = attrs;
+          }).allNodeIds;
+        expectedError = {
+          type = "ThrownError";
+          msg = scopeRefusal "eval" "received an attrset with no `nodes`";
+        };
+      };
+
+      # O14, limb 2 — the ADVERSARIAL graph, whose node ids are literally `nodes` and `nodeOrder`.
+      # Its key set is IDENTICAL to the record's, so only the TYPE discriminates.
+      test-O14-the-adversarial-node-map-is-refused-on-type = {
+        expr =
+          (genScope.eval {
+            scope =
+              (genScope.buildRoots {
+                parentGraph = genScope.overlays [
+                  (genScope.vertex "nodes")
+                  (genScope.vertex "nodeOrder")
+                ];
+              }).nodes;
+            attributes = attrs;
+          }).allNodeIds;
+        expectedError = {
+          type = "ThrownError";
+          msg = scopeRefusal "eval" "received an attrset whose `nodeOrder` is a set, not a list";
+        };
+      };
+
+      # O14, limb 3 — not an attrset at all.
+      test-O14-a-non-attrset-is-refused-with-its-type-named = {
+        expr =
+          (genScope.eval {
+            scope = [ ];
+            attributes = attrs;
+          }).allNodeIds;
+        expectedError = {
+          type = "ThrownError";
+          msg = scopeRefusal "eval" "received a list";
+        };
+      };
+
+      # O14 — the refusal is the ENTRY's, so the message names the entry the caller wrote.
+      test-O14-the-message-names-the-entry-that-was-called = {
+        expr =
+          (genScope.evalDebug {
+            scope = built.nodes;
+            attributes = attrs;
+          }).node
+            "a";
+        expectedError = {
+          type = "ThrownError";
+          msg = scopeRefusal "evalDebug" "received an attrset with no `nodes`";
+        };
+      };
+    };
+
   config.flake.testsError.build-nodes-reserved-labels = {
     test-a-reserved-P-names-the-label-and-the-argument-that-owns-it = {
-      expr = (collide [ "P" ]).a.parent;
+      expr = (collide [ "P" ]).nodes.a.parent;
       expectedError = {
         type = "ThrownError";
         msg = exactly (reservedLabelRefusal ''["P"]'' containment);
       };
     };
     test-a-reserved-I-names-the-label-and-the-argument-that-owns-it = {
-      expr = (collide [ "I" ]).a.decls.__edges.I;
+      expr = (collide [ "I" ]).nodes.a.decls.__edges.I;
       expectedError = {
         type = "ThrownError";
         msg = exactly (reservedLabelRefusal ''["I"]'' importing);

@@ -17,7 +17,7 @@
 #       └── .env                  REGION=us-east-1
 { genScope }:
 {
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.overlays [
       (genScope.star "global" [
         "apps"

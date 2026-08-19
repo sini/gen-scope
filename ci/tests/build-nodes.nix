@@ -1,7 +1,7 @@
 { lib, genScope, ... }:
 let
   # Basic build
-  basic = genScope.buildNodes {
+  basic = genScope.buildRoots {
     parentGraph = genScope.edge "child" "parent";
     importGraph = genScope.edge "child" "lib";
     decls = {
@@ -23,7 +23,7 @@ let
   };
 
   # No edges (vertices declared via parentGraph)
-  noEdges = genScope.buildNodes {
+  noEdges = genScope.buildRoots {
     parentGraph = genScope.vertices [
       "a"
       "b"
@@ -48,16 +48,19 @@ let
   # as an absence. `collide` varies only the label the caller offers.
   collide =
     label:
-    genScope.buildNodes {
+    genScope.buildRoots {
       parentGraph = genScope.edge "a" "root";
       importGraph = genScope.edge "a" "lib1";
-      edgeGraphs = {
-        ${label} = genScope.edge "a" "HIJACKED";
-      };
+      edgeGraphs = [
+        {
+          label = label;
+          graph = genScope.edge "a" "HIJACKED";
+        }
+      ];
     };
 
   # Multiple import edges
-  multiImport = genScope.buildNodes {
+  multiImport = genScope.buildRoots {
     parentGraph = genScope.empty;
     importGraph = genScope.overlays [
       (genScope.edge "a" "b")
@@ -74,7 +77,7 @@ in
 {
   flake.tests."build-nodes" = {
     test-output-has-all-vertices = {
-      expr = builtins.sort builtins.lessThan (builtins.attrNames basic);
+      expr = builtins.sort builtins.lessThan (builtins.attrNames basic.nodes);
       expected = [
         "child"
         "lib"
@@ -83,52 +86,52 @@ in
     };
 
     test-node-shape-id = {
-      expr = basic.parent.id;
+      expr = basic.nodes.parent.id;
       expected = "parent";
     };
 
     test-node-shape-type = {
-      expr = basic.parent.type;
+      expr = basic.nodes.parent.type;
       expected = "host";
     };
 
     test-node-shape-parent = {
-      expr = basic.child.parent;
+      expr = basic.nodes.child.parent;
       expected = "parent";
     };
 
     test-node-shape-null-parent = {
-      expr = basic.parent.parent;
+      expr = basic.nodes.parent.parent;
       expected = null;
     };
 
     test-node-decls-present = {
-      expr = basic.parent.decls.x;
+      expr = basic.nodes.parent.decls.x;
       expected = 1;
     };
 
     test-edges-I-populated = {
-      expr = basic.child.decls.__edges.I;
+      expr = basic.nodes.child.decls.__edges.I;
       expected = [ "lib" ];
     };
 
     test-edges-I-empty-for-root = {
-      expr = basic.parent.decls.__edges.I or [ ];
+      expr = basic.nodes.parent.decls.__edges.I or [ ];
       expected = [ ];
     };
 
     test-type-null-when-unset = {
-      expr = noEdges.b.type;
+      expr = noEdges.nodes.b.type;
       expected = null;
     };
 
     test-no-parent-when-no-P-edge = {
-      expr = noEdges.a.parent;
+      expr = noEdges.nodes.a.parent;
       expected = null;
     };
 
     test-multiple-imports = {
-      expr = builtins.sort builtins.lessThan multiImport.a.decls.__edges.I;
+      expr = builtins.sort builtins.lessThan multiImport.nodes.a.decls.__edges.I;
       expected = [
         "b"
         "c"
@@ -139,7 +142,7 @@ in
       # strict=true (default): P partial function violation throws eagerly
       expr =
         !(builtins.tryEval (
-          genScope.buildNodes {
+          genScope.buildRoots {
             parentGraph = genScope.overlays [
               (genScope.edge "x" "a")
               (genScope.edge "x" "b")
@@ -153,7 +156,7 @@ in
       # strict=false: throws only when conflicting node's parent is accessed
       expr =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             strict = false;
             parentGraph = genScope.overlays [
               (genScope.edge "x" "a")
@@ -161,12 +164,12 @@ in
             ];
           };
         in
-        (builtins.tryEval (builtins.attrNames nodes)).success;
+        (builtins.tryEval (builtins.attrNames nodes.nodes)).success;
       expected = true;
     };
 
     test-decls-default-empty = {
-      expr = builtins.removeAttrs basic.lib.decls [ "__edges" ];
+      expr = builtins.removeAttrs basic.nodes.lib.decls [ "__edges" ];
       expected = {
         z = 3;
       };
@@ -183,12 +186,12 @@ in
     # node would show no hijack to refuse: `M` is an ordinary caller label carrying the SAME edge, and
     # it leaves `parent` and the `I` set exactly as the arguments declared them.
     test-control-an-ordinary-label-leaves-parent-alone = {
-      expr = (collide "M").a.parent;
+      expr = (collide "M").nodes.a.parent;
       expected = "root";
     };
 
     test-control-an-ordinary-label-leaves-the-I-edges-alone = {
-      expr = (collide "M").a.decls.__edges.I;
+      expr = (collide "M").nodes.a.decls.__edges.I;
       expected = [ "lib1" ];
     };
 
@@ -204,12 +207,15 @@ in
 
     test-custom-edge-graphs =
       let
-        custom = genScope.buildNodes {
+        custom = genScope.buildRoots {
           parentGraph = genScope.empty;
           importGraph = genScope.empty;
-          edgeGraphs = {
-            D = genScope.edge "a" "b";
-          };
+          edgeGraphs = [
+            {
+              label = "D";
+              graph = genScope.edge "a" "b";
+            }
+          ];
           decls = {
             a = { };
             b = { };
@@ -218,7 +224,7 @@ in
         };
       in
       {
-        expr = custom.a.decls.__edges.D;
+        expr = custom.nodes.a.decls.__edges.D;
         expected = [ "b" ];
       };
   };

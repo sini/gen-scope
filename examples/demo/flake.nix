@@ -166,7 +166,7 @@
       #
       # Scope graphs model name resolution. Parent (P) edges encode
       # lexical nesting, import (I) edges encode cross-scope visibility.
-      # buildNodes constructs a flat indexed node map from algebraic graphs.
+      # buildRoots constructs the node map and its declared vertex order from algebraic graphs.
       # ===================================================================
 
       scopeGraphBasic =
@@ -187,7 +187,7 @@
           # PL department imports from math faculty (cross-scope visibility)
           importGraph = genScope.edge "dept:pl" "faculty:math";
 
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             inherit parentGraph importGraph;
             decls = {
               university = {
@@ -223,21 +223,21 @@
         in
         {
           # Parent edges create tree structure
-          lab-parent = nodes."lab:types".parent; # "dept:pl"
+          lab-parent = nodes.nodes."lab:types".parent; # "dept:pl"
           cs-children = builtins.sort builtins.lessThan (
-            builtins.attrNames (lib.filterAttrs (_: n: n.parent == "faculty:cs") nodes)
+            builtins.attrNames (lib.filterAttrs (_: n: n.parent == "faculty:cs") nodes.nodes)
           );
           # -> [ "dept:pl" "dept:systems" ]
 
           # Import edges stored in decls.__edges.I
-          pl-imports = nodes."dept:pl".decls.__edges.I or [ ]; # [ "faculty:math" ]
+          pl-imports = nodes.nodes."dept:pl".decls.__edges.I or [ ]; # [ "faculty:math" ]
 
           # Types tag nodes for typed queries
-          lab-type = nodes."lab:types".type; # "lab"
+          lab-type = nodes.nodes."lab:types".type; # "lab"
 
           # Node fields
-          pl-decls = builtins.removeAttrs nodes."dept:pl".decls [ "__edges" ]; # { focus = "scope graphs"; }
-          pl-id = nodes."dept:pl".id; # "dept:pl"
+          pl-decls = builtins.removeAttrs nodes.nodes."dept:pl".decls [ "__edges" ]; # { focus = "scope graphs"; }
+          pl-id = nodes.nodes."dept:pl".id; # "dept:pl"
         };
 
       # ===================================================================
@@ -257,7 +257,7 @@
             ])
             (genScope.edge "a1x" "a1")
           ];
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             inherit parentGraph;
             types = {
               root = "org";
@@ -269,9 +269,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: _id: [ ];
             };
           };
@@ -304,7 +304,7 @@
 
       nameResolution =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.overlay (genScope.edge "inner" "outer") (genScope.edge "deep" "inner");
             importGraph = genScope.edge "inner" "lib";
             decls = {
@@ -323,9 +323,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: id: (_self.node id).decls.__edges.I or [ ];
             };
           };
@@ -380,7 +380,7 @@
 
       ambiguityDetection =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.edge "scope" "parent";
             importGraph = genScope.edge "scope" "imported";
             decls = {
@@ -396,9 +396,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: id: (_self.node id).decls.__edges.I or [ ];
             };
           };
@@ -425,7 +425,7 @@
 
       visibilityPolicies =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.vertices [
               "modA"
               "modB"
@@ -447,9 +447,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: id: (_self.node id).decls.__edges.I or [ ];
             };
           };
@@ -481,7 +481,7 @@
 
       seenImports =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.vertices [
               "a"
               "b"
@@ -497,9 +497,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: id: (_self.node id).decls.__edges.I or [ ];
             };
           };
@@ -531,7 +531,7 @@
             ])
             (genScope.edge "infra" "platform")
           ];
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             inherit parentGraph;
             decls = {
               company = {
@@ -555,7 +555,7 @@
           };
 
           attributes = {
-            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
             imports = _self: _id: [ ];
 
             # Inherited: flows top-down via parent chain (Knuth 1968)
@@ -586,7 +586,7 @@
           };
 
           r = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             inherit attributes;
           };
         in
@@ -609,7 +609,7 @@
 
       hoagSynthesis =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.vertices [
               "dept:eng"
               "dept:sales"
@@ -637,24 +637,26 @@
           };
 
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
               children =
                 _self: id:
                 let
-                  staticChildren = lib.filterAttrs (_: n: n.parent == id) nodes;
+                  staticChildren = lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
                   # Synthesize audit nodes for departments over budget threshold
-                  audit = lib.optionalAttrs (lib.hasPrefix "dept:" id && (nodes.${id}.decls.budget or 0) > 150000) {
-                    "audit:${id}" = {
-                      id = "audit:${id}";
-                      type = "audit";
-                      parent = id;
-                      decls = {
-                        reviewer = "finance";
-                        threshold = 150000;
+                  audit =
+                    lib.optionalAttrs (lib.hasPrefix "dept:" id && (nodes.nodes.${id}.decls.budget or 0) > 150000)
+                      {
+                        "audit:${id}" = {
+                          id = "audit:${id}";
+                          type = "audit";
+                          parent = id;
+                          decls = {
+                            reviewer = "finance";
+                            threshold = 150000;
+                          };
+                        };
                       };
-                    };
-                  };
                 in
                 staticChildren // audit;
               imports = _self: _id: [ ];
@@ -683,7 +685,7 @@
 
       circularAttributes =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.vertex "system";
             decls = {
               system = {
@@ -692,7 +694,7 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
               children = _self: _id: { };
               imports = _self: _id: [ ];
@@ -722,7 +724,7 @@
 
       importCollection =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.vertices [
               "app"
               "utils"
@@ -746,9 +748,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: id: (_self.node id).decls.__edges.I or [ ];
               available-fns = genScope.collectImports (self: importId: (self.node importId).decls.exports or [ ]);
             };
@@ -765,7 +767,7 @@
 
       structuralSubtyping =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.vertices [
               "point2d"
               "point3d"
@@ -789,9 +791,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: _id: [ ];
             };
           };
@@ -813,19 +815,25 @@
 
       customEdgeLabels =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.vertices [
               "baseRecord"
               "extRecord"
               "classA"
               "classB"
             ];
-            edgeGraphs = {
+            edgeGraphs = [
               # R = record field extension
-              R = genScope.edge "extRecord" "baseRecord";
+              {
+                label = "R";
+                graph = genScope.edge "extRecord" "baseRecord";
+              }
               # E = class inheritance
-              E = genScope.edge "classB" "classA";
-            };
+              {
+                label = "E";
+                graph = genScope.edge "classB" "classA";
+              }
+            ];
             decls = {
               baseRecord = {
                 z = "num";
@@ -843,9 +851,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: _id: [ ];
               "edges-R" = _self: id: (_self.node id).decls.__edges.R or [ ];
               "edges-E" = _self: id: (_self.node id).decls.__edges.E or [ ];
@@ -875,7 +883,7 @@
 
       scopedRelations =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.edge "inner" "outer";
             decls = {
               outer = {
@@ -892,9 +900,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: _id: [ ];
             };
           };
@@ -925,7 +933,7 @@
 
       evalDebugDemo =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.vertices [
               "a"
               "b"
@@ -935,7 +943,7 @@
 
           # Intentionally cyclic: a.ping reads b.ping, b.ping reads a.ping
           result = genScope.evalDebug {
-            roots = nodes;
+            scope = nodes;
             attributes = {
               children = _self: _id: { };
               imports = _self: id: (_self.node id).decls.__edges.I or [ ];
@@ -962,7 +970,7 @@
 
       globalCollection =
         let
-          nodes = genScope.buildNodes {
+          nodes = genScope.buildRoots {
             parentGraph = genScope.star "org" [
               "teamA"
               "teamB"
@@ -988,9 +996,9 @@
             };
           };
           result = genScope.eval {
-            roots = nodes;
+            scope = nodes;
             attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes;
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: _id: [ ];
             };
           };

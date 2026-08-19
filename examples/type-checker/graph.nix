@@ -23,7 +23,7 @@
 #   class Rect   extends Shape { width: Num, height: Num }
 { genScope, lib }:
 let
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.star "root" [
       "Point2D"
       "Point3D"
@@ -35,15 +35,21 @@ let
       "Rect"
       "env"
     ];
-    edgeGraphs = {
+    edgeGraphs = [
       # R = record field extension (van Antwerpen 2018 Fig. 4, 5)
-      R = genScope.edge "NamedPoint" "Point2D";
+      {
+        label = "R";
+        graph = genScope.edge "NamedPoint" "Point2D";
+      }
       # E = class inheritance (Neron 2015 §3, Fig. 16)
-      E = genScope.overlays [
-        (genScope.edge "Circle" "Shape")
-        (genScope.edge "Rect" "Shape")
-      ];
-    };
+      {
+        label = "E";
+        graph = genScope.overlays [
+          (genScope.edge "Circle" "Shape")
+          (genScope.edge "Rect" "Shape")
+        ];
+      }
+    ];
     decls = {
       root = {
         __typeDecl = {

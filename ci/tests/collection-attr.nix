@@ -3,7 +3,7 @@ let
   inherit (genScope) collectionAttr collectImports;
 
   # Tree: root → {a, b}; a imports b
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.overlays [
       (genScope.edge "a" "root")
       (genScope.edge "b" "root")
@@ -24,9 +24,9 @@ let
   };
 
   result = genScope.eval {
-    inherit roots;
+    scope = roots;
     attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
       imports = self: id: (self.node id).decls.__edges.I or [ ];
 
       tags = self: id: (self.node id).decls.tags or [ ];
@@ -65,7 +65,7 @@ let
       # collectImports convenience
       import-tags-simple = collectImports (self: id: (self.node id).decls.tags or [ ]);
     };
-    parseParent = id: (roots.${id} or { parent = null; }).parent;
+    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
   };
 in
 {

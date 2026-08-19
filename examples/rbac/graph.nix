@@ -21,7 +21,7 @@
 #       +-- doc-3
 { genScope, lib }:
 {
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     # Resource hierarchy (parent edges)
     parentGraph = genScope.overlays [
       (genScope.star "org" [
@@ -34,24 +34,33 @@
       ])
       (genScope.edge "doc-3" "project-y")
     ];
-    edgeGraphs = {
+    edgeGraphs = [
       # R = role inheritance (Neron 2015 §3, Fig. 16)
-      R = genScope.overlays [
-        (genScope.edge "editor" "viewer")
-        (genScope.edge "admin" "editor")
-        (genScope.edge "auditor" "viewer")
-      ];
+      {
+        label = "R";
+        graph = genScope.overlays [
+          (genScope.edge "editor" "viewer")
+          (genScope.edge "admin" "editor")
+          (genScope.edge "auditor" "viewer")
+        ];
+      }
       # A = role assignment (user -> role)
-      A = genScope.overlays [
-        (genScope.edge "alice" "admin")
-        (genScope.edge "bob" "editor")
-        (genScope.edge "bob" "auditor")
-        (genScope.edge "carol" "viewer")
-        (genScope.edge "dave" "editor")
-      ];
+      {
+        label = "A";
+        graph = genScope.overlays [
+          (genScope.edge "alice" "admin")
+          (genScope.edge "bob" "editor")
+          (genScope.edge "bob" "auditor")
+          (genScope.edge "carol" "viewer")
+          (genScope.edge "dave" "editor")
+        ];
+      }
       # D = deny override (user -> resource)
-      D = genScope.edge "dave" "project-x";
-    };
+      {
+        label = "D";
+        graph = genScope.edge "dave" "project-x";
+      }
+    ];
     decls = {
       viewer = {
         read = true;

@@ -24,11 +24,12 @@
   prelude,
   eval,
   recordedDeps,
+  requireScope,
 }:
 {
   foldEquations =
     {
-      roots,
+      scope,
       parseParent,
       schedule,
       declaredEdges ? (_: [ ]),
@@ -37,7 +38,17 @@
     let
       equations = schedule.equations;
       attributes = prelude.mapAttrs (_: eq: eq.compute) equations;
-      ev = eval { inherit roots attributes parseParent; }; # demand fixpoint (delegate)
+      # The guard is forced here rather than left to `eval`, so the entry this caller named is the
+      # entry the message names.
+      checked = requireScope "foldEquations" scope;
+      # The plane re-exports the node map under its established name. That is OUTPUT data, not an
+      # entry formal, so the input-type ruling does not reach it — and a consumer that hands this
+      # half back to an evaluator is refused by name rather than served silently.
+      roots = checked.nodes;
+      ev = eval {
+        scope = checked;
+        inherit attributes parseParent;
+      }; # demand fixpoint (delegate)
 
       nodeIds = prelude.attrNames ev.allNodes; # includes NTA-spawned children
       accessor = {

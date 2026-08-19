@@ -50,7 +50,7 @@ let
         map (n: if n.__parentPath != null then genScope.edge n.__path n.__parentPath else null) nodes
       );
     in
-    genScope.buildNodes {
+    genScope.buildRoots {
       parentGraph = genScope.overlays ([ (genScope.vertices nodeIds) ] ++ parentEdges);
       decls = builtins.listToAttrs (
         map (n: {

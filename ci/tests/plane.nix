@@ -28,6 +28,10 @@ let
       labels = [ "owns" ];
     };
   };
+  planeScope = {
+    nodes = roots;
+    nodeOrder = builtins.attrNames roots;
+  };
 
   # Every family of the partition — the two child attributes, an `edges-` label, the relation the
   # resolver traverses and `includes` — plus two resolutional attributes. Read against
@@ -68,17 +72,21 @@ let
   };
 
   cold = genScope.eval {
-    inherit roots;
+    scope = planeScope;
     attributes = attrs;
   };
   prior = genScope.eval {
-    inherit roots;
+    scope = planeScope;
     attributes = priorAttrs;
   };
 
   # A graph that actually materializes a child, for the facade-residual cells: `children` is
   # what hands a raw node record back through `get`.
   childRoots.p = mkNode "p" null { owns = [ "kid" ]; };
+  childScope = {
+    nodes = childRoots;
+    nodeOrder = builtins.attrNames childRoots;
+  };
   childAttrs = {
     children =
       self: id:
@@ -97,7 +105,7 @@ let
   childParseParent = id: if id == "kid" then "p" else null;
 
   childCold = genScope.eval {
-    roots = childRoots;
+    scope = childScope;
     attributes = childAttrs;
     parseParent = childParseParent;
   };
@@ -105,7 +113,7 @@ let
   # The same program answering values a cold run never produces, so anything served from it is
   # visible wherever it surfaces — including through a channel that bypasses `get`.
   childPrior = genScope.eval {
-    roots = childRoots;
+    scope = childScope;
     attributes = childAttrs // {
       "edges-owns" = self: id: [ "POISON-EDGE" ];
       label = self: id: "cached-${id}";
@@ -116,7 +124,7 @@ let
   # Everything clean, reusing one STRUCTURAL and one RESOLUTIONAL name, so both can be read
   # back through the same residual channel in one fixture.
   childWarm = genScope.evalWarm {
-    roots = childRoots;
+    scope = childScope;
     attributes = childAttrs;
     parseParent = childParseParent;
     prior = childPrior;
@@ -133,7 +141,8 @@ let
   row =
     names:
     genScope.evalWarm {
-      inherit roots prior;
+      scope = planeScope;
+      inherit prior;
       attributes = attrs;
       decision = genScope.mkDecision {
         isClean = _: true;
@@ -145,7 +154,8 @@ let
   # shape `followEdge` and `collectionAttr`'s `label:` traversal issue. No enumeration could
   # have anticipated it.
   dynamicRow = genScope.evalWarm {
-    inherit roots prior;
+    scope = planeScope;
+    inherit prior;
     attributes = attrs;
     decision = genScope.mkDecision {
       isClean = _: true;
@@ -407,7 +417,7 @@ in
       expr =
         let
           e = genScope.eval {
-            inherit roots;
+            scope = planeScope;
             attributes = attrs // {
               label = self: id: throw "resolutional attribute forced";
               owned = self: id: throw "resolutional attribute forced";
@@ -515,7 +525,7 @@ in
         let
           r = builtins.tryEval (
             (genScope.eval {
-              inherit roots;
+              scope = planeScope;
               attributes = attrs;
               decision = genScope.mkDecision {
                 isClean = _: true;
@@ -541,7 +551,7 @@ in
     test-provenance-is-carried-to-the-caller = {
       expr =
         (genScope.eval {
-          inherit roots;
+          scope = planeScope;
           attributes = attrs;
           provenance = [
             {
@@ -562,7 +572,8 @@ in
     test-provenance-survives-the-warm-entry-point = {
       expr =
         (genScope.evalWarm {
-          inherit roots prior;
+          scope = planeScope;
+          inherit prior;
           attributes = attrs;
           decision = genScope.coldDecision;
           provenance = [ { fact = "carried"; } ];
@@ -578,7 +589,8 @@ in
       expr =
         let
           w = genScope.evalWarm {
-            inherit roots prior;
+            scope = planeScope;
+            inherit prior;
             attributes = attrs;
             decision = genScope.coldDecision;
           };

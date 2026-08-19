@@ -1672,7 +1672,7 @@
           registry = nodeMap;
           edges = importEdgesOf;
         };
-      importNodes = genScope.buildNodes {
+      importNodes = genScope.buildRoots {
         importGraph = genScope.overlays [
           (genScope.vertices [
             "lb"

@@ -21,7 +21,7 @@ let
   hostNames = builtins.attrNames hosts;
   envNames = builtins.attrNames environments;
 
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     # Parent edges: hosts -> environments -> root
     parentGraph = genScope.overlays (
       [ (genScope.star "root" (map (e: "env:${e}") envNames)) ]
@@ -31,19 +31,22 @@ let
     # M edges: group-to-group membership (transitive).
     # "users" has members = ["admins"], meaning admins are members of users.
     # M edge FROM member TO group: member inherits group's privileges.
-    edgeGraphs = {
-      M = genScope.overlays (
-        (lib.concatMap (
-          gname:
-          let
-            g = groups.${gname};
-          in
-          map (member: genScope.edge "group:${member}" "group:${gname}") g.members
-        ) groupNames)
-        # Ensure ALL groups exist as vertices even if they have no membership edges.
-        ++ [ (genScope.vertices (map (g: "group:${g}") groupNames)) ]
-      );
-    };
+    edgeGraphs = [
+      {
+        label = "M";
+        graph = genScope.overlays (
+          (lib.concatMap (
+            gname:
+            let
+              g = groups.${gname};
+            in
+            map (member: genScope.edge "group:${member}" "group:${gname}") g.members
+          ) groupNames)
+          # Ensure ALL groups exist as vertices even if they have no membership edges.
+          ++ [ (genScope.vertices (map (g: "group:${g}") groupNames)) ]
+        );
+      }
+    ];
 
     decls = lib.listToAttrs (
       [

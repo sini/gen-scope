@@ -8,20 +8,24 @@
 # to get O(1) attribute access is an attrset entry. We co-locate the memoization
 # cache (_eval) ON each node when it is materialized by its parent's `children`
 # or `derived-children` attribute.
-{ prelude }:
+{ prelude, requireScope }:
 let
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
 
   eval =
     {
-      roots,
+      scope,
       attributes,
       parseParent ? null,
       prior ? null,
       decision ? interface.coldDecision,
       provenance ? [ ],
     }:
+    let
+      checked = requireScope "eval" scope;
+      roots = checked.nodes;
+    in
     prelude.fix (
       self:
       let
@@ -141,7 +145,7 @@ let
         # The materialization walk itself, before it is collapsed into an attrset. Both
         # `allNodes` and `allNodeIds` are projections of this ONE list, so a consumer that
         # wants the node set AND its order pays for a single walk.
-        walkEntries = prelude.concatMap self._walkFrom (builtins.attrNames roots);
+        walkEntries = prelude.concatMap self._walkFrom checked.nodeOrder;
       in
       {
         node = resolveNode;
@@ -343,11 +347,12 @@ let
   # new self with updated visited/traceList. Use eval for production.
   evalDebug =
     {
-      roots,
+      scope,
       attributes,
       parseParent ? null,
     }:
     let
+      roots = (requireScope "evalDebug" scope).nodes;
       mkSelf =
         visited: traceList:
         let
@@ -430,7 +435,7 @@ let
   # holds, and it does not use the later "self-adjusting computation" name.)
   evalWarm =
     {
-      roots,
+      scope,
       attributes,
       parseParent ? null,
       prior,
@@ -439,7 +444,7 @@ let
     }:
     eval {
       inherit
-        roots
+        scope
         attributes
         parseParent
         prior

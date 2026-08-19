@@ -16,12 +16,13 @@ let
   # library bound as `graph`: these build a scope graph out of vertices and overlays, that one
   # answers reachability and partition questions about a graph already built.
   algebraicGraph = import ./graph.nix;
-  buildNodes = import ./build-nodes.nix { inherit prelude; };
+  buildRoots = import ./build-nodes.nix { inherit prelude; };
   queries = import ./queries.nix { inherit prelude; };
   resolve = import ./resolve.nix { inherit prelude; };
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
-  eval = import ./eval.nix { inherit prelude; };
+  inherit (import ./require-scope.nix { inherit prelude; }) requireScope;
+  eval = import ./eval.nix { inherit prelude requireScope; };
   program = import ./program.nix { inherit prelude; };
   leastModel = import ./least-model.nix { inherit prelude; };
   wellFounded = import ./well-founded.nix { inherit prelude; };
@@ -53,6 +54,7 @@ let
   foldEquations = import ./fold-equations.nix {
     inherit prelude;
     inherit (eval) eval recordedDeps;
+    inherit requireScope;
   };
   # The surface is folded rather than chained with `//`, so a name contributed by two modules is a
   # throw naming both instead of a silent last-wins shadowing.
@@ -61,7 +63,7 @@ in
 mergeSurface {
   inherit
     algebraicGraph
-    buildNodes
+    buildRoots
     queries
     resolve
     structural

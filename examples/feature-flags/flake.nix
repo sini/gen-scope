@@ -13,7 +13,7 @@
       attributes = import ./attributes.nix { inherit genScope lib; };
       inherit (graph) roots;
       result = genScope.eval {
-        inherit roots;
+        scope = roots;
         attributes = graph.mkAttributes roots attributes;
       };
     in

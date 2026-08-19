@@ -14,7 +14,7 @@
 #   └── lib-logging@3.1 → depends on: lib-json@1.x
 { genScope, lib }:
 let
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.star "workspace" [
       "app@1.0"
       "lib-http@2.3"
@@ -30,10 +30,13 @@ let
       (genScope.edge "lib-http@2.3" "lib-tls@1.2")
       (genScope.edge "lib-logging@3.1" "lib-json@1.5")
     ];
-    edgeGraphs = {
+    edgeGraphs = [
       # D = devDependency (separate from runtime deps)
-      D = genScope.edge "app@1.0" "lib-logging@3.1";
-    };
+      {
+        label = "D";
+        graph = genScope.edge "app@1.0" "lib-logging@3.1";
+      }
+    ];
     decls = {
       workspace = {
         name = "my-workspace";

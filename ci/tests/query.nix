@@ -8,7 +8,7 @@ let
     ;
 
   # Graph: a imports b, b imports c. Parent: a → root.
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.edge "a" "root";
     importGraph = genScope.overlays [
       (genScope.edge "a" "b")
@@ -31,44 +31,44 @@ let
   };
 
   result = genScope.eval {
-    inherit roots;
+    scope = roots;
     attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
       imports = self: id: (self.node id).decls.__edges.I or [ ];
       resolved = query {
         dataFilter = node: node.decls.val or null;
       };
     };
-    parseParent = id: (roots.${id} or { parent = null; }).parent;
+    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
   };
 
   resultTransitive = genScope.eval {
-    inherit roots;
+    scope = roots;
     attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
       imports = self: id: (self.node id).decls.__edges.I or [ ];
       resolved = query {
         dataFilter = node: node.decls.val or null;
         transitiveImports = true;
       };
     };
-    parseParent = id: (roots.${id} or { parent = null; }).parent;
+    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
   };
 
   resultAll = genScope.eval {
-    inherit roots;
+    scope = roots;
     attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
       imports = self: id: (self.node id).decls.__edges.I or [ ];
       all-vals = queryAll {
         dataFilter = node: node.decls.val or null;
       };
     };
-    parseParent = id: (roots.${id} or { parent = null; }).parent;
+    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
   };
 
   # Ambiguity: node imports two nodes with same key
-  ambRoots = genScope.buildNodes {
+  ambRoots = genScope.buildRoots {
     parentGraph = genScope.empty;
     importGraph = genScope.overlays [
       (genScope.edge "x" "y")
@@ -87,7 +87,7 @@ let
   };
 
   ambResult = genScope.eval {
-    roots = ambRoots;
+    scope = ambRoots;
     attributes = {
       children = self: id: { };
       imports = self: id: (self.node id).decls.__edges.I or [ ];
@@ -98,7 +98,7 @@ let
   };
 
   # Reverse (neededBy): b and c import a; d imports b.
-  revRoots = genScope.buildNodes {
+  revRoots = genScope.buildRoots {
     parentGraph = genScope.empty;
     importGraph = genScope.overlays [
       (genScope.edge "b" "a")
@@ -121,7 +121,7 @@ let
   };
 
   revResult = genScope.eval {
-    roots = revRoots;
+    scope = revRoots;
     attributes = {
       children = self: id: { };
       imports = self: id: (self.node id).decls.__edges.I or [ ];
@@ -142,8 +142,11 @@ let
   # is a root and the walk reaches them only by descending. The walk therefore emits
   # [ r mid alpha t ] while `attrNames allNodes` is [ alpha mid r t ]. Both `mid` and
   # `alpha` import `t`, and they are the pair whose relative order the two readings flip.
-  # `revRoots` above cannot serve here: every one of its nodes is a root with no children,
-  # so its walk order IS its codepoint order and it agrees under either reading.
+  # `revRoots` above cannot serve here either, but no longer for the reason it once could not:
+  # its nodes are all roots, so the walk IS the root enumeration — and the root enumeration is now
+  # the DECLARED vertex order, which for that fixture is [ b a c d ] against a codepoint
+  # [ a b c d ]. It discriminates on the root axis; `nestedNodes` is what discriminates on the
+  # descent axis, which is what this fixture is for.
   nestedNodes = {
     r = {
       id = "r";
@@ -181,9 +184,15 @@ let
   };
 
   nestedResult = genScope.eval {
-    roots = {
-      inherit (nestedNodes) r t;
-    };
+    scope =
+      let
+        nodes = { inherit (nestedNodes) r t; };
+      in
+      {
+        inherit nodes;
+        # A hand-built scope states its own order at the site.
+        nodeOrder = builtins.attrNames nodes;
+      };
     attributes = {
       children = self: id: lib.filterAttrs (_: n: n.parent == id) nestedNodes;
       imports = self: id: (self.node id).decls.imports or [ ];
@@ -319,10 +328,12 @@ in
       ];
     };
 
-    # CONTROL, same suite: a fixture whose walk order and key order COINCIDE answers the
-    # same list under either reading. Every node of `revRoots` is a root with no children,
-    # so its walk is its root enumeration — codepoint order. This is the case the pinned order
-    # cannot be observed in, and it is why the discriminator needs `nestedResult`.
+    # ★ RE-PINNED, and the name is kept so the change is legible in the history: this fixture's
+    # walk and key order NO LONGER COINCIDE. `revRoots` is built by the constructor, whose vertex
+    # order is now the declared one, and its declaration is [ b a c d ] where its key order is
+    # [ a b c d ]. What the cell still shows is the property that matters here — the ANSWER is
+    # unchanged under the move, because every node of this fixture is a root with no children, so
+    # nothing the query walks depends on the pair whose order flipped.
     test-queryReverse-flat-fixture-orders-coincide = {
       expr = {
         walk = revResult.allNodeIds;
@@ -331,8 +342,8 @@ in
       };
       expected = {
         walk = [
-          "a"
           "b"
+          "a"
           "c"
           "d"
         ];

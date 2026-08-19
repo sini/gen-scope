@@ -20,7 +20,7 @@
 #   max-items      — global=50, project:alpha=100
 { genScope, lib }:
 let
-  roots = genScope.buildNodes {
+  roots = genScope.buildRoots {
     parentGraph = genScope.overlays [
       (genScope.star "global" [
         "org:acme"
