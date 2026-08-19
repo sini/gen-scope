@@ -697,6 +697,32 @@ in
         msg = exactly "gen-scope.resolveClaims: kind 'g' at path [0] returned a `resources` that is a list rather than an attribute set";
       };
     };
+    # ── THE UNRECOGNISED KEY NAMES ITSELF, THE CLOSED SET, THE KIND AND THE PATH ──
+    # A caller reading this acts on it by fixing a spelling, and only the key and the set they may
+    # spell tell them which one — a boolean says a resolver was refused and leaves them to find out
+    # which of its keys this library does not read.
+    test-an-unrecognised-result-key-names-the-key-and-the-closed-set = {
+      expr = resolveClaims {
+        kinds = mkKinds [
+          (mkKind {
+            name = "g";
+            resolve = _: _: { resourcez.ok = 1; };
+          })
+        ];
+        claims = [
+          (mkClaim {
+            kind = "g";
+            subject = {
+              id_hash = "id-a";
+            };
+          })
+        ];
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.resolveClaims: kind 'g' at path [0] returned unrecognised result key(s) ["resourcez"]: this record is closed to ["resources","wiring","claims"], and a key outside that set is read by nothing here — correct the spelling or drop it'';
+      };
+    };
     # An identity that is present but cannot be an attribute name is named as such, distinctly from
     # one that is absent — two different bugs for the caller.
     test-an-unusable-id-hash-is-named-distinctly-from-a-missing-one = {

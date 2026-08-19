@@ -147,11 +147,15 @@
 #   · WHAT A RESOLVER'S ANSWER CONTAINS is unconstrained: the CONFORMANCE of a resource fragment —
 #     whether it is plain data, whether it is a function — is not a property established anywhere in
 #     this library, and a consumer needing that must obtain it elsewhere. ★ This is about the VALUES
-#     inside the answer. The answer's own SHAPE is not left open and never was: the record itself
-#     and the three containers the run reads off it are decided at the point the resolver returns,
-#     because `isAttrs` and `isList` decide them on any value and the alternative is a type error
-#     with no kind and no path in it — or, for a record that is not a set at all, no error and no
-#     output either.
+#     inside the answer, and about nothing else. The answer's own SHAPE is not left open and never
+#     was: the record itself and the three containers the run reads off it are decided at the point
+#     the resolver returns, because `isAttrs` and `isList` decide them on any value and the
+#     alternative is a type error with no kind and no path in it — or, for a record that is not a
+#     set at all, no error and no output either. ★★ Nor is its KEY SET left open: the record is
+#     CLOSED to `resources`, `wiring` and `claims`, and a key outside those three is a named
+#     refusal carrying the key, the closed set, the kind and the path. It was once open, and what
+#     that bought was the failure this library exists to remove — a misspelled field read by
+#     nothing, a claim contributing nothing, and no one told.
 #   · WHAT A `dedupKey` RETURNS is checked, but at APPLICATION and not here: a non-string grouping
 #     key is a named refusal carrying the kind and the path, which is where the value first exists.
 #
@@ -517,6 +521,13 @@ let
   # the payload is what remains after both are taken out of the arguments, so an author writing
   # `kind` has set the kind rather than shadowed it. A check over a domain two of whose members no
   # input can reach reads as coverage it does not have.
+  #
+  # ★★ AND THIS IS THE OPEN HALF OF A DELIBERATE ASYMMETRY. The payload is OPEN — anything not
+  # named here is carried — while the RESOLVER'S RESULT RECORD is CLOSED, an unrecognised key
+  # there being a named refusal. The two are opposite because the reader is: a payload is read by
+  # the caller's own resolvers and this library only carries it, whereas the result record is read
+  # by the run and by nothing else. The full reason is written once, at `resultDefect` in the run
+  # below, where the closure is enforced.
   engineKeys = [
     "_type"
     "_path"
@@ -762,10 +773,49 @@ let
       # This sits beside the `dedupKey` refusal below and works the same way: the value is in hand,
       # the emitting kind and its path are in hand, and the caller is told which of them produced
       # what.
+      #
+      # ── AND THE RECORD IS CLOSED: A KEY OUTSIDE THE THREE IS A NAMED REFUSAL ──
+      # All three fields are OPTIONAL, so "absent because misspelled" and "absent because intended"
+      # are ONE OBSERVATION to everything downstream: `{ resourcez = …; }` returned cleanly and
+      # produced nothing. It arrives through the door the shape arms above leave open — they decide
+      # the record's TYPE and its known fields' CONTAINERS, and membership is neither.
+      #
+      # ★ THE EMPTY RECORD IS NOT WHAT THIS REFUSES, and the distinction is the whole construction.
+      # `{ }` carries no key outside the set, takes no arm, and keeps returning — a legitimate empty
+      # answer, and the control the silent half above is measured against. A check on the RECORD
+      # would have refused it too; a check on its KEYS refuses neither it nor a record all of whose
+      # keys are known.
+      #
+      # ★★ TWO RECORDS IN THIS LIBRARY HAVE OPPOSITE OPENNESS, AND WHOSE CONTRACT EACH ONE IS
+      # DECIDES WHICH. `mkClaim`'s payload is OPEN: it is user-domain data this substrate carries
+      # opaquely, never reads, and cannot enumerate — an unrecognised key there is the ORDINARY
+      # CASE, and the only thing a payload may not do is take one of the engine's own names, which
+      # is what `engineKeys` reserves. This record is the SUBSTRATE'S OWN CONTRACT WITH THE RUN. Its
+      # key set is enumerable precisely because the run enumerates it — `resources`, `wiring` and
+      # `claims` are read here and nowhere else — so an unrecognised key cannot be data addressed to
+      # anyone: it is a field this library was meant to read and did not, which is a claim that
+      # vanishes with nothing said. Open where the reader is the caller; closed where the reader is
+      # this library.
+      resultKeys = [
+        "resources"
+        "wiring"
+        "claims"
+      ];
+
       resultDefect =
         result:
+        let
+          # The `isAttrs` test the first arm already makes, made again, and deliberately. Laziness
+          # means this binding is forced only where the chain has established it — but the chain's
+          # totality is a property of the ARMS, and a binding beside them is one edit from being
+          # forced first, where `attrNames` on a non-set is exactly the uncatchable abort these arms
+          # exist to replace. Total on any value for the cost of one predicate.
+          unknown = filter (k: !elem k resultKeys) (if isAttrs result then attrNames result else [ ]);
+        in
         if !isAttrs result then
           "returned a ${typeOf result} rather than an attribute set"
+        else if unknown != [ ] then
+          "returned unrecognised result key(s) ${toJSON unknown}: this record is closed to ${toJSON resultKeys}, and a key outside that set is read by nothing here — correct the spelling or drop it"
         else if result ? resources && !isAttrs result.resources then
           "returned a `resources` that is a ${typeOf result.resources} rather than an attribute set"
         else if result ? wiring && !(isAttrs result.wiring || isList result.wiring) then

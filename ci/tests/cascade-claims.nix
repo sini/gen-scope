@@ -1524,6 +1524,44 @@ in
       expr = (runReturning (_: _: { })).resources.g;
       expected = { };
     };
+    # ── THE RECORD IS CLOSED, AND `{ }` IS WHAT SAYS THE CLOSURE IS ON THE KEYS ──
+    # A misspelled field is read by nothing, so the claim contributed nothing and said nothing —
+    # the same vanish the arms above close, reached through membership rather than through shape.
+    # The two cells sit under the empty-set control deliberately: the control is the reason this
+    # check quantifies over KEYS and not over the record, and it is asserted in the same run.
+    test-an-unrecognised-result-key-refused = {
+      expr = didThrow (runReturning (_: _: { resourcez.ok = 1; }));
+      expected = true;
+    };
+    # An unrecognised key travelling WITH a known one is still refused: the check is over the whole
+    # key set, so a record that half-works does not buy the misspelling a pass.
+    test-an-unrecognised-key-beside-a-known-one-refused = {
+      expr = didThrow (
+        runReturning (
+          _: _: {
+            resources.ok = 1;
+            wirings = { };
+          }
+        )
+      );
+      expected = true;
+    };
+    # CONTROL — the three known keys together, which is the widest legitimate record there is, and
+    # it runs. Without this the cells above are equally satisfied by a check that refuses every
+    # record with a key in it.
+    test-control-all-three-known-keys-together-still-run = {
+      expr =
+        (runReturning (
+          _: _: {
+            resources.ok = 1;
+            wiring = { };
+            claims = [ ];
+          }
+        )).resources.g;
+      expected = {
+        ok = 1;
+      };
+    };
     test-control-a-resolver-producing-resources-still-runs = {
       expr = (runReturning (_: _: { resources.ok = 1; })).resources.g;
       expected = {
