@@ -186,8 +186,8 @@ let
     in
     (prelude.optional (local != null) local) ++ importResults ++ parentResults;
 
-  # Reverse reference attribute — `neededBy` (Hedin & Magnusson 2003, inter-type
-  # declarations): gather `dataFilter` over every node that IMPORTS `id` (the reverse of
+  # Reverse reference attribute — `neededBy`, and this library's OWN dual, claimed from no
+  # paper: gather `dataFilter` over every node that IMPORTS `id` (the reverse of
   # the `includes`/imports relation). A node does not know its importers locally, so this
   # forces the full node set via `allNodes` (Tier 2, like `collect`). Gather-all, no
   # shadowing; DIRECT importers by default — set `transitive = true` to walk the
@@ -200,10 +200,21 @@ let
   # The duality is what fixes the choice. `queryAll`'s answer order is its traversal order,
   # taken from each node's DECLARED `imports` list; a dual whose order came instead from
   # the codepoint key order of the node set would not be the dual of a traversal-ordered
-  # read, and the reverse relation carries no declared list of its own to walk. Attribute
-  # grammars answer this the same way: a reverse reference attribute is a survey of the
-  # tree, and its contributions combine in a traversal order of the tree (Hedin & Magnusson
-  # 2003; Sloane 2010 §7 collection attributes).
+  # read, and the reverse relation carries no declared list of its own to walk. A reverse
+  # reference attribute is a survey of the tree, and its contributions combine in a
+  # traversal order of the tree.
+  #
+  # THE CITATION THIS COMMENT USED TO CARRY WAS WRONG TWICE OVER, so it is gone rather than
+  # softened. It read "Hedin & Magnusson 2003, inter-type declarations" for the construct
+  # and "Hedin & Magnusson 2003; Sloane 2010 §7 collection attributes" for the order.
+  # Measured at the primaries: `inter-type` occurs 0 times in Hedin & Magnusson (live
+  # controls in the same run: `aspect` 80, `attribute` 93) — their word is `introduction`,
+  # credited to AspectJ, and an introduction adds a member to a class, which is not a
+  # reverse query; `contribution` and `traversal order` are likewise 0 there; and Sloane §7
+  # is Conclusion and Future Work, whose whole content on the subject is "we are adding
+  # collection attributes". Hedin 2000, the reference-attribute paper gen-scope does
+  # implement, carries no reverse direction either (`reverse`/`inverse`/`backward` 0 against
+  # `reference attribute` 47). The duality argument above needs none of them.
   #
   # This library does NOT sort and does NOT deduplicate the answer. A node reachable along
   # two reverse paths contributes twice, because a reverse gather counts contributions. A

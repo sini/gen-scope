@@ -192,10 +192,13 @@ let
         # The SAME node set as `allNodes`, as an ORDERED list of ids in MATERIALIZATION
         # order: root order, then pre-order depth-first through `children` /
         # `derived-children`, so a subtree is contiguous and a parent precedes its
-        # descendants. This is the survey order an attribute-grammar collection or reverse
-        # reference attribute is defined over (Hedin & Magnusson 2003 inter-type
-        # declarations; Sloane 2010 §7 collection attributes) — contributions combine in a
-        # traversal order of the tree, not in a codepoint order of node names.
+        # descendants. This is the survey order a gather or a reverse reference attribute is
+        # defined over — contributions combine in a traversal order of the tree, not in a
+        # codepoint order of node names. The rule is this library's own and is argued at
+        # `lib/resolve.nix:queryReverse` from the duality with `queryAll`; the citation it
+        # once carried ("Hedin & Magnusson 2003 inter-type declarations; Sloane 2010 §7
+        # collection attributes") named nothing in either paper — see that comment for the
+        # measurements.
         #
         # Two tie-breaks, declared because a declared order is the whole point:
         #
