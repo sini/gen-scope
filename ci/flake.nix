@@ -49,10 +49,17 @@
       # the same graph surface the library calls and instantiating the library against a
       # substituted one. `genPreludeLib` is a second name rather than an override of the harness's
       # `genPrelude`, whose surface is deliberately one function and stays that way.
+      # `genSchema` and `genIdentity` reach the suite because `tests/entry.nix` applies the
+      # STANDALONE root entry with explicit arguments — which is what keeps that cell pure, since
+      # supplying every dependency formal means the shim's fetching defaults are never forced. They
+      # are the SAME instances `genScope` above is built from, so the two sides of that comparison
+      # differ in entry point and in nothing else.
       specialArgs = {
         inherit genScope;
         genGraph = gen-graph.lib;
         genPreludeLib = prelude;
+        genSchema = gen-schema.lib;
+        genIdentity = gen-identity.lib;
       };
       # Cells whose subject is an error MESSAGE cannot live under `testModules`: the batch
       # asserter behind `checks.default` quantifies over `flake.tests` and forces every `expr`
