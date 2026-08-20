@@ -34,7 +34,7 @@ Quoted text is the owner's own `flake.nix` `description` field, verbatim. Grep c
 
 Entry: `inputs.gen-scope.lib` (flake). Root `default.nix` is a function `{ prelude ? <derived from flake.lock>, graph ? <derived from flake.lock>, schema ? <derived from flake.lock>, ... }` — callable as `import ./gen-scope { }`, which content-addresses gen-prelude, gen-graph and gen-schema out of the pinned lock and needs no `<nixpkgs>`.
 
-`lib/default.nix` is a REFUSING MERGE over seventeen modules — `algebraicGraph`, `buildNodes`, `queries`, `resolve`, `structural`, `interface`, `eval`, `program`, `leastModel`, `wellFounded`, `acceptance`, `engine`, `stratify`, `mint`, `folds`, `cascade`, `foldEquations` — folded by `lib/merge-surface.nix`, which throws naming the key and both contributing modules when one name is contributed twice. It replaced a flat `//` chain, which resolved a duplicate by list position and said nothing. All 88 exports sit at top level; there is no nested namespace and no key is shadowed — and that last is now a property of the assembly rather than of a cell (see traps). ★ In that merge `algebraicGraph` is this library's OWN `lib/graph.nix`; the parameter named `graph` is the **gen-graph library**, and the two are different things. `schema` is the third parameter and is bound to ONE function: `lib/default.nix` passes `hashIdentity` into `lib/mint.nix` and nothing else of that library reaches any module here. ★ Two `lib/` files are NOT in that merge and contribute no export: `lib/merge-surface.nix`, which performs it, and `lib/traversal-names.nix`, the resolver's traversal vocabulary — imported directly by `lib/resolve.nix` and `lib/structural.nix`, so the name the resolver traverses and the name the classifier reserves are one binding rather than two literals that agree by coincidence.
+`lib/default.nix` is a REFUSING MERGE over seventeen modules — `algebraicGraph`, `buildNodes`, `queries`, `resolve`, `structural`, `interface`, `eval`, `program`, `leastModel`, `wellFounded`, `acceptance`, `engine`, `stratify`, `mint`, `folds`, `cascade`, `foldEquations` — folded by `lib/merge-surface.nix`, which throws naming the key and both contributing modules when one name is contributed twice. It replaced a flat `//` chain, which resolved a duplicate by list position and said nothing. All 90 exports sit at top level; there is no nested namespace and no key is shadowed — and that last is now a property of the assembly rather than of a cell (see traps). ★ In that merge `algebraicGraph` is this library's OWN `lib/graph.nix`; the parameter named `graph` is the **gen-graph library**, and the two are different things. `schema` is the third parameter and is bound to ONE function: `lib/default.nix` passes `hashIdentity` into `lib/mint.nix` and nothing else of that library reaches any module here. ★ Two `lib/` files are NOT in that merge and contribute no export: `lib/merge-surface.nix`, which performs it, and `lib/traversal-names.nix`, the resolver's traversal vocabulary — imported directly by `lib/resolve.nix` and `lib/structural.nix`, so the name the resolver traverses and the name the classifier reserves are one binding rather than two literals that agree by coincidence.
 
 **Algebraic graph construction** — `lib/graph.nix`. A graph value is `{ vertices = [id]; edges = [{ from; to; }]; }`.
 
@@ -163,9 +163,9 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 
 | Export | Signature |
 |---|---|
-| `leastModel` | `program -> { derived; converged; work; }` — the DOOR; routes on `armFor` |
-| `leastModelUnary` | same, `genericClosure`; **refuses conjunctive input by name**. `work = { arm = "unary"; }` — no round count, because the done-set is C++-side |
-| `leastModelRounds` | same, round loop; `work = { arm = "conjunctive"; rounds; }` |
+| `leastModel` | `{ program, seed } -> { derived; converged; work; }` — the DOOR; routes on `armFor`. `seed` is the STARTING SET the least fixpoint is taken above and carries NO default; `{ }` is the ordinary least model |
+| `leastModelUnary` | same shape, `genericClosure`; the seed joins the program's facts in the start set. **Refuses conjunctive input by name**. `work = { arm = "unary"; }` — no round count, because the done-set is C++-side |
+| `leastModelRounds` | same shape, round loop; the seed is the round loop's initial `derived`. `work = { arm = "conjunctive"; rounds; }` |
 | `armFor` / `armNames` | `program -> "unary" \| "conjunctive"` / the closed enumeration |
 | `forceFields` | `acc -> null` — `seq` over every value in a record; the R-loop forcing discipline, exported so a consumer's own fold can use it |
 
@@ -174,8 +174,9 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 | Export | Signature |
 |---|---|
 | `reduct` | `program -> guess -> { atoms; unaryBodies; rules; }` — Gelfond–Lifschitz; the result is DEFINITE |
-| `wellFoundedModel` | `program -> { trueAtoms; undefinedAtoms; falseAtoms; verdict; outerRounds; converged; arm; }` |
-| `verdictNames` | `[ "true" "undefined" "false" ]` — the closed vocabulary |
+| `wellFoundedModel` | `{ program, interpretation } -> { trueAtoms; undefinedAtoms; falseAtoms; verdict; outerRounds; converged; arm; }`. `interpretation` is a LIST of `{ atom, verdict }` and carries NO default — the first pass supplies `[ ]` and says so |
+| `verdictNames` | `[ "true" "undefined" "false" ]` — the closed vocabulary, and the one an interpretation entry's verdict is checked against |
+| `Pos` | `interpretation -> [ atom ]` — the carried-TRUE projection, VGRS Definition 5.1's own name. `Neg` is not published: FALSE is inert, and a name for an inert projection invites the reading that it does something |
 
 `verdict` is TOTAL on every string: an atom no rule mentions answers `"false"`, never an absence. Atom lists come back in the program's DECLARATION order, not codepoint order.
 
@@ -191,7 +192,7 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 
 | Export | Signature |
 |---|---|
-| `solve` | `program -> wellFoundedModel // { condensationDepth; provenance; }` |
+| `solve` | `{ program, interpretation } -> wellFoundedModel // { condensationDepth; provenance; }`. Carried atoms contribute no edges, so the condensation and the stamp read the same quantity they did before |
 | `provenanceFor` | `depth -> [ entry ]` — empty inside `verifiedDepth.depth`, one entry past it |
 | `foldContributions` | `{ model, contributions, op, init } -> { value; admitted; contested; }` |
 
@@ -320,8 +321,8 @@ An instance supplies a run order (`schedule`), a way to place an item in it (`st
 | Navigate the tree | `parent` / `children` / `ancestors` / `siblings` / `descendants` |
 | Materialize nodes | `result.allNodes` / `allNodesWhere pred` / `subtreeOf id` / `nodesOfType t` |
 | Enumerate nodes in WALK order rather than codepoint order | `result.allNodeIds` (same set as `allNodes`, order kept) |
-| Give a rule program with negation a meaning | `wellFoundedModel (mkProgram { rules; })` — read `verdict`, which is total |
-| Get the meaning AND the out-of-verified-range warning | `solve (mkProgram { rules; })` — `provenance` is `[ ]` inside the bound |
+| Give a rule program with negation a meaning | `wellFoundedModel { program = mkProgram { rules; }; interpretation = [ ]; }` — read `verdict`, which is total |
+| Get the meaning AND the out-of-verified-range warning | `solve { program = mkProgram { rules; }; interpretation = [ ]; }` — `provenance` is `[ ]` inside the bound |
 | Ask which engine arm a program routes to | `armFor program` (never a mode you pass) |
 | Combine contributions gated on a model | `foldContributions { model; contributions; op; init; }` — declaration order, `contested` named |
 | Write your own round loop over a record accumulator | `prelude.iterateBounded forceFields step init bound` |
@@ -427,7 +428,7 @@ nix eval --json .#lib --apply 'builtins.attrNames'
 Current output (verbatim):
 
 ```json
-["acceptanceSignal","ambiguous","ancestors","armFor","armNames","buildNodes","childBearing","children","childrenIds","circuit","circular","clique","coldDecision","collect","collectByLabel","collectByType","collectImports","collectionAttr","connect","decisionFindings","descendants","edge","edgePrefix","edges","empty","eval","evalDebug","evalWarm","facadeNames","foldContributions","foldEquations","folds","followEdge","forceFields","forest","gmap","hasEdge","hasVertex","induce","inherit'","inheritAll","inheritSet","isAncestor","isDescendant","leastModel","leastModelRounds","leastModelUnary","mintStrata","mkClaim","mkDecision","mkFacade","mkKind","mkKinds","mkProgram","mkRule","nodesByType","overlay","overlays","paramAttr","parent","path","provenanceFor","query","queryAll","queryReverse","recordedDeps","reduct","removeEdge","removeVertex","resolutionalNames","resolve","resolveClaims","shadow","siblings","signalNames","solve","star","stratify","structural","subtypeOf","transpose","tree","verdictNames","verifiedDepth","vertex","vertices","visibleFrom","wellFoundedModel"]
+["Pos","acceptanceSignal","ambiguous","ancestors","armFor","armNames","buildNodes","buildRoots","childBearing","children","childrenIds","circuit","circular","clique","coldDecision","collect","collectByLabel","collectByType","collectImports","collectionAttr","connect","decisionFindings","descendants","edge","edgePrefix","edges","empty","eval","evalDebug","evalWarm","facadeNames","foldContributions","foldEquations","folds","followEdge","forceFields","forest","gmap","hasEdge","hasVertex","induce","inherit'","inheritAll","inheritSet","isAncestor","isDescendant","leastModel","leastModelRounds","leastModelUnary","mintStrata","mkClaim","mkDecision","mkFacade","mkKind","mkKinds","mkProgram","mkRule","nodesByType","overlay","overlays","paramAttr","parent","path","provenanceFor","query","queryAll","queryReverse","recordedDeps","reduct","removeEdge","removeVertex","resolutionalNames","resolve","resolveClaims","shadow","siblings","signalNames","solve","star","stratify","structural","subtypeOf","transpose","tree","verdictNames","verifiedDepth","vertex","vertices","visibleFrom","wellFoundedModel"]
 ```
 
 **Checks.** Test-runner invocation (from the repo root; CI runs the same command with `working-directory: ci`, `.github/workflows/ci.yml`):

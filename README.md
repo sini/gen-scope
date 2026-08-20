@@ -593,7 +593,11 @@ program = engine.mkProgram {
     { head = "c2"; pos = [ "c1" ]; }                   # c2 :- c1
   ];
 };
-model = engine.wellFoundedModel program;
+# The interpretation is a prior pass's verdicts and carries no default; the first pass says `[ ]`.
+model = engine.wellFoundedModel {
+  inherit program;
+  interpretation = [ ];
+};
 
 model.trueAtoms       # [ "t" ]         — derived
 model.undefinedAtoms  # [ "u1" "u2" ]   — CONTESTED: a cycle through a negative edge
@@ -615,8 +619,8 @@ model.verdict "nothing-mentions-this"   # "false" — total on every string
 | `leastModelRounds` | one `T_P` application per round over a flat fold | every program | reported |
 
 ```nix
-engine.armFor program        # "unary" | "conjunctive" — computed from the program
-engine.leastModel program    # the door: routes, then delegates
+engine.armFor program                            # "unary" | "conjunctive" — from the program
+engine.leastModel { inherit program; seed = { }; }  # the door: routes, then delegates
 ```
 
 **The routing is a property of the program, never a caller-selected mode.** A mode would let a caller select the engine that cannot express their program. The discriminator is the greatest **positive** body arity, and reading only the positive body is what makes computing it *once* sound: reduction deletes whole rules and deletes negative literals, and does neither of the two things that could raise that number — so a program routed once routes the same way for every reduct taken of it. A rule with one positive and one negative literal is therefore **unary**, which is worth stating because it does not look it.
@@ -667,7 +671,10 @@ The round counts above are where the loops were **run**, not where they were pus
 The engine does not partition. Strongly connected components and the condensation are [gen-graph](https://github.com/sini/gen-graph)'s concern, and this engine **consumes that library's one published front door**:
 
 ```nix
-solved = engine.solve program;
+solved = engine.solve {
+  inherit program;
+  interpretation = [ ];   # a prior pass's verdicts; required, so the first pass says so
+};
 solved.condensationDepth   # read from the door, reported as the door reports it
 solved.provenance          # [ ] inside the verified bound; one plain-data entry past it
 ```
