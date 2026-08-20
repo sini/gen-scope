@@ -1,6 +1,7 @@
 # The library's assembly point, and the one place an outside authority is bound to a module.
 #
-# `schema` is the identity authority's library and it is taken as a value rather than imported: the
+# `identity` is the identity authority's library — `gen-identity`, a dependency-free leaf — and it is
+# taken as a value rather than imported: the
 # minting module below receives the ONE function it needs and never reaches for a library of its own,
 # so the count of minting authorities is a fact about the dataflow rather than a rule an author obeys
 # (ADR-0016 ruling 5). Nothing of it is re-exported under this library's name — re-exporting another
