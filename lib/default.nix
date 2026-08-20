@@ -10,6 +10,7 @@
   prelude,
   graph,
   schema,
+  identity,
 }:
 let
   # The library's OWN algebraic-graph constructors, which are a different thing from the graph
@@ -40,7 +41,7 @@ let
   # second stratification loop.
   mint = import ./mint.nix {
     inherit prelude graph;
-    inherit (schema) hashIdentity;
+    inherit (identity) hashIdentity;
     inherit (stratify) stratify;
   };
   # A value algebra over fragments, which is why it takes the prelude and nothing else. The cascade

@@ -128,6 +128,21 @@
         "type": "github"
       }
     },
+    "gen-identity": {
+      "locked": {
+        "lastModified": 1787248094,
+        "narHash": "sha256-FfBRtY/lnemVU5WZEXRsSwjEjs3PqYCSQU7LKL6qeak=",
+        "owner": "sini",
+        "repo": "gen-identity",
+        "rev": "58c114cb76329fc5a6bb3ee0d29a34f63efc2030",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-identity",
+        "type": "github"
+      }
+    },
     "gen-merge": {
       "inputs": {
         "gen-prelude": "gen-prelude_3",
@@ -408,6 +423,7 @@
       "inputs": {
         "gen-graph": "gen-graph",
         "gen-harness": "gen-harness",
+        "gen-identity": "gen-identity",
         "gen-prelude": "gen-prelude_2",
         "gen-schema": "gen-schema",
         "nixpkgs": "nixpkgs_2"

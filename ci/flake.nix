@@ -16,6 +16,7 @@
       url = "github:sini/gen-schema";
       inputs.gen-prelude.follows = "gen-prelude";
     };
+    gen-identity.url = "github:sini/gen-identity";
     # nixpkgs is the CI runner's dependency (test harness, treefmt) and supplies the
     # `lib` the test modules use. The library itself (../lib) takes gen-prelude and gen-graph.
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
@@ -27,6 +28,7 @@
       gen-prelude,
       gen-graph,
       gen-schema,
+      gen-identity,
       ...
     }:
     let
@@ -35,6 +37,7 @@
         inherit prelude;
         graph = gen-graph.lib;
         schema = gen-schema.lib;
+        identity = gen-identity.lib;
       };
     in
     gen-harness.lib.mkCi {

@@ -25,6 +25,10 @@
       url = "github:sini/gen-schema";
       inputs.gen-prelude.follows = "gen-prelude";
     };
+    # The one minting authority, now a dependency-free leaf. It is taken directly rather than
+    # through gen-schema: a mint reached through a second library is a mint whose identity
+    # depends on that library's pin.
+    gen-identity.url = "github:sini/gen-identity";
   };
 
   outputs =
@@ -32,6 +36,7 @@
       gen-prelude,
       gen-graph,
       gen-schema,
+      gen-identity,
       ...
     }:
     {
@@ -39,6 +44,7 @@
         prelude = gen-prelude.lib;
         graph = gen-graph.lib;
         schema = gen-schema.lib;
+        identity = gen-identity.lib;
       };
     };
 }
