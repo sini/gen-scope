@@ -28,6 +28,30 @@
 # hands out no frozen set. An instance that acquires a NEGATED read acquires ABW's clause 2 with it,
 # and that is a change to this file rather than something it absorbs silently.
 #
+# ★★ AND ONE NOW EXISTS, SO THE SENTENCE ABOVE STOPS BEING HYPOTHETICAL HERE RATHER THAN BEING
+# ABSORBED SOMEWHERE ELSE. gen-program builds one program per pass out of a framework's
+# declarations and hands it to `engine.solve`; its programs carry NEGATION by construction, which
+# is the whole reason they need the well-founded semantics rather than the stratified one. So the
+# obligation this file names has fallen due, and what discharges it is recorded as what it is:
+#
+#   WHAT IT IS — ADR-0016 ruling 7's frozen set with ADR-0033 clause 1: that instance resolves a
+#   pass's relata only against what STRICTLY EARLIER passes settled, so each pass's program is
+#   built over CLOSED input and no pass reads its own in-flight output. The instance refuses an
+#   unresolved relatum by name, on its own side, and asks nothing of this loop.
+#
+#   ★ WHAT IT IS NOT — an instance of ABW's construction, and the difference is theirs to make.
+#   Their Lemma 1: "A program P is stratified iff in its dependency graph there are no cycles
+#   containing a negative edge." A pass carrying a negative cycle is therefore OUTSIDE the
+#   stratified class, and such passes are that instance's PREMISE rather than its edge case. So
+#   the frozen-set discipline is a CONSTRUCTION that closes each pass's input; it is NOT a proof
+#   that a sequence of well-founded models over successively frozen inputs inherits what a single
+#   one has. No archived primary states that compositional result, and this file claims it for
+#   nobody.
+#
+# ⇒ Nothing below changes: the driver still imposes no restriction and still hands out no frozen
+# set, because the instance builds its own. What changes is that the paragraph above now names who
+# acquired the clause, where the discharge lives, and exactly how far it reaches.
+#
 # ── THE BOUND IS A THEOREM ABOUT THE MEASURE, AND NOTHING HERE CEILINGS IT ──
 # The loop runs once per element of `schedule`, and `schedule` is the stratum universe derived from
 # the instance's own well-founded measure. Termination is Noetherian induction on that measure: an
