@@ -209,7 +209,10 @@ let
   report =
     extra:
     let
-      model = s.wellFoundedModel program;
+      model = s.wellFoundedModel {
+        inherit program;
+        interpretation = [ ];
+      };
       row = {
         inherit
           arm
@@ -238,7 +241,10 @@ else if arm == "depth" then
   report { inherit ((graph.condensation program.dependency)) depth; }
 else if arm == "solve" then
   let
-    solved = s.solve program;
+    solved = s.solve {
+      inherit program;
+      interpretation = [ ];
+    };
   in
   report {
     inherit (solved) condensationDepth;

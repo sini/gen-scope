@@ -47,11 +47,33 @@ let
     ];
   };
   derivedOf = m: builtins.attrNames m.derived;
+
+  # The door and both arms take a STARTING SET, and these cells are about the un-seeded case, so
+  # the empty seed is written ONCE here rather than at every call. The seeded case has its own
+  # suite (ci/tests/interpretation.nix), where the seed is the subject rather than a constant.
+  lmDoor =
+    program:
+    genScope.leastModel {
+      inherit program;
+      seed = { };
+    };
+  lmUnary =
+    program:
+    genScope.leastModelUnary {
+      inherit program;
+      seed = { };
+    };
+  lmRounds =
+    program:
+    genScope.leastModelRounds {
+      inherit program;
+      seed = { };
+    };
 in
 {
   flake.tests."engine-least-model" = {
     test-unary-arm-derives-the-closure = {
-      expr = derivedOf (genScope.leastModelUnary unary);
+      expr = derivedOf (lmUnary unary);
       expected = [
         "a"
         "b"
@@ -59,7 +81,7 @@ in
       ];
     };
     test-round-arm-derives-the-same-set = {
-      expr = derivedOf (genScope.leastModelRounds unary);
+      expr = derivedOf (lmRounds unary);
       expected = [
         "a"
         "b"
@@ -69,7 +91,7 @@ in
     # An atom whose body has an underivable conjunct is not derived — the fixpoint's own answer,
     # and the control that says the round arm is deciding bodies rather than collecting heads.
     test-round-arm-leaves-an-unsatisfied-body-underived = {
-      expr = derivedOf (genScope.leastModelRounds conjunctive);
+      expr = derivedOf (lmRounds conjunctive);
       expected = [
         "a"
         "b"
@@ -78,7 +100,7 @@ in
     };
     # One round per derivation step, plus the round that observes no atom was added.
     test-round-count-is-the-derivation-depth-plus-the-detection-round = {
-      expr = (genScope.leastModelRounds unary).work;
+      expr = (lmRounds unary).work;
       expected = {
         arm = "conjunctive";
         rounds = 4;
@@ -88,15 +110,15 @@ in
     # done-set outside the evaluator, so the work it does appears in none of the counters, and a
     # zero would read as "no work".
     test-closure-arm-reports-no-round-count = {
-      expr = (genScope.leastModelUnary unary).work;
+      expr = (lmUnary unary).work;
       expected = {
         arm = "unary";
       };
     };
     test-both-arms-report-convergence = {
       expr = [
-        (genScope.leastModelUnary unary).converged
-        (genScope.leastModelRounds unary).converged
+        (lmUnary unary).converged
+        (lmRounds unary).converged
       ];
       expected = [
         true
@@ -124,8 +146,8 @@ in
     };
     test-the-door-answers-with-the-arm-it-routed-to = {
       expr = [
-        (genScope.leastModel unary).work.arm
-        (genScope.leastModel conjunctive).work.arm
+        (lmDoor unary).work.arm
+        (lmDoor conjunctive).work.arm
       ];
       expected = [
         "unary"
@@ -136,7 +158,7 @@ in
     # routes one here, so this fires only where a caller asserted a property their program does
     # not have.
     test-the-unary-arm-refuses-conjunctive-input = {
-      expr = builtins.tryEval (builtins.deepSeq (genScope.leastModelUnary conjunctive) true);
+      expr = builtins.tryEval (builtins.deepSeq (lmUnary conjunctive) true);
       expected = {
         success = false;
         value = false;
@@ -145,7 +167,7 @@ in
     # ★ THE LIVE CONTROL. Without it every cell above would pass against an arm that refuses
     # everything.
     test-the-unary-arm-answers-unary-input = {
-      expr = builtins.tryEval (builtins.deepSeq (genScope.leastModelUnary unary) true);
+      expr = builtins.tryEval (builtins.deepSeq (lmUnary unary) true);
       expected = {
         success = true;
         value = true;

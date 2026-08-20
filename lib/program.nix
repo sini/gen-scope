@@ -11,6 +11,18 @@
 # Herbrand base; here that base is `atoms`, and it is closed by construction — every atom the
 # rules mention is in it, whether or not any rule has it as a head.
 #
+# ★★ AND UNDER THE ENGINE'S INTERPRETATION PARAMETER THAT BASE IS THE PROGRAM'S HALF OF A LARGER
+# ONE, WHICH IS SAID HERE RATHER THAN LEFT TO CONTRADICT THE SENTENCE ABOVE. `atoms` is still
+# closed by construction over the RULES; nothing in the paragraph above weakens. But a caller may
+# carry a verdict for an atom this program never mentions, so the base the model is computed and
+# REPORTED over is `atoms ∪ dom(interpretation)` — partly closed by construction, partly DECLARED
+# by the caller. The engine keeps the two halves in that order: program atoms first in declaration
+# order, then interpretation atoms not already present. A header claiming a closure the code no
+# longer delivers is the silent-drift class this repository exists to close, so the claim is scoped
+# rather than left standing.
+# ★ `bodyArity`, `unaryBodies` and the routing are untouched: an interpretation adds no rules, so
+# it cannot raise the greatest positive body arity.
+#
 # THE DEPENDENCY GRAPH IS SIGN-LABELLED, AND THE LABELS ARE WHY THE SEMANTICS IS NEEDED AT ALL.
 # Apt, Blair & Walker 1988 give a meaning to a program whose cycles are all positive, and give a
 # cycle through a negative edge nothing; the well-founded model is what supplies one. So the

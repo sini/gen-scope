@@ -1998,14 +1998,14 @@ in
         "leastModel"
       ];
     };
-    # 85 rather than 80: the fold vocabulary, the stratification driver, the minting entry and the
+    # 86 rather than 80: the fold vocabulary, the stratification driver, the minting entry and the
     # cold fold are each a module of their own, so `folds`, `stratify`, `mintStrata` and
     # `foldEquations` are part of the library's surface WITHOUT being one of this module's names —
     # which is exactly what an incumbent is. The figure is a baseline over the library's export
     # surface and re-derives whenever that surface grows.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 85;
+      expected = 86;
     };
     # Four: the registration and run doors, and nothing else. The consumer accessors that used to
     # sit beside them reconstructed a list the run already computed, and the run publishes it now —

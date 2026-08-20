@@ -12,6 +12,15 @@
 # has to interpret. UNDEFINED is a value this function returns, never a silence it falls into.
 { genScope, ... }:
 let
+  # These cells are about the UN-INTERPRETED semantics, so the empty interpretation is written
+  # once here rather than at every call. The interpreted case is ci/tests/interpretation.nix.
+  wf =
+    program:
+    genScope.wellFoundedModel {
+      inherit program;
+      interpretation = [ ];
+    };
+
   oracle = genScope.mkProgram {
     rules = [
       { head = "t"; }
@@ -33,14 +42,14 @@ let
       }
     ];
   };
-  m = genScope.wellFoundedModel oracle;
+  m = wf oracle;
 
   # a0 a fact, a_i :- not a_{i-1}: a chain of negative edges, TOTAL at every atom, alternating
   # true and false. It is locally stratified, so the well-founded model is the perfect model and
   # nothing here acquires a meaning it did not already have.
   negChain =
     d:
-    genScope.wellFoundedModel (
+    wf (
       genScope.mkProgram {
         rules = builtins.genList (
           i:
@@ -56,7 +65,7 @@ let
     );
 
   # The stratified fragment: a program with no negative cycle, where the model must be total.
-  stratified = genScope.wellFoundedModel (
+  stratified = wf (
     genScope.mkProgram {
       rules = [
         { head = "p"; }
@@ -128,7 +137,7 @@ in
     # against. `u1`/`u2` sort the same either way; `t` before them does not.
     test-atoms-are-emitted-in-declaration-order = {
       expr =
-        (genScope.wellFoundedModel (
+        (wf (
           genScope.mkProgram {
             rules = [
               { head = "zebra"; }

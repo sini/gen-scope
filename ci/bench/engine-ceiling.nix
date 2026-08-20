@@ -156,7 +156,10 @@ else if arm == "tryUnforced" then
   builtins.tryEval (run (_: null) "operator")
 else if arm == "rounds" then
   let
-    m = s.leastModelRounds (s.reduct roundsProgram { });
+    m = s.leastModelRounds {
+      program = s.reduct roundsProgram { };
+      seed = { };
+    };
   in
   builtins.deepSeq m.derived {
     inherit (m) converged;
@@ -164,7 +167,10 @@ else if arm == "rounds" then
   }
 else if arm == "outer" then
   let
-    m = s.wellFoundedModel outerProgram;
+    m = s.wellFoundedModel {
+      program = outerProgram;
+      interpretation = [ ];
+    };
   in
   builtins.deepSeq m.trueAtoms {
     inherit (m) converged outerRounds arm;
@@ -184,8 +190,9 @@ else if arm == "refuseConjunctiveOnUnaryArm" then
   # The unary arm's refusal IS catchable, so the suite pins that it fires. What the suite cannot
   # read is the MESSAGE — `tryEval` discards it — and a refusal that does not name the surface
   # and the offending rule is not a named refusal. That text is read here.
-  builtins.deepSeq (s.leastModelUnary (
-    s.mkProgram {
+  builtins.deepSeq (s.leastModelUnary {
+    seed = { };
+    program = s.mkProgram {
       rules = [
         { head = "a"; }
         { head = "b"; }
@@ -197,8 +204,8 @@ else if arm == "refuseConjunctiveOnUnaryArm" then
           ];
         }
       ];
-    }
-  )) 1
+    };
+  }) 1
 else if arm == "okControl" then
   1
 else if arm == "catchControl" then

@@ -1241,4 +1241,85 @@ in
       };
     };
   };
+
+  # ── THE INTERPRETATION'S REFUSALS, WHERE THEIR CONTENT LIVES ──
+  # `ci/tests/interpretation.nix` asserts THAT each of these fires, which is a boolean `tryEval`
+  # can read. WHICH one fired is a claim about the message, and four booleans are equally satisfied
+  # by a constructor with one refusal in it — so the text is asserted here.
+  #
+  # ★ THE INCONSISTENCY REFUSAL IS THE ONE THAT MATTERS MOST, because it is the primary's own
+  # requirement rather than a validation convention: VGRS Definition 2.4 makes a partial
+  # interpretation a CONSISTENT set of literals, so admitting a violation would mean the engine
+  # computed over something that paper's theorems do not quantify over. A refusal naming neither
+  # the atom nor the two verdicts sends a caller back to find them.
+  config.flake.testsError.interpretation-refusals =
+    let
+      solveWith =
+        interpretation:
+        (genScope.wellFoundedModel {
+          program = genScope.mkProgram { rules = [ ]; };
+          inherit interpretation;
+        }).trueAtoms;
+    in
+    {
+      test-an-inconsistent-interpretation-names-the-atom-and-both-verdicts = {
+        expr = solveWith [
+          {
+            atom = "x";
+            verdict = "true";
+          }
+          {
+            atom = "x";
+            verdict = "false";
+          }
+        ];
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: the interpretation is INCONSISTENT — 'x' is carried with verdicts 'true' and 'false', and Van Gelder, Ross & Schlipf 1991 Definition 2.4 makes a partial interpretation a CONSISTENT set of literals";
+        };
+      };
+
+      test-a-missing-verdict-names-the-atom-and-refuses-the-default = {
+        expr = solveWith [ { atom = "x"; } ];
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: the carried atom 'x' has no verdict, and a carried atom with no verdict is REFUSED rather than defaulted — 'absent means false' is the exact substitution this parameter exists to prevent";
+        };
+      };
+
+      test-an-unknown-entry-field-is-named = {
+        expr = solveWith [
+          {
+            atom = "x";
+            verdict = "true";
+            why = "no";
+          }
+        ];
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: the interpretation entry for 'x' carries the unknown field(s) 'why' — an entry is { atom, verdict } and nothing else";
+        };
+      };
+
+      test-a-verdict-outside-the-vocabulary-names-it-and-the-vocabulary = {
+        expr = solveWith [
+          {
+            atom = "x";
+            verdict = "maybe";
+          }
+        ];
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: the carried atom 'x' has verdict 'maybe', which is not one of 'true', 'undefined', 'false'";
+        };
+      };
+
+      test-an-entry-with-no-atom-names-its-position = {
+        expr = solveWith [ { verdict = "true"; } ];
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: interpretation entry 0 has no 'atom' field — an interpretation is a list of { atom, verdict }";
+        };
+      };
+    };
 }

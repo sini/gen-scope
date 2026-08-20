@@ -56,12 +56,31 @@ let
       inherit (verifiedDepth) derivation fixtures environment;
     };
 
+  # ── THE INTERPRETATION IS REQUIRED, AND THE ABSENCE OF A DEFAULT IS THE POINT ──
+  # A defaulted empty interpretation is the precise shape of this project's one defect: a caller
+  # who forgets the carry gets, SILENTLY, the collapse the parameter exists to prevent. Absence is
+  # a decision, so the caller makes it — the first pass supplies `interpretation = [ ]` and says so.
+  # The strict pattern also refuses an unknown field by name at application, by the evaluator
+  # itself, which is the discipline `mkRule` and `stratify` already ship.
+  #
+  # ★ THE PARTITION AND THE STAMP DO NOT MOVE, AND THE REASON IS STRUCTURAL. `program.dependency`
+  # is the accessor the condensation door reads, and CARRIED ATOMS CONTRIBUTE NO EDGES — they are
+  # isolated nodes, so they cannot exceed an existing longest path. The interpretation is therefore
+  # NOT added to the dependency accessor, the verified-depth comparison stays a reading of the same
+  # quantity it was before, and the demand-driven property survives.
+  #
+  # ★ ADR-0013's BURDEN — *a dependence fact is DERIVED unless derivation is proven impossible* —
+  # never arises, and that is argued rather than assumed, because a parameter carrying
+  # caller-supplied atoms into an engine is exactly the shape that burden exists for. The
+  # dependence relation stays DERIVED from the rules; an interpretation is not a dependence
+  # declaration, because what it declares is a set of VERDICTS and not a set of reads. Nothing here
+  # declares a fact the substrate could have derived.
   solve =
-    program:
+    { program, interpretation }:
     let
       partition = graph.condensation program.dependency;
     in
-    wellFoundedLib.wellFoundedModel program
+    wellFoundedLib.wellFoundedModel { inherit program interpretation; }
     // {
       # Read from the door, reported as the door reports it.
       condensationDepth = partition.depth;

@@ -12,6 +12,21 @@
 # forever while nothing connected them.
 { genScope, ... }:
 let
+  # The front door and the semantics both take an interpretation; these cells are about the
+  # un-interpreted case, so the empty one is written once here.
+  solve =
+    program:
+    genScope.solve {
+      inherit program;
+      interpretation = [ ];
+    };
+  wf =
+    program:
+    genScope.wellFoundedModel {
+      inherit program;
+      interpretation = [ ];
+    };
+
   inherit (genScope) verifiedDepth;
 
   # A chain of n atoms: the condensation is n singleton components in a line, so its longest path
@@ -32,11 +47,11 @@ let
       ) n;
     };
 
-  small = genScope.solve (chain 8);
+  small = solve (chain 8);
   # Two atoms past the bound: the least chain whose condensation depth exceeds it.
-  beyond = genScope.solve (chain (verifiedDepth.depth + 3));
+  beyond = solve (chain (verifiedDepth.depth + 3));
 
-  gated = genScope.wellFoundedModel (
+  gated = wf (
     genScope.mkProgram {
       rules = [
         { head = "on"; }

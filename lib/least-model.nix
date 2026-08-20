@@ -25,6 +25,27 @@
 # what a caller may express, and nothing here refuses a program for reaching it. A cap would be
 # the other thing: a number chosen to bound cost, which turns cost into correctness.
 #
+# ── THE DOOR TAKES A STARTING SET, WHICH IS AN AUGMENTED PROGRAM'S FIXPOINT WEARING A PARAMETER ──
+# `lfp_{⊇seed} T_P` — the least fixpoint taken from `seed` rather than from `∅`. An EMPTY starting
+# set is the ordinary least model, so nothing about the un-seeded case moves.
+#
+# THEORY, and the two halves are cited apart because they are two claims. Van Gelder 1993
+# Definition 4.1 makes an adjoined literal set a PARAMETER of the immediate-consequence
+# transformation, in its own words — negative literals "can be treated as 'additional EDB
+# relations' in a Horn program, whose facts are given by Ī" — and VG93 Definition 4.2 takes the
+# least fixpoint of that augmented operator FROM ∅. The step from an AUGMENTED program to a SEEDED
+# fixpoint is not the paper's and is not claimed as such: a fact has no negative body, so it
+# survives every reduct and is derived in the first round from any starting set, which makes
+#
+#   lfp T_{(P ∪ facts(S))/M}  =  lfp_{⊇S} T_{P/M}      exactly, for every M
+#
+# ⇒ THE AUGMENTATION IS THE PRIMARY'S; THE EQUIVALENCE IS THIS LIBRARY'S, and saying which is which
+# is the difference between citing a paper and claiming it.
+#
+# ★ A UNION AFTER THE FIXPOINT WOULD BE WRONG RATHER THAN MERELY WEAKER, and that is why the
+# parameter sits where it does. On `P = { q :- a }` with `a` supplied, `lfp T_{P/J} ∪ {a}` is `{a}`
+# and `q` is NEVER DERIVED. The atom has to be a premise, not an afterthought.
+#
 # ── THE TWO ARMS ARE COMPLEMENTARY, AND THE ROUTING IS ON THE PROGRAM ──
 # The unary arm is depth-immune and cannot express a conjunctive body; the round arm expresses
 # every program and pays a round loop for it. Measured at equal answer on unary input, the round
@@ -59,11 +80,16 @@ let
   # directly — which is the case it exists for: a caller who has bound the arm by name has
   # asserted a property of their program, and the refusal is where that assertion is checked.
   leastModelUnary =
-    program:
+    { program, seed }:
     let
       conjunctive = builtins.filter (r: prelude.length r.pos > 1) program.rules;
       offender = prelude.head conjunctive;
-      facts = prelude.concatMap (r: prelude.optional (r.pos == [ ]) r.head) program.rules;
+      # The seeded atoms join the program's own facts, which is the whole of the seeding on this
+      # arm: `genericClosure` starts from the union and propagates through the same index, so a
+      # seeded atom that appears in a body derives its heads exactly as a fact would.
+      facts =
+        prelude.concatMap (r: prelude.optional (r.pos == [ ]) r.head) program.rules
+        ++ prelude.attrNames seed;
       # body atom → the heads one step derives from it.
       index = prelude.mapAttrs (_: rs: map (r: r.head) rs) (
         builtins.groupBy (r: prelude.head r.pos) (
@@ -97,9 +123,11 @@ let
   # not where this arm's cost lives — the cost is on the round axis, and a round is a step of
   # derivation depth.
   leastModelRounds =
-    program:
+    { program, seed }:
     let
-      # One round per atom plus the detection round — the theorem's own bound, above.
+      # One round per atom plus the detection round — the theorem's own bound, above. The SEED does
+      # not widen it: seeded atoms are present at round zero, so no round is ever spent adding one,
+      # and the rounds that do fire still add only atoms some rule heads.
       roundBound = program.atoms ++ [ null ];
       step =
         acc:
@@ -120,7 +148,7 @@ let
             rounds = acc.rounds + 1;
           };
       final = prelude.iterateBounded forceFields step {
-        derived = { };
+        derived = seed;
         done = false;
         rounds = 0;
       } roundBound;
@@ -145,8 +173,21 @@ let
 
   # The delegation is an identity rather than a wrapper, so an arm bound by name is the same
   # function the door would have chosen.
+  #
+  # ★ A STRICT PATTERN, AND `seed` CARRIES NO DEFAULT. A defaulted empty seed is the shape this
+  # library's own consumer spent a whole revision removing: a caller who forgets the starting set
+  # gets the un-seeded answer silently, and an un-seeded fixpoint FALSELY REFUSES where the seeded
+  # one admits. Absence is a decision, so the caller makes it — the first pass supplies `{ }` and
+  # says so.
   leastModel =
-    program: if armFor program == "unary" then leastModelUnary program else leastModelRounds program;
+    {
+      program,
+      seed,
+    }:
+    if armFor program == "unary" then
+      leastModelUnary { inherit program seed; }
+    else
+      leastModelRounds { inherit program seed; };
 
   # The arm names, as data, so a cell reads a closed enumeration rather than two string literals.
   armNames = [
