@@ -13,6 +13,37 @@ let
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
 
+  # THE ONE CHILD-RESOLUTION BINDING. Every site that asks a node for its child records — the
+  # DEMAND sites that resolve a single id, and the ENUMERATION walks that descend into all of
+  # them — composes `children` with `derived-children` HERE and nowhere else. It was five inline
+  # copies of the same three lines across the two evaluators, and two copies of a discipline
+  # agree only for as long as someone keeps them in step. A soundness obligation over spawned
+  # children is then a property of THIS binding rather than a rule five call sites must each
+  # remember, which is what makes such an obligation unmissable by construction.
+  #
+  # `ev` is the accessor the caller resolves through — the production evaluator's `self`, or the
+  # debug evaluator's fresh per-`get` self, whose trace recording is exactly why it cannot be
+  # the same value.
+  #
+  # `requireChildrenAttribute` IS THE ONE AXIS THE FIVE COPIES DISAGREED ON, and it survives as a
+  # formal rather than being normalized away because the disagreement is OBSERVABLE. Against an
+  # attribute set carrying no `children` at all, a demanding site read `get`'s unknown-attribute
+  # refusal while a walking site read `{ }` and completed over the roots. Collapsing to either arm
+  # would move live behaviour under cover of a consolidation, so the divergence is carried as an
+  # argument — visible at one site and decidable in one place — instead of being settled here.
+  childRecordsOf =
+    {
+      attributes,
+      requireChildrenAttribute,
+    }:
+    ev: id:
+    let
+      children =
+        if requireChildrenAttribute || attributes ? "children" then ev.get id "children" else { };
+      derived = if attributes ? "derived-children" then ev.get id "derived-children" else { };
+    in
+    children // derived;
+
   eval =
     {
       scope,
@@ -25,6 +56,17 @@ let
     let
       checked = requireScope "eval" scope;
       roots = checked.nodes;
+
+      # The two arms of the binding above, taken once each so the divergence the five collapsed
+      # copies carried has exactly two names instead of five inline spellings.
+      childRecordsStrict = childRecordsOf {
+        inherit attributes;
+        requireChildrenAttribute = true;
+      };
+      childRecordsLenient = childRecordsOf {
+        inherit attributes;
+        requireChildrenAttribute = false;
+      };
     in
     prelude.fix (
       self:
@@ -107,9 +149,7 @@ let
               genericResolve id
             else
               let
-                children = self.get parentId "children";
-                derived = if attributes ? "derived-children" then self.get parentId "derived-children" else { };
-                all = children // derived;
+                all = childRecordsStrict self parentId;
               in
               if all ? ${id} then
                 all.${id}
@@ -126,9 +166,7 @@ let
             walkChildren =
               parentId:
               let
-                children = self.get parentId "children";
-                derived = if attributes ? "derived-children" then self.get parentId "derived-children" else { };
-                all = children // derived;
+                all = childRecordsStrict self parentId;
               in
               if all ? ${id} then
                 all.${id}
@@ -170,9 +208,7 @@ let
         _walkFrom =
           id:
           let
-            children = if attributes ? "children" then self.get id "children" else { };
-            derived = if attributes ? "derived-children" then self.get id "derived-children" else { };
-            all = children // derived;
+            all = childRecordsLenient self id;
           in
           [
             {
@@ -215,9 +251,9 @@ let
         #    constructor, not to this walk.
         #
         # 2. A `derived-children` node INTERLEAVES with its `children` siblings rather than
-        #    following them: `_walkFrom` descends `children // derived` as ONE attrset, so a
-        #    derived id sorts into the sibling run under the same codepoint rule and nothing
-        #    in this list marks it as derived.
+        #    following them: `_walkFrom` descends what `childRecordsOf` returns, and that is the
+        #    two halves merged into ONE attrset, so a derived id sorts into the sibling run under
+        #    the same codepoint rule and nothing in this list marks it as derived.
         #
         # Repeats are dropped FIRST-OCCURRENCE-WINS, the same rule `listToAttrs` applies to
         # `allNodes`, so `allNodeIds` is exactly `attrNames allNodes` as a set. A node
@@ -256,9 +292,7 @@ let
               id:
               let
                 node = self.node id;
-                children = if attributes ? "children" then self.get id "children" else { };
-                derived = if attributes ? "derived-children" then self.get id "derived-children" else { };
-                all = children // derived;
+                all = childRecordsLenient self id;
                 childResults = prelude.concatMap walkFrom (builtins.attrNames all);
               in
               (
@@ -356,6 +390,13 @@ let
     }:
     let
       roots = (requireScope "evalDebug" scope).nodes;
+
+      # The debug evaluator resolves on DEMAND only — it refuses materialization outright — so it
+      # takes the demanding arm, which is the arm its inline copy carried.
+      childRecordsStrict = childRecordsOf {
+        inherit attributes;
+        requireChildrenAttribute = true;
+      };
       mkSelf =
         visited: traceList:
         let
@@ -401,14 +442,15 @@ let
               let
                 parentId = parseParent id;
                 s = mkSelf visited traceList;
-                children = if parentId != null then s.get parentId "children" else { };
-                derived =
-                  if parentId != null && attributes ? "derived-children" then
-                    s.get parentId "derived-children"
-                  else
-                    { };
               in
-              (children // derived).${id} or (throw "gen-scope: node '${id}' not reachable")
+              # The null parent is a control-flow guard, not a vocabulary one: it stops a null id
+              # reaching `get`, where it would surface as a coercion failure rather than as the
+              # unreachability this reports. The inline copy spelled it as an `else { }` on both
+              # halves, which reached the same throw one attrset construction later.
+              if parentId == null then
+                throw "gen-scope: node '${id}' not reachable"
+              else
+                (childRecordsStrict s parentId).${id} or (throw "gen-scope: node '${id}' not reachable")
             else
               throw "gen-scope: evalDebug requires parseParent for non-root nodes";
 
