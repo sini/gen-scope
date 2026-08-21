@@ -3,8 +3,8 @@
 #
 # This entry is the evaluator's CALLER and holds no fixpoint of its own: the equations' compute
 # functions become the attribute set `eval` folds, and what the entry adds around it is the sealing —
-# the topology accessor the graph and plane consumers read, the declared-read trace, and the schedule
-# that validated the grammar.
+# the topology accessor the graph and plane consumers read, the trace derived over it, and the
+# schedule that validated the grammar.
 #
 # THEORY. Knuth (1968), "Semantics of Context-Free Languages", gives the semantic equations and the
 # dependency schedule over them; Vogt, Swierstra & Kuiper (1989), "Higher Order Attribute Grammars",
@@ -23,7 +23,6 @@
 {
   prelude,
   eval,
-  recordedDeps,
   requireScope,
 }:
 {
@@ -57,11 +56,16 @@
         parent = id: parseParent id;
         nodeData = id: (ev.node id).decls or { };
       };
+      # The trace's deps are DERIVED — read off the accessor's edge set, which is the same graph
+      # the gate runs over. Nothing declares a read set beside the rule, because a declared read
+      # set does not exist to declare: the body IS the read set (Van Gelder 1991 Def 3.3 and §8;
+      # Sagiv 1990 printed 664; Vogt 1989 Def 3.5 p. 139). The projection that used to stand
+      # between these two lines duplicated a truth the edge set already held.
       trace = prelude.listToAttrs (
         prelude.map (id: {
           name = id;
           value = {
-            deps = recordedDeps { inherit declaredEdges; } id; # eager, declared read-edges
+            deps = accessor.edges id; # eager, derived from the graph's edges
             hash = null; # a reuse layer across evaluations is what would populate this
           };
         }) nodeIds

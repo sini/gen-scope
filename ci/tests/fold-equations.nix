@@ -66,13 +66,23 @@ let
     parseParent = id: roots.nodes.${id}.parent or null;
   };
 
+  # The same fold over a NON-EMPTY edge set, which is what makes the trace cells below
+  # discriminating: against the default `_: [ ]` every deps list is empty and a derivation that
+  # dropped its argument entirely would read identically to one that used it.
+  edgedCtx = foldEquations {
+    scope = roots;
+    inherit schedule;
+    parseParent = id: roots.nodes.${id}.parent or null;
+    declaredEdges = id: if id == "child" then [ "parent" ] else [ ];
+  };
+
   # ── (g) THE COLLISION SET ──
   # The comparand is the library's exports MINUS this module's own, so the check is about what was
   # already there and not about the name this module just added.
   foldNames = builtins.attrNames (
     import ../../lib/fold-equations.nix {
       prelude = genPreludeLib;
-      inherit (genScope) eval recordedDeps;
+      inherit (genScope) eval;
       inherit (import ../../lib/require-scope.nix { prelude = genPreludeLib; }) requireScope;
     }
   );
@@ -115,6 +125,36 @@ in
     test-the-sealed-equations-are-the-schedules-own = {
       expr = ctx.equations == schedule.equations;
       expected = true;
+    };
+    # ── THE TRACE'S DEPS ARE DERIVED, NOT DECLARED ──
+    # There is no read-set construct between the edge set and the trace: the body is the read set,
+    # so the deps a consumer reads off the seal are the accessor's edges for that node and nothing
+    # else. Asserted THROUGH the fold rather than against a naked projection, which is what the
+    # retired surface's own cells could not do.
+    test-trace-deps-are-the-accessor-edges = {
+      expr = edgedCtx.trace.child.deps;
+      expected = edgedCtx.accessor.edges "child";
+    };
+    # Pinned against a LITERAL as well, so the cell above cannot pass by comparing two calls to one
+    # broken function.
+    test-trace-deps-literal = {
+      expr = edgedCtx.trace.child.deps;
+      expected = [ "parent" ];
+    };
+    # A node the edge set says nothing about traces empty — and this is the discriminating pair
+    # with the cell above: both nodes exist, both are traced, and only the edge set separates them.
+    test-trace-deps-empty-where-no-edge-is-declared = {
+      expr = edgedCtx.trace.parent.deps;
+      expected = [ ];
+    };
+    # Every traced node carries the pair the seal promises; a derivation that skipped a node would
+    # leave a `deps` missing rather than empty.
+    test-trace-entry-shape = {
+      expr = builtins.attrNames edgedCtx.trace.child;
+      expected = [
+        "deps"
+        "hash"
+      ];
     };
     # The declared edges are the topology consumers' oracle and nothing on the cold path walks them,
     # so a CYCLIC declaration resolves exactly as an acyclic one does.
@@ -174,7 +214,7 @@ in
     # surface and re-derives whenever that surface grows.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 89;
+      expected = 88;
     };
     # One: the fold's entry, and nothing else. This cell is the module's inventory, and an export it
     # does not list is an export nothing measured.

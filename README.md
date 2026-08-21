@@ -28,7 +28,7 @@ And it carries a fourth concern, **the demand cascade**, which resolves a multis
   - [evalDebug](#evaldebug)
   - [evalWarm](#evalwarm)
   - [The structural partition](#the-structural-partition)
-  - [recordedDeps](#recordeddeps)
+  - [Read edges: derived, never declared](#read-edges-derived-never-declared)
   - [buildNodes](#buildnodes)
   - [Algebraic Graph Construction](#algebraic-graph-construction)
   - [Attribute Combinators](#attribute-combinators)
@@ -370,13 +370,20 @@ An attribute is **structural** when the graph's shape depends on it: `children`,
 
 Containment needs no term: a node's parent rides the node record's `.parent` field and never reaches the evaluator as an attribute name.
 
-### `recordedDeps`
+### Read edges: derived, never declared
+
+There is **no read-set construct in this library**, and its absence is the design rather than a gap. A read set declared beside a rule does not simplify away — it never exists, because **the body IS the read set** (Van Gelder 1991 Def 3.3 and §8; Sagiv 1990 printed 664; Vogt 1989 Def 3.5 p. 139). Reads derive from the graph's edges.
+
+An incremental consumer that needs an explicit dependency edge set reads it off `foldEquations`' seal:
 
 ```nix
-recordedDeps { declaredEdges } id   # → [id]
+ctx.accessor.edges id   # → [id]   the edge set itself
+ctx.trace.<id>.deps     # → [id]   the same list, indexed per node
 ```
 
-First-class projection of a consumer's **declared** read-edges: it simply applies `declaredEdges id`. Pure and memo-free — it never runs through `get`. The *dynamic* read-set (the attributes a node actually `self.get`s) is only recoverable via `evalDebug`'s fresh-`self`-per-`get` — `getTraced` returns that recording as a value — and that construction defeats memoization; there is no pure, memo-preserving way to capture it, so the declared edges are the inspectable contract. Useful for incremental consumers that need an explicit dependency edge set (e.g. driving a rebuild).
+`trace.<id>.deps` is derived as `accessor.edges id` at seal time, so the two agree by construction rather than by upkeep. Both are pure and memo-free — neither runs through `get`.
+
+The *dynamic* read-set (the attributes a node actually `self.get`s) is only recoverable via `evalDebug`'s fresh-`self`-per-`get` — `getTraced` returns that recording as a value — and that construction defeats memoization; there is no pure, memo-preserving way to capture it, so the graph's edges are the inspectable contract, and a validator over the dynamic recording is what shows whether they cover the reads.
 
 ### `buildNodes`
 
@@ -1023,7 +1030,7 @@ A stack overflow is an abort rather than a throw, so `tryEval` does not contain 
 | Gelfond & Lifschitz (1988) "The stable model semantics for logic programming" | **Partial** | The reduct `P/J` the alternating fixpoint iterates over. Stable-model EXISTENCE as the refusal oracle is adopted as the companion criterion and is **not built here** — no construction in this library decides it |
 | Apt, Blair & Walker (1988) "Towards a theory of declarative knowledge" | **Informed by** | Five uses at one label. For the engine: why the third value is needed at all — the stratified semantics admits positive cycles and leaves a cycle through a negative edge without a meaning. For [staged minting](#staged-minting): the standard model of a stratified program is built one stratum at a time, each closed before the next begins, and a minting pass is that stratum — which is what makes a cycle among minted nodes inexpressible rather than detected; the correspondence taken there is the closure of earlier strata, not the per-stratum fixpoint iteration. For [the demand cascade](#the-demand-cascade): completeness alone — that construction has no negation anywhere, so the strictly-lower indexing of Definition 3, which governs the negative case, is deliberately not imposed on it. For [the fold vocabulary](#the-fold-vocabulary): the same completeness, as the CALLER's precondition, which no fold enforces. For [the stratification driver](#the-stratification-driver): the stratum-by-stratum model as what its loop guarantees and the whole of what it guarantees |
 | van Emden & Kowalski (1976) "The semantics of predicate logic as a programming language" | **Implements**, attribution UNCHECKED | `T_P` and its least fixpoint as the meaning of a definite program — what both `leastModel` arms compute over the reduct. The operator and its least fixpoint are standard and the code computes them; the attribution to this paper is not checked against a held copy (see below) |
-| Acar, Blelloch & Harper (2002) "Adaptive functional programming" | **Informed by** | Warm-cache incremental re-evaluation (`evalWarm`): reusing clean prior results and recomputing only dirty nodes, which is this paper's **change propagation** over its time-stamped trace. `recordedDeps` is the declared read-edge projection of that read structure. ★ The row used to cite the 2006 journal edition and to call that structure a *dynamic dependence graph*; the edition this project holds is the 2002 conference paper, and it does not use that phrase — `pdftotext` over the held PDF reports `dynamic dependence graph` **0** times against `change propagation` **35** and `time stamp` **42** in the same run. The claim is stated in the held edition's own vocabulary rather than the later one's |
+| Acar, Blelloch & Harper (2002) "Adaptive functional programming" | **Informed by** | Warm-cache incremental re-evaluation (`evalWarm`): reusing clean prior results and recomputing only dirty nodes, which is this paper's **change propagation** over its time-stamped trace. `ctx.trace.<id>.deps` is that read structure, DERIVED from the graph's edge set rather than declared beside the rule. ★ The row used to cite the 2006 journal edition and to call that structure a *dynamic dependence graph*; the edition this project holds is the 2002 conference paper, and it does not use that phrase — `pdftotext` over the held PDF reports `dynamic dependence graph` **0** times against `change propagation` **35** and `time stamp` **42** in the same run. The claim is stated in the held edition's own vocabulary rather than the later one's |
 
 ★ **What the table does not list is a claim too, so it is stated rather than left to be inferred.** A table of papers reads as the whole account of where a library's ideas come from, and two constructions here are deliberately absent from it. **The termination arguments** — the cascade's `maxDepth + 1` round bound and the stratification driver's schedule bound — rest on the well-ordering of ℕ, which is classical mathematics implementing nobody's result; no row exists because no paper is being drawn on. **The fold vocabulary** — which operators exist, their shared `key: [v]: v` shape, the refuse-by-name discipline — is original to gen: the fold-algebra literature a construction of this shape would be expected to cite (catamorphisms and the Bird–Meertens formalism, Meijer's banana/lens calculus, Hutton's universality-of-fold treatment) is not held by this project, so nothing was available to verify a citation against and none is written. Both statements are falsifiable: a primary that derives a schedule from a registry's own relation, or one this vocabulary turns out to instantiate, belongs in the table.
 

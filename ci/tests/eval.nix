@@ -711,15 +711,4 @@ in
             "val";
       };
     };
-
-  flake.tests."recorded-deps" = {
-    test-recordedDeps-declared = {
-      expr = genScope.recordedDeps { declaredEdges = id: if id == "b" then [ "a" ] else [ ]; } "b";
-      expected = [ "a" ];
-    };
-    test-recordedDeps-empty = {
-      expr = genScope.recordedDeps { declaredEdges = _: [ ]; } "x";
-      expected = [ ];
-    };
-  };
 }

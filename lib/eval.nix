@@ -456,20 +456,25 @@ let
         ;
     };
 
-  # First-class inspectable projection of the consumer's declared read-edges. Pure,
-  # zero memo cost (never runs through `get`). The dynamic read-set — the attributes
-  # a node actually self.get's — is only recoverable via evalDebug's fresh-self-per-get,
-  # which defeats the memo; there is no pure, memo-preserving way to capture it, so the
-  # declared edges are the inspectable contract. (Acar, Blelloch & Harper 2002: the read edges
-  # its change propagation walks. "Dynamic dependence graph" is the later editions' name for that
-  # structure and does not appear in the edition this project holds, so it is not used here.)
-  recordedDeps = { declaredEdges }: id: declaredEdges id;
+  # THERE IS NO DECLARED-READS PROJECTION HERE, and its absence is the design rather than a gap.
+  # A read-set declared beside a rule does not simplify away — it never exists: the BODY IS THE
+  # READ SET (Van Gelder 1991, Definition 3.3 and §8; Sagiv 1990, printed 664; Vogt, Swierstra &
+  # Kuiper 1989, Definition 3.5 p. 139). A consumer wanting the read edges of a node reads them off
+  # the graph's edge set, which is where they already are.
+  #
+  # WHAT THE PROJECTION USED TO SAY THAT IS STILL TRUE, kept because it is a property of the
+  # evaluator and not of the retired surface: the dynamic read-set — the attributes a node actually
+  # `self.get`s — is recoverable only via `evalDebug`'s fresh-self-per-get, which defeats the memo.
+  # There is no pure, memo-preserving way to capture it, so the graph's edges are the inspectable
+  # contract, and a validator over the dynamic recording is what shows whether they cover the reads
+  # (Acar, Blelloch & Harper 2002: the read edges its change propagation walks. "Dynamic dependence
+  # graph" is the later editions' name for that structure and does not appear in the edition this
+  # project holds, so it is not used here.)
 in
 {
   inherit
     eval
     evalDebug
     evalWarm
-    recordedDeps
     ;
 }
