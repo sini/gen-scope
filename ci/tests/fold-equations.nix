@@ -64,16 +64,17 @@ let
     scope = roots;
     inherit schedule;
     parseParent = id: roots.nodes.${id}.parent or null;
+    declaredDependencies = _: [ ];
   };
 
-  # The same fold over a NON-EMPTY edge set, which is what makes the trace cells below
-  # discriminating: against the default `_: [ ]` every deps list is empty and a derivation that
+  # The same fold over a NON-EMPTY relation, which is what makes the trace cells below
+  # discriminating: against the empty relation every deps list is empty and a derivation that
   # dropped its argument entirely would read identically to one that used it.
   edgedCtx = foldEquations {
     scope = roots;
     inherit schedule;
     parseParent = id: roots.nodes.${id}.parent or null;
-    declaredEdges = id: if id == "child" then [ "parent" ] else [ ];
+    declaredDependencies = id: if id == "child" then [ "parent" ] else [ ];
   };
 
   # ── (g) THE COLLISION SET ──
@@ -110,7 +111,7 @@ in
       expected = [
         "accessor"
         "attributes"
-        "declaredEdges"
+        "declaredDependencies"
         "equations"
         "eval"
         "parseParent"
@@ -127,13 +128,13 @@ in
       expected = true;
     };
     # ── THE TRACE'S DEPS ARE DERIVED, NOT DECLARED ──
-    # There is no read-set construct between the edge set and the trace: the body is the read set,
-    # so the deps a consumer reads off the seal are the accessor's edges for that node and nothing
-    # else. Asserted THROUGH the fold rather than against a naked projection, which is what the
-    # retired surface's own cells could not do.
-    test-trace-deps-are-the-accessor-edges = {
+    # There is no read-set construct between the relation and the trace: the body is the read set,
+    # so the deps a consumer reads off the seal are the accessor's dependencies for that node and
+    # nothing else. Asserted THROUGH the fold rather than against a naked projection, which is what
+    # the retired surface's own cells could not do.
+    test-trace-deps-are-the-accessor-dependencies = {
       expr = edgedCtx.trace.child.deps;
-      expected = edgedCtx.accessor.edges "child";
+      expected = edgedCtx.accessor.dependencies "child";
     };
     # Pinned against a LITERAL as well, so the cell above cannot pass by comparing two calls to one
     # broken function.
@@ -141,9 +142,9 @@ in
       expr = edgedCtx.trace.child.deps;
       expected = [ "parent" ];
     };
-    # A node the edge set says nothing about traces empty — and this is the discriminating pair
-    # with the cell above: both nodes exist, both are traced, and only the edge set separates them.
-    test-trace-deps-empty-where-no-edge-is-declared = {
+    # A node the relation says nothing about traces empty — and this is the discriminating pair
+    # with the cell above: both nodes exist, both are traced, and only the relation separates them.
+    test-trace-deps-empty-where-no-dependency-is-declared = {
       expr = edgedCtx.trace.parent.deps;
       expected = [ ];
     };
@@ -156,15 +157,15 @@ in
         "hash"
       ];
     };
-    # The declared edges are the topology consumers' oracle and nothing on the cold path walks them,
-    # so a CYCLIC declaration resolves exactly as an acyclic one does.
-    test-cyclic-declared-edges-leave-the-cold-path-alone = {
+    # The declared dependencies are the topology consumers' oracle and nothing on the cold path
+    # walks them, so a CYCLIC declaration resolves exactly as an acyclic one does.
+    test-cyclic-declared-dependencies-leave-the-cold-path-alone = {
       expr =
         (foldEquations {
           scope = roots;
           inherit schedule;
           parseParent = id: roots.nodes.${id}.parent or null;
-          declaredEdges = id: if id == "child" then [ "parent" ] else [ "child" ];
+          declaredDependencies = id: if id == "child" then [ "parent" ] else [ "child" ];
         }).eval.get
           "child"
           "self-v";
@@ -177,6 +178,7 @@ in
         (builtins.tryEval (foldEquations {
           scope = roots;
           parseParent = _: null;
+          declaredDependencies = _: [ ];
           schedule = throw "the gate refused this grammar";
         })).success;
       expected = false;
@@ -189,6 +191,7 @@ in
           scope = roots;
           inherit schedule;
           parseParent = _: null;
+          declaredDependencies = _: [ ];
         })).success;
       expected = true;
     };

@@ -28,7 +28,7 @@ And it carries a fourth concern, **the demand cascade**, which resolves a multis
   - [evalDebug](#evaldebug)
   - [evalWarm](#evalwarm)
   - [The structural partition](#the-structural-partition)
-  - [Read edges: derived, never declared](#read-edges-derived-never-declared)
+  - [Read sets: derived, never declared](#read-sets-derived-never-declared)
   - [buildNodes](#buildnodes)
   - [Algebraic Graph Construction](#algebraic-graph-construction)
   - [Attribute Combinators](#attribute-combinators)
@@ -263,7 +263,7 @@ eval {
 }
 ```
 
-Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfType, facade, resolutional, served, structuralEdges, decisionFindings, provenance }`:
+Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfType, facade, resolutional, served, structuralAttributes, decisionFindings, provenance }`:
 
 | Function | Cost | Description |
 |----------|------|-------------|
@@ -277,7 +277,7 @@ Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfTyp
 | `result.facade` | O(1) | The restricted read record an incremental plane is handed — see [`evalWarm`](#evalwarm) |
 | `result.resolutional id` | O(a) | The reuse vocabulary at a node: this attribute set minus the structural partition |
 | `result.served id` | O(a·r) | What the decision asked to reuse, intersected with that vocabulary |
-| `result.structuralEdges id` | O(1) + per entry | The structural relation the substrate constructed, readable without forcing any resolutional attribute. Its key set is the structural partition taken over the consumer's own attribute set, so a name entering the partition enters this record |
+| `result.structuralAttributes id` | O(1) + per entry | The structural partition of the node's attribute set, as a record `name -> value`, readable without forcing any resolutional attribute. Its key set is the structural partition taken over the consumer's own attribute set, so a name entering the partition enters this record |
 | `result.decisionFindings` | O(n·r), only if forced | Debug-mode validator: every attribute a decision named that the node's vocabulary does not contain |
 | `result.provenance` | O(1) | The provenance the caller supplied, carried back on the result rather than dropped |
 
@@ -370,20 +370,20 @@ An attribute is **structural** when the graph's shape depends on it: `children`,
 
 Containment needs no term: a node's parent rides the node record's `.parent` field and never reaches the evaluator as an attribute name.
 
-### Read edges: derived, never declared
+### Read sets: derived, never declared
 
-There is **no read-set construct in this library**, and its absence is the design rather than a gap. A read set declared beside a rule does not simplify away — it never exists, because **the body IS the read set** (Van Gelder 1991 Def 3.3 and §8; Sagiv 1990 printed 664; Vogt 1989 Def 3.5 p. 139). Reads derive from the graph's edges.
+There is **no read-set construct in this library**, and its absence is the design rather than a gap. A read set declared beside a rule does not simplify away — it never exists, because **the body IS the read set** (Van Gelder 1991 Def 3.3 and §8; Sagiv 1990 printed 664; Vogt 1989 Def 3.5 p. 139). Reads derive from the graph's declared dependency relation.
 
-An incremental consumer that needs an explicit dependency edge set reads it off `foldEquations`' seal:
+An incremental consumer that needs an explicit dependency relation reads it off `foldEquations`' seal:
 
 ```nix
-ctx.accessor.edges id   # → [id]   the edge set itself
-ctx.trace.<id>.deps     # → [id]   the same list, indexed per node
+ctx.accessor.dependencies id   # → [id]   the declared relation itself
+ctx.trace.<id>.deps            # → [id]   the same list, indexed per node
 ```
 
-`trace.<id>.deps` is derived as `accessor.edges id` at seal time, so the two agree by construction rather than by upkeep. Both are pure and memo-free — neither runs through `get`.
+`trace.<id>.deps` is derived as `accessor.dependencies id` at seal time, so the two agree by construction rather than by upkeep. Both are pure and memo-free — neither runs through `get`.
 
-The *dynamic* read-set (the attributes a node actually `self.get`s) is only recoverable via `evalDebug`'s fresh-`self`-per-`get` — `getTraced` returns that recording as a value — and that construction defeats memoization; there is no pure, memo-preserving way to capture it, so the graph's edges are the inspectable contract, and a validator over the dynamic recording is what shows whether they cover the reads.
+The *dynamic* read-set (the attributes a node actually `self.get`s) is only recoverable via `evalDebug`'s fresh-`self`-per-`get` — `getTraced` returns that recording as a value — and that construction defeats memoization; there is no pure, memo-preserving way to capture it, so the declared relation is the inspectable contract, and a validator over the dynamic recording is what shows whether it covers the reads.
 
 ### `buildNodes`
 

@@ -280,7 +280,7 @@ in
         "node"
         "allNodes"
         "allNodeIds"
-        "structuralEdges"
+        "structuralAttributes"
         "facade"
       ];
       expected = [
@@ -405,15 +405,15 @@ in
   };
 
   flake.tests."plane-exposures" = {
-    # The structural edge set the substrate constructed, readable without forcing any
+    # The structural attribute partition the substrate constructed, readable without forcing any
     # resolutional attribute — pinned by making every resolutional attribute throw.
     #
     # The KEY SET is the whole partition as this fixture declares it, the resolver's traversed
-    # relation included: `structuralEdges` is `genAttrs` over the structural names of the
+    # relation included: `structuralAttributes` is `genAttrs` over the structural names of the
     # consumer's attribute set, so a family entering the partition enters this accessor's key set.
     # That makes the accessor's surface a consequence of the partition rather than a second list,
     # and a cell reading the key set is what makes a family's arrival visible at all.
-    test-structural-edges-force-no-resolutional-attribute = {
+    test-structural-attributes-force-no-resolutional-attribute = {
       expr =
         let
           e = genScope.eval {
@@ -423,7 +423,7 @@ in
               owned = self: id: throw "resolutional attribute forced";
             };
           };
-          s = e.structuralEdges "a";
+          s = e.structuralAttributes "a";
         in
         {
           names = builtins.attrNames s;

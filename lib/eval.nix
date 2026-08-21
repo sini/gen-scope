@@ -345,12 +345,16 @@ let
         resolutional = resolutionalAt;
         served = servedAt;
 
-        # THE STRUCTURAL EDGE SET THE SUBSTRATE CONSTRUCTED — the children /
-        # derived-children / edges-* / includes relation, materialized by the always-recompute
+        # THE STRUCTURAL PARTITION OF THE ATTRIBUTE SET, PER NODE — the children /
+        # derived-children / edges-* / includes attributes, materialized by the always-recompute
         # branch, readable WITHOUT forcing any resolutional attribute. Reads derive from it
         # statically. It is derived rather than declared: the substrate constructed these
-        # edges, so no impossibility argument is owed for them.
-        structuralEdges = id: prelude.genAttrs structuralNamesAll (name: self.get id name);
+        # attributes, so no impossibility argument is owed for them.
+        #
+        # It is an attribute-name-indexed RECORD and not a relation — `id -> {name -> value}`,
+        # which is not even the arity of an edge set. Naming it for the attributes it partitions
+        # is what keeps it distinct from the node-level dependency relation the seal publishes.
+        structuralAttributes = id: prelude.genAttrs structuralNamesAll (name: self.get id name);
 
         # The debug-mode validator, as a value. Nothing in the production path forces it, so it
         # alters no production result and is not a rule the plane must obey; forcing it reports

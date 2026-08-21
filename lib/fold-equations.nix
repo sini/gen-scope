@@ -31,7 +31,12 @@
       scope,
       parseParent,
       schedule,
-      declaredEdges ? (_: [ ]),
+      # REQUIRED AND TOTAL, with no default. A defaulted relation would make the ABSENCE of a
+      # declaration mean something, and what it meant would be the strongest claim available —
+      # this node depends on nothing — awarded to the caller who said nothing at all. The
+      # neighbouring decision fields are required for the same reason; absence is a decision, so
+      # the caller makes it and says so.
+      declaredDependencies,
       settings ? { },
     }:
     let
@@ -52,20 +57,20 @@
       nodeIds = prelude.attrNames ev.allNodes; # includes NTA-spawned children
       accessor = {
         nodes = nodeIds;
-        edges = declaredEdges; # consumer->producer (must over-declare, soundness (c))
+        dependencies = declaredDependencies; # consumer->producer (must over-declare, soundness (c))
         parent = id: parseParent id;
         nodeData = id: (ev.node id).decls or { };
       };
-      # The trace's deps are DERIVED — read off the accessor's edge set, which is the same graph
-      # the gate runs over. Nothing declares a read set beside the rule, because a declared read
-      # set does not exist to declare: the body IS the read set (Van Gelder 1991 Def 3.3 and §8;
-      # Sagiv 1990 printed 664; Vogt 1989 Def 3.5 p. 139). The projection that used to stand
-      # between these two lines duplicated a truth the edge set already held.
+      # The trace's deps are DERIVED — read off the accessor's dependency relation, which is the
+      # same graph the gate runs over. Nothing declares a read set beside the rule, because a
+      # declared read set does not exist to declare: the body IS the read set (Van Gelder 1991
+      # Def 3.3 and §8; Sagiv 1990 printed 664; Vogt 1989 Def 3.5 p. 139). The projection that
+      # used to stand between these two lines duplicated a truth the relation already held.
       trace = prelude.listToAttrs (
         prelude.map (id: {
           name = id;
           value = {
-            deps = accessor.edges id; # eager, derived from the graph's edges
+            deps = accessor.dependencies id; # eager, derived from the graph's declared relation
             hash = null; # a reuse layer across evaluations is what would populate this
           };
         }) nodeIds
@@ -79,7 +84,7 @@
     builtins.seq schedule {
       inherit
         accessor
-        declaredEdges
+        declaredDependencies
         equations
         parseParent
         roots
