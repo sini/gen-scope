@@ -267,6 +267,12 @@ let
     unresolvedRelatum
     conflictingContribution
     ;
+
+  # ── THE CIRCULAR-NTA FIXTURE ──
+  # Shared with `tests/circular-nta.nix`, which holds the same grammar's convergence cells. Both
+  # seeded variants are defined there, so the grammar a refusal is earned on and the grammar the
+  # clean path converges on are one value rather than two that agree while someone keeps them so.
+  circularNta = import ./tests/_fixtures/circular-nta.nix { inherit genScope; };
 in
 {
   # Same type as `flake.tests`, because it is the same kind of thing read by the same runner —
@@ -1796,4 +1802,41 @@ in
         };
       };
     };
+
+  # ── THE SAME TWO REFUSALS, EARNED OVER A SPAWNED SUBTREE ──
+  # The cells above run the combinator on a bare integer and settle what each message SAYS. These
+  # run the same two failures inside the composed grammar — a lattice indexed by nodes that did not
+  # exist when the attribute was declared — and settle that composing the carriers does not blunt
+  # either refusal. `tests/circular-nta.nix` holds the same grammar's clean path, without which a
+  # pair of refusals is equally consistent with a grammar that refuses whatever it is given.
+  #
+  # ★ WHAT THE MESSAGE NAMES, STATED BECAUSE IT IS THE DIAGNOSTIC COST OF THE PRODUCT CARRIER. Both
+  # texts name 'c' — the node the circular attribute is homed at — and neither names the member
+  # whose contribution broke the ascent or exhausted the chain. That follows from where the SCC is
+  # carried: one attribute instance over a product lattice is ONE circular attribute as far as the
+  # combinator is concerned, so the coordinate it can report is the instance's. An author reads
+  # which member moved by diffing the two states, not out of the refusal.
+  config.flake.testsError.circular-nta-refusals = {
+    # The neighbours' contribution replacing a member's own seed rather than joining it. The
+    # iteration index is the first round in which any member had a non-empty neighbour, which is
+    # the first round in which a replacement could drop anything.
+    test-a-non-monotone-contribution-over-the-spawned-subtree-names-monotonicity = {
+      expr = circularNta.nonMonotone;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'c' took a step its declared order does not ascend, at iteration 1 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # A height one short of the cycle's length. The step count the message reports is the one this
+    # run actually took, so a cell asserting the text asserts that the bound came off the
+    # declaration rather than being recited from it.
+    test-a-height-one-short-of-the-cycle-refutes-the-declaration = {
+      expr = circularNta.shortHeight;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'c' is still ascending after 3 steps, so the declared height of 2 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
+      };
+    };
+  };
 }
