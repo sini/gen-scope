@@ -23,6 +23,32 @@
 #   class Rect   extends Shape { width: Num, height: Num }
 { genScope, lib }:
 let
+  # ── THE KIND VOCABULARY, AND THE ONE EXPANSION IN IT ──
+  # `root` expands into a RECORD — the instantiated generic — and says so at registration, where
+  # `record` must already rank below it. A generic instantiated at firing time could otherwise
+  # produce any kind at all, including its own host's, and nothing would be able to say whether the
+  # expansion terminates.
+  kinds = genScope.mkKinds [
+    (genScope.mkKind { name = "primitive"; })
+    (genScope.mkKind { name = "record"; })
+    (genScope.mkKind { name = "class"; })
+    (genScope.mkKind { name = "env"; })
+    (genScope.mkKind {
+      name = "root";
+      below = [ "record" ];
+      spawns.record = _self: _id: {
+        "Pair<Num,String>" = {
+          id = "Pair<Num,String>";
+          parent = "root";
+          decls = {
+            fst = "Num";
+            snd = "String";
+          };
+        };
+      };
+    })
+  ];
+
   roots = genScope.buildRoots {
     parentGraph = genScope.star "root" [
       "Point2D"
@@ -104,6 +130,7 @@ let
         };
       };
     };
+    kinds = kinds;
     types = {
       root = "root";
       "Point2D" = "record";
@@ -128,26 +155,8 @@ let
         "edges-R" = _self: id: (_self.node id).decls.__edges.R or [ ];
         "edges-E" = _self: id: (_self.node id).decls.__edges.E or [ ];
       };
-      derivedAttrs = {
-        derived-children =
-          _self: id:
-          if id == "root" then
-            {
-              "Pair<Num,String>" = {
-                id = "Pair<Num,String>";
-                parent = "root";
-                decls = {
-                  fst = "Num";
-                  snd = "String";
-                };
-                type = "record";
-              };
-            }
-          else
-            { };
-      };
     in
-    baseAttrs // derivedAttrs // userAttrs;
+    baseAttrs // userAttrs;
 in
 {
   inherit roots mkAttributes;

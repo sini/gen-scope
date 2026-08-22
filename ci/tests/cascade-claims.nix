@@ -604,18 +604,30 @@ let
     };
 
   noResolve = {
+    spawns = { };
     dedupKey = null;
     fold = null;
   };
   noDedupKey = {
     resolve = ghostResolve;
+    spawns = { };
     fold = null;
   };
   noFold = {
     resolve = ghostResolve;
+    spawns = { };
     dedupKey = _: "g";
   };
   wellFormedForged = {
+    resolve = ghostResolve;
+    spawns = { };
+    dedupKey = null;
+    fold = null;
+  };
+  # The registry projects `spawns` off an entry exactly as it projects the others — a kind that
+  # expands declares its produced kinds there — so a forged record missing it is the same defect
+  # in the same class, and the control above is only a control while it carries the field.
+  noSpawns = {
     resolve = ghostResolve;
     dedupKey = null;
     fold = null;
@@ -673,22 +685,26 @@ let
 
   entryNoResolve = {
     below = [ ];
+    spawns = { };
     dedupKey = null;
     fold = null;
   };
   entryNoDedupKey = {
     below = [ ];
     resolve = ghostResolve;
+    spawns = { };
     fold = null;
   };
   entryNoFold = {
     below = [ ];
     resolve = ghostResolve;
+    spawns = { };
     dedupKey = _: "g";
   };
   # `below` is read only where an emission is validated, so this entry must emit or the cell
   # reports a refusal it never asked for.
   entryNoBelow = {
+    spawns = { };
     resolve = c: _: {
       claims = [
         (mkClaim {
@@ -701,6 +717,13 @@ let
     fold = null;
   };
   entryWellFormed = {
+    below = [ ];
+    resolve = ghostResolve;
+    spawns = { };
+    dedupKey = null;
+    fold = null;
+  };
+  entryNoSpawns = {
     below = [ ];
     resolve = ghostResolve;
     dedupKey = null;
@@ -1337,6 +1360,20 @@ in
     };
     test-kind-set-entry-with-no-fold-refused-when-nothing-claims-it = {
       expr = didThrow (withForgedKindSet entryNoFold false);
+      expected = true;
+    };
+    # `spawns` joins the projected class: the evaluator reads it off a node's kind to expand that
+    # node, so an entry without it is the same type error reached by a different consumer.
+    test-a-forged-record-with-no-spawns-refused = {
+      expr = didThrow (withForged noSpawns true);
+      expected = true;
+    };
+    test-kind-set-entry-with-no-spawns-refused-when-claimed = {
+      expr = didThrow (withForgedKindSet entryNoSpawns true);
+      expected = true;
+    };
+    test-kind-set-entry-with-no-spawns-refused-when-nothing-claims-it = {
+      expr = didThrow (withForgedKindSet entryNoSpawns false);
       expected = true;
     };
     test-kind-set-entry-with-no-below-refused-when-claimed = {

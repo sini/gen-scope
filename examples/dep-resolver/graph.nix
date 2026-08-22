@@ -14,6 +14,33 @@
 #   └── lib-logging@3.1 → depends on: lib-json@1.x
 { genScope, lib }:
 let
+  # ── THE KIND VOCABULARY, AND THE ONE EXPANSION IN IT ──
+  # A workspace expands into a MANIFEST — a second-stage node whose declarations are read off the
+  # first stage's attributes. The expansion is declared on `workspace`, whose `below` set is what
+  # licenses it: `manifest` ranks under `workspace`, so the descent is settled at registration and
+  # the builder cannot produce anything else. Its records carry no `type`; the substrate stamps the
+  # kind from the key the builder is declared under.
+  kinds = genScope.mkKinds [
+    (genScope.mkKind { name = "lib"; })
+    (genScope.mkKind { name = "app"; })
+    (genScope.mkKind { name = "manifest"; })
+    (genScope.mkKind {
+      name = "workspace";
+      below = [ "manifest" ];
+      spawns.manifest = self: _id: {
+        "resolved:app@1.0" = {
+          id = "resolved:app@1.0";
+          parent = "workspace";
+          decls = {
+            package = "app@1.0";
+            resolvedDeps = self.get "app@1.0" "allDeps";
+            totalAPIs = self.get "app@1.0" "availableAPIs";
+          };
+        };
+      };
+    })
+  ];
+
   roots = genScope.buildRoots {
     parentGraph = genScope.star "workspace" [
       "app@1.0"
@@ -93,6 +120,7 @@ let
         ];
       };
     };
+    kinds = kinds;
     types = {
       workspace = "workspace";
       "app@1.0" = "app";
@@ -118,28 +146,8 @@ let
         imports = _self: id: (_self.node id).decls.__edges.I or [ ];
         "edges-D" = _self: id: (_self.node id).decls.__edges.D or [ ];
       };
-      # Derived children: synthesize manifest node for app
-      derivedAttrs = {
-        derived-children =
-          self: id:
-          if id == "workspace" then
-            {
-              "resolved:app@1.0" = {
-                id = "resolved:app@1.0";
-                parent = "workspace";
-                decls = {
-                  package = "app@1.0";
-                  resolvedDeps = self.get "app@1.0" "allDeps";
-                  totalAPIs = self.get "app@1.0" "availableAPIs";
-                };
-                type = "manifest";
-              };
-            }
-          else
-            { };
-      };
     in
-    baseAttrs // derivedAttrs // userAttrs;
+    baseAttrs // userAttrs;
 in
 {
   inherit roots mkAttributes;

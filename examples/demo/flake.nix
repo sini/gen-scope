@@ -211,6 +211,14 @@
                 head = "Dr. Neron";
               };
             };
+            kinds = genScope.mkKinds (
+              map (name: genScope.mkKind { inherit name; }) [
+                "institution"
+                "faculty"
+                "department"
+                "lab"
+              ]
+            );
             types = {
               university = "institution";
               "faculty:cs" = "faculty";
@@ -259,6 +267,14 @@
           ];
           nodes = genScope.buildRoots {
             inherit parentGraph;
+            kinds = genScope.mkKinds (
+              map (name: genScope.mkKind { inherit name; }) [
+                "org"
+                "team"
+                "person"
+                "pet"
+              ]
+            );
             types = {
               root = "org";
               a = "team";
@@ -629,6 +645,12 @@
                 headcount = 8;
               };
             };
+            kinds = genScope.mkKinds (
+              map (name: genScope.mkKind { inherit name; }) [
+                "department"
+                "audit"
+              ]
+            );
             types = {
               "dept:eng" = "department";
               "dept:sales" = "department";
@@ -1002,6 +1024,12 @@
                 size = 3;
               };
             };
+            kinds = genScope.mkKinds (
+              map (name: genScope.mkKind { inherit name; }) [
+                "org"
+                "team"
+              ]
+            );
             types = {
               org = "org";
               teamA = "team";

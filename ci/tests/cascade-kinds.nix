@@ -626,5 +626,107 @@ in
       expr = namesOf (lattice 3 7);
       expected = registeredNames (lattice 3 7);
     };
+
+    # ── THE REGISTRY IS THE SUBSTRATE'S, NOT THE CASCADE'S ──
+    # `resolve` used to be total at the door, which made this registry unusable as the home of the
+    # node kind order: a structural kind has no demand semantics to supply. These cells are the
+    # generalization from the other side — a kind with NO resolver registers, ranks and orders
+    # exactly like one that carries it, so the two vocabularies really do share one relation and one
+    # acyclicity verdict. What such a kind cannot do is answer a demand, and `../tests-error.nix`
+    # asserts that refusal by its text.
+    test-a-kind-with-no-resolver-registers = {
+      expr =
+        builtins.attrNames
+          (genScope.mkKinds [
+            (genScope.mkKind { name = "structural"; })
+            (genScope.mkKind {
+              name = "host";
+              below = [ "structural" ];
+            })
+          ]).kinds;
+      expected = [
+        "host"
+        "structural"
+      ];
+    };
+    test-a-kind-with-no-resolver-takes-a-rank-like-any-other = {
+      expr =
+        (genScope.mkKinds [
+          (genScope.mkKind { name = "structural"; })
+          (genScope.mkKind {
+            name = "host";
+            below = [ "structural" ];
+          })
+        ]).depth;
+      expected = {
+        host = 1;
+        structural = 0;
+      };
+    };
+    # A DEMAND kind and a STRUCTURAL one rank in the SAME relation — which is the whole content of
+    # there being one registry rather than two. Without this cell the two above are equally
+    # consistent with a registry that quietly partitions them.
+    test-control-demand-and-structural-kinds-rank-in-one-order = {
+      expr =
+        (genScope.mkKinds [
+          (genScope.mkKind { name = "leaf"; })
+          (genScope.mkKind {
+            name = "structural";
+            below = [ "leaf" ];
+          })
+          (genScope.mkKind {
+            name = "demanding";
+            below = [ "structural" ];
+            resolve = _: _: { };
+          })
+        ]).depth;
+      expected = {
+        demanding = 2;
+        leaf = 0;
+        structural = 1;
+      };
+    };
+
+    # ── THE SPAWN DECLARATION RIDES THE SAME RECORD ──
+    # A declared spawn is admitted only where its produced kind is already `below` the host, so the
+    # descent is a property of the record rather than of the run. The refusal is asserted by text
+    # next door; this is its clean path, and without it that refusal is consistent with a
+    # constructor that refuses every `spawns` it is given.
+    test-control-a-descending-spawn-is-admitted = {
+      expr =
+        builtins.attrNames
+          (genScope.mkKind {
+            name = "host";
+            below = [ "child" ];
+            spawns.child = _self: _id: { };
+          }).spawns;
+      expected = [ "child" ];
+    };
+    # The refusal as a BOOLEAN, beside the message cell next door, because the two suites are read
+    # by different gates: the batch asserter behind `checks.default` quantifies over `flake.tests`
+    # and never sees `flake.testsError`, so a guard pinned only by its text is unguarded on the gate
+    # CI actually builds. Measured: with the descent check disabled, `#tests` stayed green at 732
+    # and only the message cells fired.
+    test-a-spawn-outside-the-hosts-below-set-is-refused = {
+      expr =
+        !(builtins.tryEval (
+          builtins.deepSeq (genScope.mkKind {
+            name = "host";
+            below = [ "low" ];
+            spawns.sideways = _self: _id: { };
+          }) null
+        )).success;
+      expected = true;
+    };
+    test-a-spawn-declared-with-no-below-at-all-is-refused = {
+      expr =
+        !(builtins.tryEval (
+          builtins.deepSeq (genScope.mkKind {
+            name = "host";
+            spawns.child = _self: _id: { };
+          }) null
+        )).success;
+      expected = true;
+    };
   };
 }

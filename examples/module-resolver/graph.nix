@@ -49,6 +49,16 @@ let
     (genScope.edge "Cycle2" "Cycle1")
   ];
 
+  # A FLAT kind vocabulary: the names this graph's nodes are, with no order between them, so no
+  # kind expands into another. Registering them is what gives the kind set a domain — an
+  # unregistered spelling is refused rather than silently becoming a kind of its own.
+  kinds = genScope.mkKinds (
+    map (name: genScope.mkKind { inherit name; }) [
+      "root"
+      "module"
+    ]
+  );
+
   roots = genScope.buildRoots {
     inherit parentGraph importGraph;
     decls = {
@@ -78,6 +88,7 @@ let
         val = "c2";
       };
     };
+    kinds = kinds;
     types = {
       root = "root";
       Std = "module";

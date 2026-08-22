@@ -396,32 +396,77 @@ in
       };
     };
 
-    # ── THE CONSTRUCTOR REFUSES A KIND WITH NO RESOLVER, BY NAME, AND CATCHABLY ──
-    # `resolve` used to be a bare required formal, so omitting it was refused by NIX at application
-    # — `called without required argument 'resolve'`, an EvalError that terminates the evaluation,
-    # that `tryEval` does not contain, and that arrives before any arm in `mkKind` can run. The
-    # caller got no name and no library text, at the ordinary door, for the most ordinary mistake.
-    # These cells exist because a `ThrownError` assertion is only expressible once the throw is the
-    # library's: the pre-fix behaviour could not be written as a cell at all, which is exactly what
-    # made it worth fixing rather than documenting.
-    test-constructor-refuses-a-kind-with-no-resolve = {
-      expr = mkKind { name = "k"; };
+    # ── A KIND WITH NO RESOLVER REGISTERS, AND IS REFUSED WHERE IT IS ASKED TO ANSWER ──
+    # `resolve` was total at this door, which made the registry unusable as the home of the NODE
+    # kind order: a structural kind has no demand semantics and requiring it to invent one imposes a
+    # vocabulary it has no use for. So the field became an option and the requirement moved to the
+    # consumer — the run, where the claim naming the kind is, and where both the kind and the
+    # caller's path can be named. These two cells are that move: the construction is admitted (the
+    # control for that sits in `#tests`, where a kind with no resolver registers and ranks), and the
+    # demand is refused with a message saying which of the two vocabularies the kind belongs to.
+    test-a-claim-on-a-kind-with-no-resolver-is-refused-at-the-run = {
+      expr = resolveClaims {
+        kinds = mkKinds [ (mkKind { name = "structural"; }) ];
+        claims = [
+          (mkClaim {
+            kind = "structural";
+            subject = subjA;
+          })
+        ];
+      };
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.mkKind: kind 'k' declares no `resolve` (a kind must say how a demand of its kind resolves)";
+        msg = exactly "gen-scope.resolveClaims: kind 'structural' at path [0] declares no `resolve`, so it cannot answer a demand — it is a registered kind and not a demand kind";
       };
     };
-    # An explicit null takes the same arm, and that is the sentinel's whole cost: `resolve = null`
-    # and an omitted `resolve` are one case here. Nothing legitimate is collapsed — null is not a
-    # resolver on any reading, and the registry already refuses it through `callable`.
-    test-constructor-refuses-an-explicitly-null-resolve-the-same-way = {
-      expr = mkKind {
-        name = "k";
-        resolve = null;
+    # An explicit null and an omitted field are one case, which is the sentinel's whole cost and its
+    # whole point: nothing legitimate is collapsed, because null is not a resolver on any reading.
+    test-an-explicitly-null-resolver-is-refused-the-same-way = {
+      expr = resolveClaims {
+        kinds = mkKinds [
+          (mkKind {
+            name = "structural";
+            resolve = null;
+          })
+        ];
+        claims = [
+          (mkClaim {
+            kind = "structural";
+            subject = subjA;
+          })
+        ];
       };
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.mkKind: kind 'k' declares no `resolve` (a kind must say how a demand of its kind resolves)";
+        msg = exactly "gen-scope.resolveClaims: kind 'structural' at path [0] declares no `resolve`, so it cannot answer a demand — it is a registered kind and not a demand kind";
+      };
+    };
+    # ── THE SPAWN DECLARATION'S OWN REFUSAL, AT THE DOOR ──
+    # A produced kind outside the host's `below` set is what a non-descending expansion IS, and it
+    # is refused where the record is built rather than when the spawn fires. That is the whole
+    # difference between an expansion that is checked and one that cannot be written.
+    test-a-spawn-outside-the-hosts-below-set-is-refused-at-construction = {
+      expr = mkKind {
+        name = "host";
+        below = [ "low" ];
+        spawns.sideways = _self: _id: { };
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKind: kind 'host' declares a spawn producing kind(s) ["sideways"] that its `below` set ["low"] does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there.'';
+      };
+    };
+    # A spawn declared on a kind with NO `below` at all is the same refusal reached from the other
+    # side, and it is the ordinary shape of the mistake: an author writes the builder and forgets
+    # that the order is what licenses it.
+    test-a-spawn-with-no-below-at-all-is-refused = {
+      expr = mkKind {
+        name = "host";
+        spawns.child = _self: _id: { };
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKind: kind 'host' declares a spawn producing kind(s) ["child"] that its `below` set [] does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there.'';
       };
     };
     # A PRESENT but unusable `resolve` is a different reason and says so, mirroring the registry's
@@ -515,6 +560,7 @@ in
           name = "l";
           below = [ ];
           resolve = 42;
+          spawns = { };
           dedupKey = null;
           fold = null;
         }
@@ -589,6 +635,20 @@ in
     # The other two missing-field arms. WHICH field is absent is the coordinate the caller acts
     # on, and the three arms are interchangeable without it: a registry is a list, and a message
     # naming the entry but not the field leaves the caller bisecting a record they already wrote.
+    test-a-missing-spawns-names-that-field = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind";
+          name = "l";
+          below = [ ];
+          resolve = _: _: { };
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries no `spawns` field"]'';
+      };
+    };
     test-a-missing-dedupkey-names-that-field = {
       expr = mkKinds [
         {
@@ -596,6 +656,7 @@ in
           name = "l";
           below = [ ];
           resolve = _: _: { };
+          spawns = { };
         }
       ];
       expectedError = {
@@ -610,6 +671,7 @@ in
           name = "l";
           below = [ ];
           resolve = _: _: { };
+          spawns = { };
           dedupKey = null;
         }
       ];
@@ -1320,6 +1382,132 @@ in
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope: interpretation entry 0 has no 'atom' field — an interpretation is a list of { atom, verdict }";
+        };
+      };
+    };
+
+  # ── THE DOMAIN CARRIER'S REFUSALS, EACH BY ITS OWN TEXT ──
+  # Four different facts, and a caller acts differently on each: a kind vocabulary that was never
+  # registered, a spelling the registry does not carry, an expansion declared outside the registry
+  # altogether, and a builder choosing its child's kind while it fires. `tryEval` reports one
+  # boolean for all four, and the booleans live beside their controls in `tests/build-nodes.nix`
+  # and `tests/hoag.nix`.
+  config.flake.testsError.domain-carrier-refusals =
+    let
+      lowHigh =
+        spawn:
+        genScope.mkKinds [
+          (genScope.mkKind { name = "low"; })
+          (genScope.mkKind {
+            name = "high";
+            below = [ "low" ];
+            spawns.low = spawn;
+          })
+        ];
+      runWith =
+        kinds: attributes:
+        builtins.deepSeq
+          (genScope.eval {
+            scope = genScope.buildRoots {
+              inherit kinds;
+              parentGraph = genScope.vertex "h";
+              types.h = "high";
+            };
+            attributes = {
+              children = _self: _id: { };
+              imports = _self: _id: [ ];
+            }
+            // attributes;
+          }).allNodes
+          null;
+    in
+    {
+      test-declaring-types-with-no-registry-names-the-vocabulary = {
+        expr =
+          builtins.deepSeq
+            (genScope.buildRoots {
+              parentGraph = genScope.vertex "n";
+              types.n = "host";
+            }).nodes
+            null;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope.buildRoots: `types` declares kind(s) ["host"] but no `kinds` registry was supplied. A kind is a name in a registered vocabulary, not a free string: without the registry there is no order for the kinds to be ranked in, so nothing can say that an expansion descends and every spelling is its own kind. Register them with `mkKinds` and pass the result as `kinds`, or declare no types.'';
+        };
+      };
+
+      test-a-spelling-the-registry-does-not-carry-is-named = {
+        expr =
+          builtins.deepSeq
+            (genScope.buildRoots {
+              parentGraph = genScope.vertex "n";
+              kinds = genScope.mkKinds [ (genScope.mkKind { name = "host"; }) ];
+              types.n = "gost";
+            }).nodes
+            null;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope.buildRoots: `types` declares kind(s) ["gost"] that the supplied `kinds` registry does not carry. An unregistered kind has no rank, so nothing can decide whether an expansion into or out of it descends — register the kind, or use one that is registered.'';
+        };
+      };
+
+      # A hand-written spawn attribute is refused at the ENTRY, before any node resolves, because it
+      # is a statement about the whole program rather than about one node.
+      test-a-hand-written-spawn-attribute-names-where-the-declaration-belongs = {
+        expr = runWith (lowHigh (_self: _id: { })) {
+          derived-children = _self: _id: { };
+        };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.eval: `attributes` declares `derived-children` directly. A node expansion is declared on the KIND it expands FROM — `mkKind { spawns = { <produced-kind> = builder; }; }` — so that the produced kind is a registered name below its host's own and the descent is settled before anything fires. Written as a bare attribute the produced kind is whatever the body returns, which is a choice made at firing time and one nothing can check. Move the builder onto its host kind's `spawns`.";
+        };
+      };
+
+      # A builder writing `type` is the only way a firing-time kind choice could still be attempted,
+      # and the message says which host, which produced kind and which child — the three coordinates
+      # an author needs to find the line.
+      test-a-builder-choosing-its-childs-kind-is-refused-by-name = {
+        expr = runWith (lowHigh (
+          _self: id: {
+            "${id}-c" = {
+              id = "${id}-c";
+              parent = id;
+              type = "low";
+              decls = { };
+            };
+          }
+        )) { };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: kind 'high' spawns 'low' and its builder returned a child 'h-c' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field.";
+        };
+      };
+
+      # The route that skips the constructor's door: a scope record assembled by hand carries nodes
+      # nothing validated, so the spawn channel refuses the unregistered kind where it reads it.
+      test-a-hand-built-scope-with-an-unregistered-kind-is-refused = {
+        expr =
+          builtins.deepSeq
+            (genScope.eval {
+              scope = {
+                nodes.n = {
+                  id = "n";
+                  parent = null;
+                  type = "ghost";
+                  decls = { };
+                };
+                nodeOrder = [ "n" ];
+                kinds = genScope.mkKinds [ (genScope.mkKind { name = "high"; }) ];
+              };
+              attributes = {
+                children = _self: _id: { };
+                imports = _self: _id: [ ];
+              };
+            }).allNodes
+            null;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: node 'n' carries kind 'ghost', which the supplied registry does not carry. A node's kind is a name in a registered vocabulary — register it with `mkKinds`, or build the scope through `buildRoots`, which refuses an unregistered kind at the door.";
         };
       };
     };

@@ -8,9 +8,17 @@
 #
 # `mkKind` builds one kind record and refuses a `dedupKey` without a `fold` and a `fold` without a
 # `dedupKey`: grouping and merging are only meaningful together, so the pairing is a
-# registration-time error rather than a resolution-time surprise. `mkKinds` validates the whole
-# set — name uniqueness, `below`-name resolution, acyclicity — and publishes the per-kind `depth`
-# measure with its maximum.
+# registration-time error rather than a resolution-time surprise. It also refuses a `spawns` entry
+# whose produced kind is outside the host's own `below` set, which is what makes a non-descending
+# node expansion inexpressible rather than detectable. `mkKinds` validates the whole set — name
+# uniqueness, `below`-name resolution, acyclicity — and publishes the per-kind `depth` measure with
+# its maximum.
+#
+# ★ THIS REGISTRY IS THE SUBSTRATE'S, NOT THE CASCADE'S. It began as the demand vocabulary and now
+# carries the kind order every node kind is ranked in, so the two things a kind can be — something
+# a demand resolves against, and something a node IS — register once, in one relation, with one
+# acyclicity verdict. `resolve` marks the demand subset; `spawns` marks the expanding subset; a
+# kind may be in either, both or neither.
 #
 # ── WHAT THIS FILE STANDS ON, AND THE THREE ANSWERS ARE DIFFERENT IN KIND ──
 # TERMINATION is classical mathematics and claims no primary: the round bound is Noetherian
@@ -80,15 +88,23 @@
 # failure this intake exists to prevent, and declining it here on the grounds that the token cannot
 # vouch for the fields' CONTENTS would be answering a question nobody asked.
 #
-# ★ AND THE ORDINARY DOOR ALREADY REQUIRES ALL THREE, so this costs a cooperative caller nothing:
-# `mkKind` refuses a kind with no applicable `resolve` by name, and writes `dedupKey` and `fold` as
-# null when a kind declares neither. No record it builds can fail these arms. What they reach is
-# precisely the forged record — the one case the marker was never able to speak for.
+# ★ AND THE ORDINARY DOOR ALREADY REQUIRES THE FIELDS TO BE PRESENT, so this costs a cooperative
+# caller nothing: `mkKind` writes `resolve`, `dedupKey` and `fold` as null when a kind declares
+# none of them, so no record it builds can fail a PRESENCE arm. What they reach is precisely the
+# forged record — the one case the marker was never able to speak for.
 #
-# The constructor's `resolve` arm is written as a SENTINEL DEFAULT rather than a bare required
-# formal, and the reason is this same paragraph read one level down: a bare formal makes the omission
-# Nix's refusal instead of the library's, which is the uncatchable termination described above
-# happening at the door that exists to prevent it. See `mkKind` for the argument in full.
+# ★★ WHAT `resolve` IS AND IS NOT REQUIRED FOR. It is the answer to a DEMAND, and this registry is
+# no longer only the demand vocabulary: it is the substrate's kind registry, and a structural node
+# kind has no demand semantics to supply. So a kind may register without one. What that does NOT
+# relax is the answer to a demand — a kind carrying no `resolve` cannot resolve a claim, and a
+# claim naming it is refused BY NAME at the run, where the caller is and where the kind can be
+# named. The requirement moved from the door to the consumer; it did not disappear, and demand
+# kinds are exactly the subset that carry the field.
+#
+# The constructor's arms are written as SENTINEL DEFAULTS rather than bare required formals, and
+# the reason is this same paragraph read one level down: a bare formal makes an omission Nix's
+# refusal instead of the library's, which is the uncatchable termination described above happening
+# at the door that exists to prevent it. See `mkKind` for the argument in full.
 #
 # The field checks answer USABILITY, and they are the half that holds against any input at all —
 # `name` is used as an attribute name and `below` as a list of them, and those obligations are the
@@ -321,34 +337,61 @@ let
   kindMarker = "gen-scope/kind";
   kindSetMarker = "gen-scope/kind-set";
 
-  # ★ `resolve` IS REQUIRED, AND THE NULL IS HOW THE REFUSAL GETS TO FIRE. Written as a formal with
-  # no default, an omitted `resolve` is refused by NIX, at application, with
-  # `called without required argument 'resolve'` — a termination this library never names, that
-  # `tryEval` does not contain, and that arrives BEFORE any arm below can run. That is the same
-  # uncatchable class the header above refuses on the registry's behalf, reaching the ordinary door:
-  # a caller who omits the field gets a dead evaluation instead of a name.
+  # ★★ THIS IS THE SUBSTRATE'S KIND REGISTRY, AND `resolve` IS ONE VOCABULARY INSIDE IT.
+  # It was built as the cascade's demand vocabulary and `resolve` was total: a kind that could not
+  # answer a demand was not a kind. That reading made the registry unusable as the home of the NODE
+  # kind order — a structural node kind has no demand semantics, and requiring it to invent one is
+  # imposing a resolution vocabulary on something that has no use for it. The alternative, a second
+  # registry over the same `graph.coneRank` primitive, pays the price this file states twice: two
+  # copies of a discipline agree only for as long as someone keeps them in step.
   #
-  # So the formal carries a sentinel whose ONLY job is to let the arm underneath it decide. `null`
-  # can serve as that sentinel because it is not a resolver on any reading — the registry's
-  # `notAKind` already refuses a null `resolve` through `callable` — so nothing legitimate is being
-  # collapsed into the absent case, and the two arms below reproduce the registry's own two reasons
-  # ("carries no `resolve` field", "carries a `resolve` that cannot be applied") at the construction
-  # site, where the author is and where the kind can be named.
+  # So the registry generalizes and `resolve` becomes a sentinel-guarded OPTION. DEMAND KINDS ARE
+  # THE SUBSET THAT CARRY IT. A kind without one is a perfectly good kind — it takes a rank in the
+  # order, it may declare what it spawns, it may be a node's type — and it cannot answer a demand,
+  # which `resolveClaims` refuses by name at the claim that asks it to. The requirement did not
+  # disappear; it moved to the consumer that actually needs it, where the kind can be named and the
+  # caller is standing.
   #
-  # THE PRESENCE CLAIM THE HEADER MAKES IS PRESERVED, and strengthened: no record this constructor
-  # builds can reach the registry without an APPLICABLE `resolve`, so the registry's presence arms
-  # still cannot fire on its output, and neither can its applicability arm.
+  # ★ THE NULL IS STILL HOW A REFUSAL GETS TO FIRE, for the fields that remain constrained. Written
+  # as a formal with no default, an omitted field is refused by NIX, at application, with
+  # `called without required argument '…'` — a termination this library never names, that `tryEval`
+  # does not contain, and that arrives BEFORE any arm below can run. That is the same uncatchable
+  # class the header refuses on the registry's behalf, reaching the ordinary door. The sentinel's
+  # only job is to let the arm underneath it decide, and `null` can serve because it is not a
+  # resolver, a fold or a key on any reading.
+  #
+  # THE PRESENCE CLAIM THE HEADER MAKES IS PRESERVED: no record this constructor builds can reach
+  # the registry with a field MISSING, so the registry's presence arms still cannot fire on its
+  # output. What the constructor no longer claims is that the field is non-null.
   mkKind =
     {
       name,
       below ? [ ],
       resolve ? null,
+      spawns ? { },
       dedupKey ? null,
       fold ? null,
     }:
     let
       hasDedup = dedupKey != null;
       hasFold = fold != null;
+      # ── THE SPAWN DECLARATION, AND WHY ITS DESCENT IS DECIDED HERE ──
+      # THEORY. Söderberg §7 (printed 320) states the finiteness technique as "ordering the
+      # nonterminals (the node types), so that each new NTA has a lower order than its host", and in
+      # Vogt's formalism an expansion produces a symbol the GRAMMAR declares — the produced symbol is
+      # never a runtime choice. `spawns` is that declaration: a host kind says, at registration, which
+      # kinds it can expand into, and the substrate stamps the produced kind from the KEY rather than
+      # reading it off whatever the builder returned.
+      #
+      # Every declared key must already be a `below` name, so descent is not a separate condition to
+      # check: `below` is the relation `graph.coneRank` ranks, and a registered `below` edge strictly
+      # decreases that rank by construction. A NON-DESCENDING SPAWN IS THEREFORE INEXPRESSIBLE — the
+      # record cannot be built — rather than admitted here and refused when it fires. That is the
+      # same shape the emission guard already enforces for CLAIMS, where a sub-claim outside its
+      # emitter's `below` set is a topology error; nodes and claims now expand under one rule.
+      spawnKinds = if isAttrs spawns then attrNames spawns else [ ];
+      undeclaredSpawn = filter (k: !(elem k below)) spawnKinds;
+      unbuildableSpawn = filter (k: !(callable spawns.${k})) spawnKinds;
     in
     if !isString name then
       throw "gen-scope.mkKind: `name` must be a string"
@@ -356,10 +399,14 @@ let
       throw "gen-scope.mkKind: kind '${name}' declares a `below` that is a ${typeOf below} rather than a list"
     else if !(all isString below) then
       throw "gen-scope.mkKind: kind '${name}' declares a `below` holding a name that is not a string"
-    else if resolve == null then
-      throw "gen-scope.mkKind: kind '${name}' declares no `resolve` (a kind must say how a demand of its kind resolves)"
-    else if !(callable resolve) then
+    else if resolve != null && !(callable resolve) then
       throw "gen-scope.mkKind: kind '${name}' declares a `resolve` that cannot be applied (it is a ${typeOf resolve})"
+    else if !isAttrs spawns then
+      throw "gen-scope.mkKind: kind '${name}' declares a `spawns` that is a ${typeOf spawns} rather than an attribute set keyed by the kind each builder produces"
+    else if undeclaredSpawn != [ ] then
+      throw "gen-scope.mkKind: kind '${name}' declares a spawn producing kind(s) ${toJSON undeclaredSpawn} that its `below` set ${toJSON below} does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there."
+    else if unbuildableSpawn != [ ] then
+      throw "gen-scope.mkKind: kind '${name}' declares a spawn for kind(s) ${toJSON unbuildableSpawn} whose builder cannot be applied"
     else if hasDedup && !hasFold then
       throw "gen-scope.mkKind: kind '${name}' declares `dedupKey` without `fold` (a fold is required to merge grouped fragments)"
     else if hasFold && !hasDedup then
@@ -371,6 +418,7 @@ let
           name
           below
           resolve
+          spawns
           dedupKey
           fold
           ;
@@ -401,12 +449,23 @@ let
       "carries a `below` holding a name that is not a string"
     else if !(k ? resolve) then
       "carries no `resolve` field"
+    else if !(k ? spawns) then
+      "carries no `spawns` field"
     else if !(k ? dedupKey) then
       "carries no `dedupKey` field"
     else if !(k ? fold) then
       "carries no `fold` field"
-    else if !(callable k.resolve) then
+    # `resolve` is an OPTION now — a kind without one is structural and cannot answer a demand,
+    # which the run refuses at the claim rather than here. What stays refused is a resolve that is
+    # PRESENT and unapplicable, because that one aborts at the call site with no name of ours.
+    else if k.resolve != null && !(callable k.resolve) then
       "carries a `resolve` that cannot be applied"
+    else if !isAttrs k.spawns then
+      "carries a `spawns` that is not an attribute set"
+    else if !(all (p: elem p k.below) (attrNames k.spawns)) then
+      "declares a spawn outside its own `below` set"
+    else if !(all (p: callable k.spawns.${p}) (attrNames k.spawns)) then
+      "carries a spawn builder that cannot be applied"
     else if k.dedupKey != null && !(callable k.dedupKey) then
       "carries a `dedupKey` that is neither null nor applicable"
     else if k.fold != null && !(callable k.fold) then
@@ -721,6 +780,13 @@ let
           throw "gen-scope.resolveClaims: claim at path ${pathStr} carries a `kind` that is a ${typeOf (c.kind or null)} rather than a string${chain}"
         else if !(ks ? ${c.kind}) then
           throw "gen-scope.resolveClaims: unknown kind '${toString c.kind}' at path ${pathStr}${chain}"
+        # The demand vocabulary is the SUBSET of the registry that carries a `resolve`. A kind
+        # without one is registered, ranked and possibly spawning, and it still cannot answer a
+        # demand — so the requirement the constructor no longer imposes is imposed here, at the
+        # claim that asks for it, where both the kind and the caller's path can be named. Refusing
+        # here rather than at registration is what lets one registry serve both vocabularies.
+        else if ks.${c.kind}.resolve == null then
+          throw "gen-scope.resolveClaims: kind '${c.kind}' at path ${pathStr} declares no `resolve`, so it cannot answer a demand — it is a registered kind and not a demand kind${chain}"
         else if (c._reserved or [ ]) != [ ] then
           throw "gen-scope.resolveClaims: claim at path ${pathStr} (kind '${c.kind}', subject '${rendered}') shadows reserved payload key(s) ${renderValue c._reserved}${chain}"
         else if !(hasId (c.subject or null)) then

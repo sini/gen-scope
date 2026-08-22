@@ -16,8 +16,21 @@
 #   └── infra/
 #       └── .env                  REGION=us-east-1
 { genScope }:
+let
+  # A FLAT kind vocabulary: the names this graph's nodes are, with no order between them, so no
+  # kind expands into another. Registering them is what gives the kind set a domain — an
+  # unregistered spelling is refused rather than silently becoming a kind of its own.
+  kinds = genScope.mkKinds (
+    map (name: genScope.mkKind { inherit name; }) [
+      "root"
+      "dir"
+      "env"
+    ]
+  );
+in
 {
   roots = genScope.buildRoots {
+    inherit kinds;
     parentGraph = genScope.overlays [
       (genScope.star "global" [
         "apps"

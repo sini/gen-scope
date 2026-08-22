@@ -40,9 +40,78 @@ let
     let
       children =
         if requireChildrenAttribute || attributes ? "children" then ev.get id "children" else { };
-      derived = if attributes ? "derived-children" then ev.get id "derived-children" else { };
+      derived = if attributes ? ${spawnChannel} then ev.get id spawnChannel else { };
     in
     children // derived;
+
+  # ── THE SPAWN CHANNEL ──
+  # This attribute is the one that grows the NODE SET, and it is where the domain half of
+  # well-definedness is bought or lost. It used to be a caller-written function returning whatever
+  # records it liked, each carrying whatever `type` string its author wrote — so a spawn minted a
+  # fresh kind per level as freely as it minted a fresh id, and an expansion that descended nothing
+  # was indistinguishable from one that did.
+  #
+  # THEORY. Söderberg §7 (printed 320) states the conservative termination technique as "ordering
+  # the nonterminals (the node types), so that each new NTA has a lower order than its host", and in
+  # Vogt's formalism an expansion produces a symbol the GRAMMAR declares: the produced symbol is
+  # never a runtime choice. Both put the expansion on the node TYPE, which is why the declaration
+  # lives on the kind record and not here, and why what arrives here is already known to descend —
+  # `mkKind` refuses a `spawns` key outside its own `below` set, and a registered `below` edge
+  # strictly decreases the rank `graph.coneRank` publishes.
+  #
+  # WHAT REMAINS FOR THIS BINDING is to make the produced kind the DECLARATION'S rather than the
+  # body's: the builder is written under the key naming what it produces, and the kind is stamped
+  # from that key. A builder that writes its own `type` is refused by name, because that field is
+  # the firing-time choice the mandate removes — the only way one could still be attempted.
+  #
+  # ⇒ A NON-DESCENDING OR UNDECLARED SPAWN IS INEXPRESSIBLE rather than detected. Nothing here
+  # compares two ranks; the comparison happened at registration and cannot be reached from a
+  # grammar. What this does is a lookup and a stamp.
+  spawnChannel = "derived-children";
+
+  spawnFrom =
+    kinds: ev: id:
+    let
+      hostKind = (ev.node id).type or null;
+      # A node of NO kind spawns nothing, and that is the honest reading rather than a hole: an
+      # expansion descends a rank, and a node outside the kind vocabulary has no rank to descend
+      # from. A node carrying a kind the registry does not know is refused by name — `buildRoots`
+      # already refuses that at the door, so what this arm covers is a scope record assembled by
+      # hand, which is the one route that skips the door.
+      spawns =
+        if hostKind == null then
+          { }
+        else if kinds.kinds ? ${hostKind} then
+          kinds.kinds.${hostKind}.spawns
+        else
+          throw "gen-scope: node '${id}' carries kind '${toString hostKind}', which the supplied registry does not carry. A node's kind is a name in a registered vocabulary — register it with `mkKinds`, or build the scope through `buildRoots`, which refuses an unregistered kind at the door.";
+      stamped =
+        produced:
+        builtins.mapAttrs (
+          childId: record:
+          if record ? type then
+            throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
+          else
+            record // { type = produced; }
+        ) (spawns.${produced} ev id);
+    in
+    prelude.foldl' (acc: produced: acc // stamped produced) { } (builtins.attrNames spawns);
+
+  # The attribute set the evaluators actually run, which is the caller's plus the spawn channel the
+  # registry declares. Writing that channel by hand is refused: it is the one surface on which an
+  # expansion could still be declared outside the kind order, and leaving it open would make the
+  # order a convention rather than a property.
+  effectiveAttributes =
+    entry: kinds: attributes:
+    if attributes ? ${spawnChannel} then
+      throw "gen-scope.${entry}: `attributes` declares `${spawnChannel}` directly. A node expansion is declared on the KIND it expands FROM — `mkKind { spawns = { <produced-kind> = builder; }; }` — so that the produced kind is a registered name below its host's own and the descent is settled before anything fires. Written as a bare attribute the produced kind is whatever the body returns, which is a choice made at firing time and one nothing can check. Move the builder onto its host kind's `spawns`."
+    else if kinds == null then
+      attributes
+    else
+      attributes
+      // {
+        ${spawnChannel} = spawnFrom kinds;
+      };
 
   eval =
     {
@@ -57,14 +126,26 @@ let
       checked = requireScope "eval" scope;
       roots = checked.nodes;
 
+      # WHAT THE CALLER DECLARED versus WHAT RUNS, and the two are different sets because the spawn
+      # channel is the registry's rather than the caller's. Everything below reads `runAttributes`:
+      # the partition, the per-node evaluator, the memo map and `get`'s own membership test all have
+      # to agree about which names exist, and reading the declared set at any one of them would make
+      # a spawned node reachable by one route and unknown by another.
+      #
+      # The registry travels ON the scope, so the vocabulary a node's kind was validated against and
+      # the vocabulary its expansions are declared in are ONE value. Two formals would be two
+      # declarations that agree only while someone keeps them in step, and a disagreement between
+      # them is a node whose kind is registered here and absent there.
+      runAttributes = effectiveAttributes "eval" (checked.kinds or null) attributes;
+
       # The two arms of the binding above, taken once each so the divergence the five collapsed
       # copies carried has exactly two names instead of five inline spellings.
       childRecordsStrict = childRecordsOf {
-        inherit attributes;
+        attributes = runAttributes;
         requireChildrenAttribute = true;
       };
       childRecordsLenient = childRecordsOf {
-        inherit attributes;
+        attributes = runAttributes;
         requireChildrenAttribute = false;
       };
     in
@@ -76,9 +157,9 @@ let
         # nothing for it to intersect with. The attribute set is one set for every node, so the
         # projection is node-independent here; the per-node signature is the interface's,
         # because a substrate whose attribute set varies by node must still answer per node.
-        resolutionalNamesAll = structural.resolutionalNames (builtins.attrNames attributes);
+        resolutionalNamesAll = structural.resolutionalNames (builtins.attrNames runAttributes);
         resolutionalAt = _nodeId: resolutionalNamesAll;
-        structuralNamesAll = builtins.filter structural.structural (builtins.attrNames attributes);
+        structuralNamesAll = builtins.filter structural.structural (builtins.attrNames runAttributes);
 
         # served nodeId = reusable nodeId ∩ resolutional nodeId. A total function, not a check
         # that can fail.
@@ -129,10 +210,10 @@ let
           childNode:
           childNode
           // {
-            _eval = builtins.mapAttrs (attrName: fn: evalAttr childNode.id attrName fn) attributes;
+            _eval = builtins.mapAttrs (attrName: fn: evalAttr childNode.id attrName fn) runAttributes;
           };
         rootEval = prelude.mapAttrs (
-          id: _: builtins.mapAttrs (attrName: fn: evalAttr id attrName fn) attributes
+          id: _: builtins.mapAttrs (attrName: fn: evalAttr id attrName fn) runAttributes
         ) roots;
 
         # Resolve a node by ID.
@@ -191,7 +272,7 @@ let
         get =
           id: attrName:
           builtins.addErrorContext "evaluating '${attrName}' on '${id}'" (
-            if !(attributes ? ${attrName}) then
+            if !(runAttributes ? ${attrName}) then
               throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
             else if rootEval ? ${id} then
               rootEval.${id}.${attrName}
@@ -199,7 +280,7 @@ let
               let
                 n = self.node id;
               in
-              if n ? _eval then n._eval.${attrName} else attributes.${attrName} self id # fallback (shouldn't happen)
+              if n ? _eval then n._eval.${attrName} else runAttributes.${attrName} self id # fallback (shouldn't happen)
           );
 
         # --- Tier 2: Materialization (forces evaluation, memoized) ---
@@ -393,12 +474,18 @@ let
       parseParent ? null,
     }:
     let
-      roots = (requireScope "evalDebug" scope).nodes;
+      checked = requireScope "evalDebug" scope;
+      roots = checked.nodes;
+
+      # The debug evaluator runs the same effective set for the same reason: a spawn the production
+      # evaluator materializes and this one cannot see would make the trace a statement about a
+      # different graph.
+      runAttributes = effectiveAttributes "evalDebug" (checked.kinds or null) attributes;
 
       # The debug evaluator resolves on DEMAND only — it refuses materialization outright — so it
       # takes the demanding arm, which is the arm its inline copy carried.
       childRecordsStrict = childRecordsOf {
-        inherit attributes;
+        attributes = runAttributes;
         requireChildrenAttribute = true;
       };
       mkSelf =
@@ -424,12 +511,12 @@ let
             {
               trace = path;
               value =
-                if !(attributes ? ${attrName}) then
+                if !(runAttributes ? ${attrName}) then
                   throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
                 else if visited ? ${traceEntry} then
                   throw "gen-scope: cycle detected: ${builtins.concatStringsSep " -> " path}"
                 else
-                  attributes.${attrName} (mkSelf (visited // { ${traceEntry} = true; }) path) id;
+                  runAttributes.${attrName} (mkSelf (visited // { ${traceEntry} = true; }) path) id;
             };
         in
         {

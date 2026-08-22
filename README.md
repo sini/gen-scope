@@ -233,20 +233,35 @@ in {
 }
 ```
 
-### `derived-children` — Second-Stage Synthesis
+### `derived-children` — Second-Stage Synthesis, DECLARED ON THE KIND IT EXPANDS FROM
 
-`derived-children` can read attributes of nodes produced by `children` (Vogt 1989 §2.4 NTA stratification):
+`derived-children` is the attribute that grows the node set, and it can read attributes of nodes produced by `children` (Vogt 1989 §2.4 NTA stratification). It is **not written as an attribute**: an expansion is declared on the kind it expands from, and writing the name directly is refused.
 
 ```nix
-attributes = {
-  children = self: id: { ... };
-  derived-children = self: id:
-    let alice = self.get "user:alice@${id}" "resolved-aspects"; in
-    if hasAspect "sudo" alice
-    then { "user:alice-admin@${id}" = { ... }; }
-    else {};
-};
+kinds = mkKinds [
+  (mkKind { name = "admin-user"; })
+  (mkKind {
+    name = "host";
+    below = [ "admin-user" ];                # the ORDER is what licenses the expansion
+    spawns.admin-user = self: id:            # the KEY is the produced kind
+      let alice = self.get "user:alice@${id}" "resolved-aspects"; in
+      if hasAspect "sudo" alice
+      then { "user:alice-admin@${id}" = { parent = id; decls = { ... }; }; }
+      else { };
+  })
+];
+roots = buildRoots { inherit kinds; types."h" = "host"; ... };
 ```
+
+**Why the declaration is not where the builder used to be.** A bare `derived-children` returned records carrying whatever `type` string their author wrote, so a spawn minted a fresh kind per level as freely as it minted a fresh id — an expansion that descended nothing was indistinguishable from one that did, and neither growth was observable from anywhere. Söderberg & Hedin §7 (printed 320) states the conservative termination technique as *"ordering the nonterminals (the node types), so that each new NTA has a lower order than its host"*, and in Vogt's formalism an expansion produces a symbol the **grammar declares** — the produced symbol is never a runtime choice. Both put the expansion on the node type.
+
+So:
+
+- **The produced kind must be `below` the host's**, refused at `mkKind` where the record is built. A non-descending expansion is **inexpressible**, not detected: a registered `below` edge strictly decreases the rank `mkKinds` publishes, so nothing at evaluation time compares two ranks.
+- **The substrate stamps `type`** from the key the builder is declared under. A builder returning a record that carries its own `type` is refused by name — that field is the only way a firing-time kind choice could still be attempted.
+- **A node of no kind spawns nothing**, and that is the honest reading rather than a hole: an expansion descends a rank, and a node outside the kind vocabulary has none.
+
+**What this does NOT close.** `children` grows the node set through the same walk, and a `children` body may still mint a node whose kind it chooses. Such a kind must be **registered** — the spawn channel refuses an unregistered one where it reads it — but it is not required to **descend** its host's. The descent half therefore has a second channel, and whether minting through `children` counts as an expansion is not decided here.
 
 ## API Reference
 
@@ -385,20 +400,25 @@ ctx.trace.<id>.deps            # → [id]   the same list, indexed per node
 
 The *dynamic* read-set (the attributes a node actually `self.get`s) is only recoverable via `evalDebug`'s fresh-`self`-per-`get` — `getTraced` returns that recording as a value — and that construction defeats memoization; there is no pure, memo-preserving way to capture it, so the declared relation is the inspectable contract, and a validator over the dynamic recording is what shows whether it covers the reads.
 
-### `buildNodes`
+### `buildRoots`
 
 ```nix
-buildNodes {
+buildRoots {
   parentGraph ? empty;   # Algebraic graph for P edges (child → parent)
   importGraph ? empty;   # Algebraic graph for I edges
-  edgeGraphs ? {};       # Custom labeled edges: { label → graph }; `P` and `I` are reserved
+  edgeGraphs ? [];       # Custom labeled edges: [ { label; graph; } ]; `P` and `I` are reserved
   decls ? {};            # { nodeId → attrset }
-  types ? {};            # { nodeId → string }
+  types ? {};            # { nodeId → registered kind NAME }
+  kinds ? null;          # the registry from `mkKinds` that `types` names into
   strict ? true;         # true: deepSeq validates parent uniqueness upfront
 }
 ```
 
-Returns minimal root descriptors: `{ id = { id, type, parent, decls }; }`.
+Returns `{ nodes; nodeOrder; kinds; }` — the node descriptors `{ id, type, parent, decls }`, the declared vertex order, and the registry the kinds were validated against. Every evaluator entry takes that **whole record** as `scope`; `buildNodes` is a tombstone that refuses the old name, because a bare node map and this record are near-indistinguishable to a caller and catastrophically different to an enumerating read.
+
+**Node kinds register, and both directions of the absence are refused.** `type` used to be `types.${id} or null` and nothing else: a per-id free-form string with no registry behind it, so any spelling was a kind and the kind set grew as freely as the node set. A well-founded order over kinds cannot live on a set like that — an order needs a domain. So declaring `types` **with no `kinds` registry** is refused by name, and so is a spelling the registry does not carry. A caller declaring no types at all is unaffected and pays nothing: there is no kind to be unregistered, and the order over an empty vocabulary is trivially well founded. What such a caller cannot do is expand, because an expansion descends a rank and a node with no kind has none.
+
+The registry travels **on** the returned record rather than as a second formal at `eval`, so the vocabulary a node's kind was validated against and the vocabulary its expansions are declared in are one value.
 
 **`P` and `I` are reserved labels, and `edgeGraphs` is refused by name if it carries either.** They are this constructor's own names for the containment and import relations, whose edges arrive as `parentGraph` and `importGraph`. The caller's labels merge *last*, so a caller offering `P` or `I` would replace the argument it passed in the same call — and `P` is not an ordinary label in any case: the partial-function guard is stated of it by name (Neron 2015 §2.2) and the label index is built from every label except it. The refusal names the offending label and the argument that owns it. Every other label is the caller's, and the reservation does not depend on whether the corresponding argument was supplied.
 
@@ -835,18 +855,25 @@ resolveClaims {
 
 ```nix
 mkKind {
-  name;              # a string; the registry's key and the claim's `kind`
-  below ? [ ];       # kind NAMES this kind's resolver may emit sub-claims of
-  resolve;           # applied to the resolver view and then to `ctx`; returns a record whose
-                     #   `resources` (a set), `wiring` (a set or a list) and `claims` (a list)
+  name;              # a string; the registry's key, a claim's `kind`, and a node's `type`
+  below ? [ ];       # kind NAMES ranked under this one: what its resolver may emit sub-claims of,
+                     #   and what a node of this kind may expand into
+  resolve ? null;    # OPTIONAL. Applied to the resolver view and then to `ctx`; returns a record
+                     #   whose `resources` (a set), `wiring` (a set or a list) and `claims` (a list)
                      #   are each optional, and which is CLOSED to those three — any other key
                      #   is a named refusal, while `{ }` remains a legitimate empty answer
+  spawns ? { };      # produced-kind → builder. Every key must be in `below`; the substrate stamps
+                     #   `type` from the key, so a builder cannot choose its child's kind
   dedupKey ? null;   # groups claimants; required together with `fold`
   fold ? null;       # merges a group's resource fragments; required together with `dedupKey`
 }
 ```
 
+**This is the substrate's kind registry, and `resolve` marks one vocabulary inside it.** It began as the demand vocabulary with `resolve` total — a kind that could not answer a demand was not a kind — and that made it unusable as the home of the **node** kind order, because a structural node kind has no demand semantics and requiring it to invent one imposes a vocabulary it has no use for. A second registry over the same rank primitive would pay the price this library states twice: two copies of a discipline agree only for as long as someone keeps them in step. So `resolve` became an option. **Demand kinds are the subset that carry it**, and a claim naming a kind without one is refused **by name at the run**, where the caller is and where the kind can be named. The requirement moved to its consumer; it did not disappear.
+
 **`dedupKey` and `fold` are refused apart.** Grouping and merging are only meaningful together, so the pairing is a registration-time error rather than a resolution-time surprise.
+
+**A `spawns` key outside `below` is refused at construction.** That is what makes a non-descending node expansion inexpressible rather than detectable — see [`derived-children`](#derived-children--second-stage-synthesis-declared-on-the-kind-it-expands-from).
 
 **The depth measure and the acyclicity verdict are one read, and the read is not this library's.** Both come out of [gen-graph](https://github.com/sini/gen-graph)'s cone-rank surface, over the relation the registry already describes. Nothing here re-implements the recurrence, and the reason is a cost fact rather than a preference: a plain per-node recursion over `below` never consults the map it is building, so a node reachable by several paths is re-expanded once per path and the walk is exponential on a shared producer. A cyclic `below` relation has no producers-first rank and the surface refuses it BY NAME rather than answering, so acyclicity is not a guard bolted onto the registry — it is what asking for the measure already costs. The ranked record is forced as the registry is built, which is what makes a cyclic set refuse where it is DEFINED and not where some later reader happens to touch a field.
 

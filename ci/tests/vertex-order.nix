@@ -5,6 +5,10 @@
 # cannot fail, and the one place that agreement is the POINT carries its own control below.
 { lib, genScope, ... }:
 let
+  # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
+  # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+
   # Declared z, y, b, a — against a codepoint a, b, root, y, z.
   declared = [
     "z"
@@ -238,6 +242,7 @@ in
             d1 = { };
             a = { };
           };
+          kinds = flatKinds [ "x" ];
           types = {
             t2 = "x";
             t1 = "x";

@@ -1,7 +1,16 @@
 { lib, genScope, ... }:
 let
+  # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
+  # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+
   # Multi-level: env → host → user
   roots = genScope.buildRoots {
+    kinds = flatKinds [
+      "env"
+      "host"
+      "user"
+    ];
     parentGraph = genScope.overlays [
       (genScope.edge "host1" "env")
       (genScope.edge "user1" "host1")
@@ -45,10 +54,43 @@ let
     parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
   };
 
-  # Derived children: proxy nodes synthesized conditionally
+  # ── DERIVED CHILDREN: THE EXPANSION IS DECLARED ON THE KIND IT EXPANDS FROM ──
+  # `cluster` expands into `proxy` and says so at registration, where `proxy` must already be one
+  # of its `below` names — so the descent is settled before the grammar runs and the builder cannot
+  # produce anything else. The builder is written under the key naming what it produces and the
+  # substrate stamps `type` from that key: nothing in the body chooses a kind.
+  proxyKinds = genScope.mkKinds [
+    (genScope.mkKind { name = "proxy"; })
+    (genScope.mkKind { name = "service"; })
+    (genScope.mkKind {
+      name = "cluster";
+      below = [ "proxy" ];
+      spawns = {
+        proxy =
+          self: id:
+          let
+            node = self.node id;
+          in
+          if node.decls.proxy or false then
+            {
+              "${id}-proxy" = {
+                id = "${id}-proxy";
+                parent = id;
+                decls = {
+                  upstream = id;
+                };
+              };
+            }
+          else
+            { };
+      };
+    })
+  ];
+
   proxyRoots = genScope.buildRoots {
     parentGraph = genScope.edge "svc" "cluster";
     importGraph = genScope.empty;
+    kinds = proxyKinds;
     decls = {
       cluster = {
         proxy = true;
@@ -68,24 +110,6 @@ let
     attributes = {
       children = self: id: lib.filterAttrs (_: n: n.parent == id) proxyRoots.nodes;
       imports = self: id: [ ];
-      derived-children =
-        self: id:
-        let
-          node = self.node id;
-        in
-        if node.decls.proxy or false then
-          {
-            "${id}-proxy" = {
-              id = "${id}-proxy";
-              type = "proxy";
-              parent = id;
-              decls = {
-                upstream = id;
-              };
-            };
-          }
-        else
-          { };
       port = self: id: (self.node id).decls.port or null;
     };
     parseParent =
@@ -168,5 +192,120 @@ in
         "svc"
       ];
     };
+
+    # ── THE TWO PATH CLASSES, BOTH ASSERTED ──
+    # gen-scope is a demand-driven evaluator, so asking for ONE spawned node by id resolves through
+    # `resolveNode` and never touches the materialization walk. A suite carrying only the
+    # enumeration cell above would say nothing about the route the evaluator actually uses most, and
+    # the two cells would agree with a substrate that handed out unstamped records on demand.
+    test-the-spawned-kind-is-stamped-on-the-demand-path = {
+      expr = (proxyResult.node "cluster-proxy").type;
+      expected = "proxy";
+    };
+    test-the-spawned-kind-is-stamped-on-the-enumeration-path = {
+      expr = proxyResult.allNodes."cluster-proxy".type;
+      expected = "proxy";
+    };
+
+    # ── THE SPAWN CHANNEL CANNOT BE WRITTEN BY HAND ──
+    # It is the one surface on which an expansion could still be declared outside the kind order, so
+    # leaving it open would make the order a convention. WHICH refusal fires is asserted by text in
+    # `../tests-error.nix`.
+    test-a-hand-written-spawn-attribute-is-refused = {
+      expr =
+        !(builtins.tryEval (
+          (genScope.eval {
+            scope = proxyRoots;
+            attributes = {
+              children = _self: _id: { };
+              imports = _self: _id: [ ];
+              derived-children = _self: _id: { };
+            };
+          }).get
+            "cluster"
+            "children"
+        )).success;
+      expected = true;
+    };
+
+    # ── AND A BUILDER CANNOT CHOOSE ITS CHILD'S KIND ──
+    # The kind is the key the builder is declared under. `type` on a returned record is the only way
+    # a firing-time choice could still be attempted, and it is refused by name rather than
+    # overwritten — silently stamping over it would leave the author believing the field was read.
+    test-a-builder-writing-its-own-type-is-refused =
+      let
+        kinds = genScope.mkKinds [
+          (genScope.mkKind { name = "low"; })
+          (genScope.mkKind {
+            name = "high";
+            below = [ "low" ];
+            spawns.low = _self: id: {
+              "${id}-c" = {
+                id = "${id}-c";
+                parent = id;
+                type = "low";
+                decls = { };
+              };
+            };
+          })
+        ];
+        scope = genScope.buildRoots {
+          inherit kinds;
+          parentGraph = genScope.vertex "h";
+          types.h = "high";
+        };
+      in
+      {
+        expr =
+          !(builtins.tryEval (
+            builtins.deepSeq
+              (genScope.eval {
+                inherit scope;
+                attributes = {
+                  children = _self: _id: { };
+                  imports = _self: _id: [ ];
+                };
+              }).allNodes
+              null
+          )).success;
+        expected = true;
+      };
+
+    # THE CONTROL FOR BOTH REFUSALS ABOVE: the same shape with the `type` dropped materializes, and
+    # the stamp puts the declared kind on it. Without this the two cells are equally consistent with
+    # an evaluator that refuses every spawn it is given.
+    test-control-the-same-spawn-without-a-written-type-materializes =
+      let
+        kinds = genScope.mkKinds [
+          (genScope.mkKind { name = "low"; })
+          (genScope.mkKind {
+            name = "high";
+            below = [ "low" ];
+            spawns.low = _self: id: {
+              "${id}-c" = {
+                id = "${id}-c";
+                parent = id;
+                decls = { };
+              };
+            };
+          })
+        ];
+        scope = genScope.buildRoots {
+          inherit kinds;
+          parentGraph = genScope.vertex "h";
+          types.h = "high";
+        };
+        ev = genScope.eval {
+          inherit scope;
+          attributes = {
+            children = _self: _id: { };
+            imports = _self: _id: [ ];
+          };
+        };
+      in
+      {
+        expr = (ev.node "h-c").type;
+        expected = "low";
+      };
   };
 }

@@ -28,9 +28,46 @@ let
       labels = [ "owns" ];
     };
   };
+  # ── THE SPAWN CHANNEL IS THE REGISTRY'S, SO THE PLANE'S TWO PROGRAMS DIFFER IN THEIR REGISTRIES ──
+  # `derived-children` cannot be written as an attribute any more: the expansion is declared on the
+  # kind it expands FROM, so the cold program and the poisoned prior each register a `t` that spawns
+  # `d` and disagree about what the builder returns. That is the same distinguishable-value shape
+  # every other row of this matrix uses, moved to where the declaration now lives — and the row it
+  # arms is unchanged, because what the row asserts is that the EVALUATOR recomputes the channel
+  # rather than serving it from the prior.
+  planeKinds =
+    spawn:
+    genScope.mkKinds [
+      (genScope.mkKind { name = "d"; })
+      (genScope.mkKind {
+        name = "t";
+        below = [ "d" ];
+        spawns.d = spawn;
+      })
+    ];
+  noSpawn = _self: _id: { };
+  poisonSpawn =
+    _self: id:
+    if id == "a" then
+      {
+        # No `type`: the substrate stamps `d` from the key this builder is declared under, and a
+        # builder writing its own kind is refused.
+        POISON-D = {
+          id = "POISON-D";
+          parent = "a";
+          decls = { };
+        };
+      }
+    else
+      { };
+
   planeScope = {
     nodes = roots;
     nodeOrder = builtins.attrNames roots;
+    kinds = planeKinds noSpawn;
+  };
+  poisonedScope = planeScope // {
+    kinds = planeKinds poisonSpawn;
   };
 
   # Every family of the partition — the two child attributes, an `edges-` label, the relation the
@@ -39,7 +76,6 @@ let
   # and a partition one instrument holds is one edit from a partition nothing holds.
   attrs = {
     children = self: id: { };
-    derived-children = self: id: { };
     "edges-owns" = self: id: (self.node id).decls.owns or [ ];
     imports = self: id: (self.node id).decls.imports or [ ];
     includes = self: id: (self.node id).decls.includes or [ ];
@@ -57,14 +93,6 @@ let
         }
       else
         { };
-    derived-children =
-      self: id:
-      if id == "a" then
-        {
-          POISON-D = mkNode "POISON-D" "a" { };
-        }
-      else
-        { };
     "edges-owns" = self: id: [ "POISON" ];
     imports = self: id: [ "POISON" ];
     includes = self: id: [ "POISON" ];
@@ -76,7 +104,7 @@ let
     attributes = attrs;
   };
   prior = genScope.eval {
-    scope = planeScope;
+    scope = poisonedScope;
     attributes = priorAttrs;
   };
 

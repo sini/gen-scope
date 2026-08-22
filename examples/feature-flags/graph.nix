@@ -20,6 +20,37 @@
 #   max-items      — global=50, project:alpha=100
 { genScope, lib }:
 let
+  # ── THE KIND VOCABULARY, AND THE ONE EXPANSION IN IT ──
+  # An ORG expands into a ROLLOUT for beta-enabled orgs. The host kind is no longer something the
+  # builder tests for — it is the kind the declaration hangs on, so `node.type == "org"` stops being
+  # a condition inside the body and becomes the reason the body runs at all. What is left in the
+  # body is the genuine data condition.
+  kinds = genScope.mkKinds [
+    (genScope.mkKind { name = "global"; })
+    (genScope.mkKind { name = "project"; })
+    (genScope.mkKind { name = "user"; })
+    (genScope.mkKind { name = "rollout"; })
+    (genScope.mkKind {
+      name = "org";
+      below = [ "rollout" ];
+      spawns.rollout =
+        self: id:
+        if (self.node id).decls.beta-features or false then
+          {
+            "rollout:${id}" = {
+              id = "rollout:${id}";
+              parent = id;
+              decls = {
+                stage = "canary";
+                targetPct = 100;
+              };
+            };
+          }
+        else
+          { };
+    })
+  ];
+
   roots = genScope.buildRoots {
     parentGraph = genScope.overlays [
       (genScope.star "global" [
@@ -65,6 +96,7 @@ let
       "user:carol" = { };
       "user:dave" = { };
     };
+    kinds = kinds;
     types = {
       global = "global";
       "org:acme" = "org";
@@ -87,30 +119,8 @@ let
         children = _self: id: lib.filterAttrs (_: n: n.parent == id) rootNodes;
         imports = _self: _id: [ ];
       };
-      # Derived children: rollout tracking for beta-enabled orgs
-      derivedAttrs = {
-        derived-children =
-          self: id:
-          let
-            node = self.node id;
-          in
-          if node.type == "org" && (node.decls.beta-features or false) then
-            {
-              "rollout:${id}" = {
-                id = "rollout:${id}";
-                parent = id;
-                decls = {
-                  stage = "canary";
-                  targetPct = 100;
-                };
-                type = "rollout";
-              };
-            }
-          else
-            { };
-      };
     in
-    baseAttrs // derivedAttrs // userAttrs;
+    baseAttrs // userAttrs;
 in
 {
   inherit roots mkAttributes;

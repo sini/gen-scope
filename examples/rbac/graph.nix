@@ -20,6 +20,18 @@
 #   +-- project-y/ (low sensitivity)
 #       +-- doc-3
 { genScope, lib }:
+let
+  # A FLAT kind vocabulary: the names this graph's nodes are, with no order between them, so no
+  # kind expands into another. Registering them is what gives the kind set a domain — an
+  # unregistered spelling is refused rather than silently becoming a kind of its own.
+  kinds = genScope.mkKinds (
+    map (name: genScope.mkKind { inherit name; }) [
+      "role"
+      "user"
+      "resource"
+    ]
+  );
+in
 {
   roots = genScope.buildRoots {
     # Resource hierarchy (parent edges)
@@ -114,6 +126,7 @@
         title = "Roadmap";
       };
     };
+    kinds = kinds;
     types = {
       viewer = "role";
       editor = "role";

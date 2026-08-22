@@ -1,7 +1,15 @@
 { lib, genScope, ... }:
 let
+  # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
+  # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+
   # Minimal graph: two roots, a and b
   roots = genScope.buildRoots {
+    kinds = flatKinds [
+      "host"
+      "user"
+    ];
     parentGraph = genScope.edge "child" "parent";
     importGraph = genScope.empty;
     decls = {
@@ -42,6 +50,7 @@ let
 
   # Single root, no children
   singleRoots = genScope.buildRoots {
+    kinds = flatKinds [ "host" ];
     parentGraph = genScope.vertex "solo";
     importGraph = genScope.empty;
     decls = {

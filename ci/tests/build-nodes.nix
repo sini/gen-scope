@@ -1,7 +1,16 @@
 { lib, genScope, ... }:
 let
+  # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
+  # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+
   # Basic build
   basic = genScope.buildRoots {
+    kinds = flatKinds [
+      "host"
+      "user"
+      "library"
+    ];
     parentGraph = genScope.edge "child" "parent";
     importGraph = genScope.edge "child" "lib";
     decls = {
@@ -24,6 +33,7 @@ let
 
   # No edges (vertices declared via parentGraph)
   noEdges = genScope.buildRoots {
+    kinds = flatKinds [ "x" ];
     parentGraph = genScope.vertices [
       "a"
       "b"
@@ -227,5 +237,58 @@ in
         expr = custom.nodes.a.decls.__edges.D;
         expected = [ "b" ];
       };
+
+    # ── NODE KINDS REGISTER, AND BOTH DIRECTIONS OF THE ABSENCE ARE REFUSED ──
+    # `type` was `types.${id} or null` with nothing behind it: any spelling was a kind and the kind
+    # set grew as freely as the node set. The rule that replaces it is total in BOTH directions, and
+    # that is the half a defaulted version would get wrong — declaring kinds with no registry is
+    # just as much an undeclared vocabulary as declaring one the registry does not carry. WHICH of
+    # the two refused is a claim about the message and is asserted in `../tests-error.nix`.
+    test-types-without-a-registry-are-refused = {
+      expr = builtins.tryEval (
+        builtins.deepSeq
+          (genScope.buildRoots {
+            parentGraph = genScope.vertex "n";
+            types.n = "host";
+          }).nodes
+          null
+      );
+      expected = {
+        success = false;
+        value = false;
+      };
+    };
+    test-a-type-the-registry-does-not-carry-is-refused = {
+      expr = builtins.tryEval (
+        builtins.deepSeq
+          (genScope.buildRoots {
+            parentGraph = genScope.vertex "n";
+            kinds = flatKinds [ "host" ];
+            types.n = "gost";
+          }).nodes
+          null
+      );
+      expected = {
+        success = false;
+        value = false;
+      };
+    };
+    # THE TWO CONTROLS, and they are what stop the pair above from passing against a constructor
+    # that refuses every `types` it is handed: a registered spelling builds, and a caller declaring
+    # NO kinds at all is untouched — there is no kind to be unregistered, and the order over an
+    # empty vocabulary is trivially well founded.
+    test-control-a-registered-type-builds = {
+      expr =
+        (genScope.buildRoots {
+          parentGraph = genScope.vertex "n";
+          kinds = flatKinds [ "host" ];
+          types.n = "host";
+        }).nodes.n.type;
+      expected = "host";
+    };
+    test-control-declaring-no-types-needs-no-registry = {
+      expr = (genScope.buildRoots { parentGraph = genScope.vertex "n"; }).nodes.n.type;
+      expected = null;
+    };
   };
 }

@@ -47,6 +47,31 @@ let
 
   nonEmpty = g: g.vertices != [ ] || g.edges != [ ];
 
+  # ── NODE KINDS REGISTER ──
+  # `type` used to be `types.${id} or null` and nothing else: a per-id, free-form string with no
+  # registry behind it and no validation in front of it. Any spelling was a kind, an id absent from
+  # `types` was a node of no kind at all, and a node minted during evaluation carried whatever its
+  # producer wrote — so the kind set grew as freely as the node set, and neither growth was
+  # observable from anywhere. A well-founded order over kinds cannot live on a set like that: an
+  # order needs a domain, and this one had none.
+  #
+  # So a caller that declares kinds declares them AGAINST A REGISTRY, and an unregistered name is
+  # refused BY NAME. The formal is sentinel-guarded rather than required, and the rule underneath it
+  # is total in both directions: declaring a `type` with no registry is refused just as an
+  # unregistered spelling is. It is the absent-declaration case that the free-form version got
+  # wrong, and defaulting it to "anything goes" is the same defect wearing a default.
+  #
+  # A caller declaring NO types is unaffected and pays nothing — there is no kind to be unregistered,
+  # and the kind order over an empty vocabulary is trivially well founded. What such a caller cannot
+  # do is spawn, because an expansion descends a rank and a node with no kind has none.
+  unregisteredKinds =
+    kinds: types:
+    let
+      declared = prelude.filter (t: t != null) (builtins.attrValues types);
+      registered = builtins.attrNames (kinds.kinds or { });
+    in
+    prelude.unique (prelude.filter (t: !(builtins.elem t registered)) declared);
+
   buildRoots =
     {
       parentGraph ? graph.empty,
@@ -54,12 +79,16 @@ let
       edgeGraphs ? [ ],
       decls ? { },
       types ? { },
+      kinds ? null,
       strict ? true,
     }:
     let
       reservedOffenders = prelude.filter (
         r: prelude.any (c: c.label == r.label) edgeGraphs
       ) reservedLabels;
+
+      declaredTypes = prelude.filter (t: t != null) (builtins.attrValues types);
+      unregistered = if kinds == null then [ ] else unregisteredKinds kinds types;
 
       # A label names a DIMENSION, not a node, so two contributions claiming one label is a genuine
       # collision with no order semantics to resolve it. The list form makes that expressible where
@@ -73,7 +102,11 @@ let
         prelude.filter (l: builtins.length byLabel.${l} > 1) (builtins.attrNames byLabel);
 
       contributions =
-        if reservedOffenders != [ ] then
+        if kinds == null && declaredTypes != [ ] then
+          throw "gen-scope.buildRoots: `types` declares kind(s) ${builtins.toJSON (prelude.unique declaredTypes)} but no `kinds` registry was supplied. A kind is a name in a registered vocabulary, not a free string: without the registry there is no order for the kinds to be ranked in, so nothing can say that an expansion descends and every spelling is its own kind. Register them with `mkKinds` and pass the result as `kinds`, or declare no types."
+        else if unregistered != [ ] then
+          throw "gen-scope.buildRoots: `types` declares kind(s) ${builtins.toJSON unregistered} that the supplied `kinds` registry does not carry. An unregistered kind has no rank, so nothing can decide whether an expansion into or out of it descends — register the kind, or use one that is registered."
+        else if reservedOffenders != [ ] then
           throw "gen-scope.buildRoots: `edgeGraphs` carries reserved label(s) ${
             builtins.toJSON (map (r: r.label) reservedOffenders)
           }: ${
@@ -165,8 +198,14 @@ let
     in
     builtins.seq parentIndex {
       inherit nodeOrder;
+      # The registry travels WITH the node set, because the evaluator needs the same vocabulary
+      # this constructor validated against and a second formal there would be a second declaration.
+      # `null` is the no-kinds case and reads as one: an evaluator handed it runs no spawn channel,
+      # which is exactly right for a scope whose nodes have no kinds to descend from.
+      inherit kinds;
       nodes = prelude.genAttrs nodeOrder (id: {
         inherit id;
+        # Checked above against the registry, so this is a lookup rather than an admission.
         type = types.${id} or null;
         parent = parentIndex.${id} or null;
         decls = (decls.${id} or { }) // {
