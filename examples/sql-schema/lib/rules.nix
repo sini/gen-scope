@@ -68,8 +68,33 @@ let
   # feedback widens context until the server's data row reaches a fixpoint, and the NixOS
   # actions are read off the CONVERGED context by one post-convergence dispatch — a function
   # of the fixpoint, not the iteration path (recompute-at-fixpoint = confluence).
+  # ── THE CONVERGENCE CARRIER ──
+  # THEORY. The ascent is well defined only over a carrier with a bottom, an order and a bounded
+  # height (Söderberg & Hedin 2013 §4.1). This is a QUOTIENT carrier: the order is read off the
+  # server's DATA ROW and says nothing about the accessor context's other four fields, which the
+  # loop never touches. What it declares is that a pass EXTENDS the row — every key already present
+  # survives with the same value — so an enrich action that overwrote a key with a DIFFERENT value
+  # is not an ascent and is refused by name. The projection equality this replaces could not see
+  # that: it compared one row to the next and called them converged whenever they happened to
+  # agree, with no claim that agreement was a fixed point of anything.
+  #
+  # The height is the number of keys the rule set can contribute. That is a fact about the RULES,
+  # not about this function, so it arrives as the caller's declaration: each strict ascent adds at
+  # least one key, so the declared key list bounds the chain by its own length.
+  mkConvergenceCarrier = serverName: serverData: enrichKeys: {
+    bottom = mkServerContext serverData;
+    leq =
+      a: b:
+      let
+        rowA = a.data serverName;
+        rowB = b.data serverName;
+      in
+      builtins.all (k: (rowB ? ${k}) && rowB.${k} == rowA.${k}) (builtins.attrNames rowA);
+    height = builtins.length enrichKeys;
+  };
+
   buildHostConfig =
-    fleet: rules: serverName:
+    fleet: rules: enrichKeys: serverName:
     let
       server = fleet.server.${serverName};
       serverData = server // {
@@ -92,16 +117,10 @@ let
         groupOrder = groupOrderList;
       };
       converged =
-        (genScope.circular
-          {
-            init = mkServerContext serverData;
-            eq = a: b: (a.data serverName) == (b.data serverName);
-          }
-          (
-            _self: _id: ctx:
-            (dispatch (cfg // { context = ctx; })).context
-          )
-        )
+        (genScope.circular { carrier = mkConvergenceCarrier serverName serverData enrichKeys; } (
+          _self: _id: ctx:
+          (dispatch (cfg // { context = ctx; })).context
+        ))
           { }
           serverName;
       nixosActions = (dispatch (cfg // { context = converged; })).actions.config or [ ];
@@ -110,7 +129,8 @@ let
 
   # Build all host configs: { serverName = mergedConfig; }
   buildAllHostConfigs =
-    fleet: rules: lib.mapAttrs (name: _: buildHostConfig fleet rules name) (fleet.server or { });
+    fleet: rules: enrichKeys:
+    lib.mapAttrs (name: _: buildHostConfig fleet rules enrichKeys name) (fleet.server or { });
 in
 {
   inherit

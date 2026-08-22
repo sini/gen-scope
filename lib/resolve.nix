@@ -35,6 +35,10 @@ let
   # than re-spelled — the prefix below and the prefix the partition tests are one value.
   structural = import ./structural.nix { inherit prelude; };
 
+  # The applicability approximation the kind registry also decides its `resolve` with, taken from
+  # the one binding rather than re-approximated here.
+  callable = import ./callable.nix;
+
   # Shadow: merge two declaration sets, inner shadows outer (Neron §5 Def. 1).
   shadow = inner: outer: inner // prelude.filterAttrs (k: _: !(inner ? ${k})) outer;
 
@@ -364,28 +368,118 @@ let
     f: self: id: param:
     f self id param;
 
-  # Circular attribute: iterate from initial value until fixed-point (Sloane 2010 §2.2).
+  # ── THE CIRCULAR ATTRIBUTE, AND THE CARRIER ITS SOUNDNESS RESTS ON ──
+  #
+  # THEORY. A circular attribute's value is the least fixed point of its equation, and that is
+  # well defined only under conditions on the value domain: "Circular attributes are well-defined
+  # as the least fixed-point solution to their equations, IF their semantic functions are monotonic
+  # and yield values over a lattice of bounded height" (Söderberg & Hedin 2013 §2.4, printed 305),
+  # restated at §4.1, printed 311, with the third term explicit — "a lattice of bounded height, that
+  # the semantic function is monotonic, and that a BOTTOM VALUE is provided as the starting point of
+  # the fixed-point iteration". Those three terms are exactly what `carrier` declares. The condition
+  # is Söderberg's; the SIGNATURE this combinator used to carry, a bare `init` with no stated
+  # relation to any order, came from Kiama's API table (Sloane 2010, printed 211), which states no
+  # soundness condition and never claimed to.
+  #
+  # NONE OF THE THREE IS DERIVABLE FROM `f`. The step arrives as an opaque caller-supplied function
+  # over an open vocabulary, so nothing here can recover an order the caller did not state.
+  # Declaring them is the only honest option, and the declaration is REQUIRED and TOTAL: absence is
+  # refused BY NAME rather than defaulted, because a default here would be this library choosing a
+  # lattice for a value space it has never seen. The formal carries a `null` sentinel whose only
+  # job is to let the arm underneath name that refusal — written as a formal with no default, an
+  # omitted `carrier` is refused by NIX at application, a termination this library never names and
+  # `tryEval` does not contain.
+  #
+  # THE ITERATION BOUND IS DERIVED, AND IT IS A THEOREM RATHER THAN A CAP. On a lattice of declared
+  # height `h`, at most `h` steps can strictly ascend from the bottom and one further step observes
+  # that none did, so `h + 1` step evaluations exhaust the ascent by Noetherian induction on ℕ.
+  # That is a fact about the fixpoint, not a budget on what a caller may express — the distinction
+  # `least-model.nix` draws for its `|atoms| + 1` and `cascade.nix` for its `maxDepth + 1`. This is
+  # the third site and the last one that lacked it; what it replaces was a chosen `maxIter`, which
+  # is the other thing.
+  #
+  # EQUALITY IS ANTISYMMETRY AT THE DECLARED ORDER, so there is no separate equality knob to supply
+  # and no way to supply one. A convergence test unrelated to the ascent test is what lets a
+  # fixed-point combinator return a value its own step does not fix: the answer is taken the moment
+  # that test fires, whether or not the iteration reached a fixed point, and the free `eq` argument
+  # this replaces made precisely that expressible.
+  #
+  # A QUOTIENT CARRIER IS ADMISSIBLE, and it is how a coarsened convergence keeps its technique.
+  # `leq` may order a QUOTIENT of the value space rather than the raw values — key-set inclusion, a
+  # projection's order — because the theorem's hypothesis constrains the DECLARED carrier and never
+  # requires it be the raw value's equality. What converges is then the CLASS: raw values may still
+  # churn inside one, and a consumer needing finer stability asks for a finer carrier. The price a
+  # quotient pays is stating its height, which is where an unbounded coarsening is refused by name
+  # instead of running to a cap. This is the reason both directions of `leq` are applied rather than
+  # one `leq` and a structural `==`: a raw equality would never fire on a converged class, and the
+  # two applications per iteration are what the quotient costs.
+  #
+  # WHAT IS NOT CHECKED, stated because a soundness gate that overclaims is worse than none: that
+  # `leq` IS a partial order, and that `height` is large enough for the carrier it names. Both
+  # quantify over the whole value set and no terminating predicate decides either. There is partial
+  # cover in one direction only — a `leq` that holds too often admits a non-ascent, which then fails
+  # to converge inside the declared height, so the height refusal is the ascent check's own control;
+  # a `leq` that holds too rarely refuses a sound program, and nothing looks for those.
+
+  # The reason a carrier is not one, or null. Total on any value: each arm establishes what the next
+  # one reads. The reason NEVER RENDERS the carrier — an order is a function, and rendering a
+  # function is itself an abort no caller can catch, which would answer an uncatchable termination
+  # with another one while claiming to diagnose it.
+  carrierDefect =
+    c:
+    if c == null then
+      "declares no `carrier` — a circular attribute is well defined only over one, and its three terms are a bottom, an order and a bounded height (Söderberg & Hedin 2013 §4.1)"
+    else if !builtins.isAttrs c then
+      "declares a `carrier` that is a ${builtins.typeOf c} rather than a { bottom, leq, height } record"
+    else if !(c ? bottom) then
+      "declares a `carrier` with no `bottom` (the starting point of the fixed-point iteration)"
+    else if !(c ? leq) then
+      "declares a `carrier` with no `leq` (the order the step is required to ascend)"
+    else if !(callable c.leq) then
+      "declares a `carrier` whose `leq` cannot be applied (it is a ${builtins.typeOf c.leq})"
+    else if !(c ? height) then
+      "declares a `carrier` with no `height` (the lattice's bounded height, from which the iteration bound is derived)"
+    else if !builtins.isInt c.height then
+      "declares a `carrier` whose `height` is a ${builtins.typeOf c.height} rather than an integer"
+    else if c.height < 0 then
+      "declares a `carrier` whose `height` is ${toString c.height}, and a lattice has no negative height"
+    else
+      null;
+
   circular =
     {
-      init,
-      eq ? a: b: a == b,
-      maxIter ? 100,
+      carrier ? null,
     }:
     f: self: id:
     let
+      defect = carrierDefect carrier;
+      inherit (carrier) leq height;
       go =
         n: prev:
         let
           next = f self id prev;
+          ascends = leq prev next;
         in
-        if n >= maxIter then
-          throw "gen-scope: circular attribute on '${id}' did not converge after ${toString maxIter} iterations"
-        else if eq prev next then
+        # The fixed point is the step whose result the declared order cannot tell from its input.
+        if ascends && leq next prev then
           next
+        else if !ascends then
+          throw "gen-scope: circular attribute on '${id}' took a step its declared order does not ascend, at iteration ${toString n} — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed"
+        else if n >= height then
+          # The step count is the one this run ACTUALLY took, never `height + 1` restated. A message
+          # that recites the declaration says the same thing whatever the loop did, so it cannot
+          # witness the bound it claims to derive — measured under a deliberately loosened bound, the
+          # text was byte-identical while the loop ran fifty steps longer. Written this way the two
+          # numbers agree only when the derivation holds, so a cell asserting the text asserts it.
+          throw
+            "gen-scope: circular attribute on '${id}' is still ascending after ${toString (n + 1)} steps, so the declared height of ${toString height} is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget"
         else
           go (n + 1) next;
     in
-    go 0 init;
+    if defect != null then
+      throw "gen-scope: circular attribute on '${id}' ${defect}"
+    else
+      go 0 carrier.bottom;
 
   # Collection attribute combinator (Sloane 2010 §7).
   # Traversal uses COMPUTED attributes (self.get), not structural fields.

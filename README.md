@@ -70,7 +70,7 @@ gen-scope evaluates **attributes** over a tree of **nodes**. You supply two thin
 
 Evaluation is **demand-driven**: an attribute computes only when `get` reads it, and each result is memoized on a co-located `_eval` cache carried by its own node (see [Core Insight](#core-insight)). Two access tiers matter for cost — **Tier 1** navigation (`node`, `get`) is O(1)/O(depth); **Tier 2** materialization (`allNodes`) forces the full tree at O(n).
 
-The tree is not fixed. The `children` and `derived-children` attributes **synthesize new nodes on demand** (the HOAG half — [HOAG: Dynamic Tree Expansion](#hoag-dynamic-tree-expansion)), and cross-node references travel along **import edges** resolved with scope-graph queries (`query`/`queryAll`/`queryReverse`, the RAG half). The convergence of mutually-recursive attributes is driven by `circular` (fixed-point iteration, Sloane 2010 §2.2) — the loop primitive consumers such as [gen-resolve](https://github.com/sini/gen-resolve) build their fold on top of.
+The tree is not fixed. The `children` and `derived-children` attributes **synthesize new nodes on demand** (the HOAG half — [HOAG: Dynamic Tree Expansion](#hoag-dynamic-tree-expansion)), and cross-node references travel along **import edges** resolved with scope-graph queries (`query`/`queryAll`/`queryReverse`, the RAG half). The convergence of mutually-recursive attributes is driven by `circular` (least-fixed-point iteration over a declared carrier, Söderberg & Hedin 2013 §4.1) — the loop primitive consumers such as [gen-resolve](https://github.com/sini/gen-resolve) build their fold on top of.
 
 ## Gen Ecosystem
 
@@ -478,10 +478,22 @@ Set-discipline sibling of `inheritAll`: a node's value = its own contribution �
 #### `circular`
 
 ```nix
-circular { init; eq ? a: b: a == b; maxIter ? 100; } f self id
+circular { carrier = { bottom; leq; height; }; } f self id
 ```
 
-Fixed-point iteration (Sloane 2010 §2.2). `f` receives `self`, `id`, and previous value.
+Least-fixed-point iteration over a **declared carrier**. `f` receives `self`, `id`, and the previous value.
+
+The three terms are Söderberg & Hedin 2013 §4.1's, and they are what makes the result well defined: *"a lattice of bounded height, that the semantic function is monotonic, and that a bottom value is provided as the starting point of the fixed-point iteration"* (printed 311; the condition itself is stated at §2.4, printed 305). None of the three is derivable from an opaque `f`, so **the declaration is required and total** — an absent or malformed carrier is refused **by name**, never defaulted.
+
+What the declaration buys:
+
+- **The iteration bound is DERIVED, and it is a theorem rather than a cap.** At most `height` steps can strictly ascend from `bottom`, and one further step observes that none did, so `h + 1` step evaluations exhaust the ascent. That is the same form `leastModel` derives as `|atoms| + 1` and `cascade` as `maxDepth + 1`. The `maxIter` this replaces was a number chosen to bound cost, which is the other thing.
+- **Equality is antisymmetry at the declared order**, so there is no `eq` knob to supply and no way to supply one. A convergence test unrelated to the ascent test is what lets a fixed-point combinator return a value its own step does not fix.
+- **Three refusals, one per fact.** No declared carrier; a step the declared order does not ascend, refused at the first such step and naming monotonicity; and an ascent still running past the declared height, which refutes the *declaration*. The last two used to share one message, which named the iteration count and neither cause.
+
+**Quotient carriers are admissible.** `leq` may order a quotient of the value space — key-set inclusion, a projection's order — because the theorem constrains the *declared* carrier and never requires it be the raw value's equality. What converges is then the class: raw values may still churn inside one, and a consumer needing finer stability declares a finer carrier. The price a quotient pays is stating its height, which is where an unbounded coarsening is refused by name instead of running to a cap.
+
+**What is not checked, and cannot be:** that `leq` is a partial order, and that `height` is large enough for the carrier it names. Both quantify over the whole value set. A `leq` that holds too often admits a non-ascent, which then fails to converge inside the declared height — so the height refusal is the ascent check's own control — while a `leq` that holds too rarely refuses a sound program, and nothing looks for those.
 
 #### `collectionAttr`
 
@@ -1021,7 +1033,8 @@ A stack overflow is an abort rather than a throw, so `tryEval` does not contain 
 | Neron et al. (2015) "A theory of name resolution" | **Implements** | Scope graph construction, resolution calculus (`query`/`queryAll`), D < I < P specificity ordering (Fig. 2), well-formedness of paths (§2.4), seen-imports cycle prevention (rule X), shadowing (§5 Def. 1) |
 | van Antwerpen et al. (2018) "Scopes as types" | **Partial** | Custom edge labels via `edgeGraphs`/`followEdge`, structural subtyping (`subtypeOf`), coarse-grained visibility (boolean shadowing flags); Statix-style constraint patterns (partial: custom labeled edges via `edgeGraphs`, single `decls` relation per node) |
 | Mokhov (2017) "Algebraic graphs with class" | **Implements** | All four graph construction primitives (`empty`/`vertex`/`overlay`/`connect`) and derived constructors (`star`/`path`/`clique`/`tree`/etc.) from §2.1-§5.1 |
-| Sloane et al. (2010) "Kiama: AG embedding" | **Implements** | `CachedAttribute` pattern realized as `_eval` co-located cache; `paramAttr` (§3); `circular` fixed-point attributes (§2.2). ★ **Collection attributes are struck from this row and are claimed from Sloane nowhere else:** §7 is *Conclusion and Future Work*, and its whole content on them is Kiama's own future work — "we are adding collection attributes [4,15]" — so there is no mechanism there to implement. The mechanism paper it defers to, [15] Magnusson, Ekman & Hedin, *Extending attribute grammars with collection attributes*, is **not held by this project**, so nothing here may claim it either. What the library built is a gather, and `collectionAttr` says so on its own terms |
+| Söderberg & Hedin (2013) "Circular higher-order reference attribute grammars" | **Implements** | `circular`'s declared carrier — the bounded-height lattice, the monotone semantic function and the bottom value, §4.1 printed 311, the condition stated at §2.4 printed 305. The three terms are what the combinator requires and what its derived `h + 1` bound rests on |
+| Sloane et al. (2010) "Kiama: AG embedding" | **Implements** | `CachedAttribute` pattern realized as `_eval` co-located cache; `paramAttr` (§3). ★ **`circular` is no longer claimed from this paper's §2.2 and the correction is recorded rather than quietly applied:** Sloane 2010 states no soundness condition anywhere, and its §2.2 is *Variable liveness* — an example, not a condition. What gen-scope really inherited from it was the SIGNATURE, `circular (init : U) (f : T => U)` from the API table printed 211, bare `init` included; the condition was never in the cited section to inherit, and the citation travelled with the shape. The combinator's own row above now carries the conditions at the primary that states them, and the signature moved with them. ★ **Collection attributes are struck from this row and are claimed from Sloane nowhere else:** §7 is *Conclusion and Future Work*, and its whole content on them is Kiama's own future work — "we are adding collection attributes [4,15]" — so there is no mechanism there to implement. The mechanism paper it defers to, [15] Magnusson, Ekman & Hedin, *Extending attribute grammars with collection attributes*, is **not held by this project**, so nothing here may claim it either. What the library built is a gather, and `collectionAttr` says so on its own terms |
 | Radul & Sussman (2009) "Art of the propagator" | **Informed by** | Monotonic convergence concept for `circular` attribute iteration; cells accepting information from multiple sources as design influence on scope graph merging |
 | Van Wyk et al. (2010) "Silver: extensible AG" | **Informed by** | Forwarding concept (productions defining default attribute values via translation); collection attributes with fold operators as design influence on `collectionAttr` |
 | Mokhov et al. (2018) "Build systems a la carte" | **Informed by** | Demand-driven evaluation as suspending scheduler (§4.1); Nix's lazy evaluation recognized as the scheduling mechanism — we do not build a scheduler, Nix is the scheduler |

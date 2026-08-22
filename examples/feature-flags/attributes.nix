@@ -41,18 +41,31 @@
       )
     );
 
-  # Circular attribute: rollout convergence (Sloane 2010 §2.2).
-  rolloutPct = genScope.circular { init = 0; } (
-    self: id: prev:
-    let
-      target = 100;
-    in
-    if prev >= target then
-      target
-    else
-      let
-        next = prev + 25;
-      in
-      if next > target then target else next
-  );
+  # Circular attribute: rollout convergence (Söderberg & Hedin 2013 §4.1). The carrier is the
+  # percentages 0…100 under the arithmetic order — bottom 0, and a height of four, because four is
+  # how many strict ascents 25-at-a-time takes to reach the target. The iteration bound is read off
+  # that declaration rather than chosen, so a step that changed its stride would refute the declared
+  # height by name instead of quietly taking longer.
+  rolloutPct =
+    genScope.circular
+      {
+        carrier = {
+          bottom = 0;
+          leq = a: b: a <= b;
+          height = 4;
+        };
+      }
+      (
+        self: id: prev:
+        let
+          target = 100;
+        in
+        if prev >= target then
+          target
+        else
+          let
+            next = prev + 25;
+          in
+          if next > target then target else next
+      );
 }

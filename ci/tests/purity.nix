@@ -161,10 +161,12 @@ let
   ];
 
   # The live counterpart to `forbidden`: the name this library reaches for where a tether would
-  # reach for nixpkgs. Every gen-scope source but two carries it, and both exclusions are files
-  # that depend on nothing and so name no prelude — `lib/graph.nix` is the algebraic graph core
-  # (Mokhov, 2017), written in builtins alone, and `lib/traversal-names.nix` is the traversal
-  # vocabulary, a bare attribute set of names taking no argument at all. Those exclusions are what
+  # reach for nixpkgs. Every gen-scope source but three carries it, and all three exclusions are
+  # files that depend on nothing and so name no prelude — `lib/graph.nix` is the algebraic graph
+  # core (Mokhov, 2017), written in builtins alone, `lib/traversal-names.nix` is the traversal
+  # vocabulary, a bare attribute set of names taking no argument at all, and `lib/callable.nix` is
+  # the applicability approximation, one builtins-only predicate that two modules read rather than
+  # approximate twice. Those exclusions are what
   # give the assertion its teeth: the expected list is a PROPER subset of the manifest, so a read
   # returning one fixed text for every file lands outside it either way — without the token the
   # list collapses toward empty, with it the list swells to every source.
@@ -195,6 +197,7 @@ in
     expected = [
       "lib/acceptance.nix"
       "lib/build-nodes.nix"
+      "lib/callable.nix"
       "lib/cascade.nix"
       "lib/default.nix"
       "lib/engine.nix"

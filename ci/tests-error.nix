@@ -48,6 +48,7 @@
 }:
 let
   inherit (genScope)
+    circular
     mkKind
     mkKinds
     mkClaim
@@ -1319,6 +1320,204 @@ in
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope: interpretation entry 0 has no 'atom' field — an interpretation is a list of { atom, verdict }";
+        };
+      };
+    };
+
+  # ── THE CIRCULAR CARRIER'S REFUSALS, EACH BY ITS OWN TEXT ──
+  # A caller must act differently on each of these and `tryEval` cannot tell them apart: an absent
+  # carrier is a declaration missing, a malformed one is a declaration wrong, an antitone step is
+  # the STEP disagreeing with the declared order, and an exhausted height is the DECLARATION
+  # disagreeing with the step. The last two are the pair the combinator this replaces reported with
+  # one message — "did not converge after N iterations" — which named the iteration count for both
+  # and the cause for neither. Splitting them is the reason the cells are worth their text.
+  #
+  # The combinator is applied DIRECTLY rather than through an evaluator: `eval`'s `get` wraps every
+  # attribute in `addErrorContext`, and these cells are about what the carrier says, not about
+  # where a reader was standing when it said it. `null` is a legitimate `self` here because no arm
+  # reached below applies it.
+  config.flake.testsError.circular-refusals =
+    let
+      run = carrierArg: f: circular carrierArg f null "n";
+      ascending = {
+        bottom = 0;
+        leq = a: b: a <= b;
+        height = 3;
+      };
+    in
+    {
+      test-an-absent-carrier-names-the-three-terms = {
+        expr = run { } (
+          _self: _id: prev:
+          prev
+        );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares no `carrier` — a circular attribute is well defined only over one, and its three terms are a bottom, an order and a bounded height (Söderberg & Hedin 2013 §4.1)";
+        };
+      };
+
+      test-a-carrier-that-is-not-a-record-names-what-arrived = {
+        expr = run { carrier = 5; } (
+          _self: _id: prev:
+          prev
+        );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares a `carrier` that is a int rather than a { bottom, leq, height } record";
+        };
+      };
+
+      # `bottom` is checked for PRESENCE and not against null, because null is a value some lattices
+      # really do carry as their least element — the sentinel discipline that lets an absent
+      # `carrier` be named cannot be spent twice on the same record.
+      test-a-carrier-with-no-bottom-is-refused = {
+        expr =
+          run
+            {
+              carrier = {
+                leq = a: b: a <= b;
+                height = 1;
+              };
+            }
+            (
+              _self: _id: prev:
+              prev
+            );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares a `carrier` with no `bottom` (the starting point of the fixed-point iteration)";
+        };
+      };
+
+      test-a-carrier-with-no-leq-is-refused = {
+        expr =
+          run
+            {
+              carrier = {
+                bottom = 0;
+                height = 1;
+              };
+            }
+            (
+              _self: _id: prev:
+              prev
+            );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares a `carrier` with no `leq` (the order the step is required to ascend)";
+        };
+      };
+
+      # The arm that keeps an unapplicable order from ending the evaluation in the evaluator's
+      # words. Without it `leq prev next` is "attempt to call something which is not a function" —
+      # uncatchable, and carrying no name of ours.
+      test-a-leq-that-cannot-be-applied-is-refused = {
+        expr =
+          run
+            {
+              carrier = {
+                bottom = 0;
+                leq = "not an order";
+                height = 1;
+              };
+            }
+            (
+              _self: _id: prev:
+              prev
+            );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares a `carrier` whose `leq` cannot be applied (it is a string)";
+        };
+      };
+
+      test-a-carrier-with-no-height-is-refused = {
+        expr =
+          run
+            {
+              carrier = {
+                bottom = 0;
+                leq = a: b: a <= b;
+              };
+            }
+            (
+              _self: _id: prev:
+              prev
+            );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares a `carrier` with no `height` (the lattice's bounded height, from which the iteration bound is derived)";
+        };
+      };
+
+      test-a-height-that-is-not-an-integer-is-refused = {
+        expr =
+          run
+            {
+              carrier = {
+                bottom = 0;
+                leq = a: b: a <= b;
+                height = "tall";
+              };
+            }
+            (
+              _self: _id: prev:
+              prev
+            );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares a `carrier` whose `height` is a string rather than an integer";
+        };
+      };
+
+      test-a-negative-height-is-refused = {
+        expr =
+          run
+            {
+              carrier = {
+                bottom = 0;
+                leq = a: b: a <= b;
+                height = -1;
+              };
+            }
+            (
+              _self: _id: prev:
+              prev
+            );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares a `carrier` whose `height` is -1, and a lattice has no negative height";
+        };
+      };
+
+      # ── THE TWO THE OLD MESSAGE CONFLATED ──
+      # An ANTITONE step, refused at the first iteration that does not ascend rather than after the
+      # cap's worth of recomputations. Under an equality convergence test this failure was invisible
+      # by construction: consecutive states of an oscillation are never equal, so the run could only
+      # ever end by exhausting its budget.
+      test-an-antitone-step-names-monotonicity-and-the-iteration = {
+        expr = run { carrier = ascending; } (
+          _self: _id: prev:
+          if prev == 0 then 1 else 0
+        );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 1 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+        };
+      };
+
+      # A perfectly MONOTONE step on a carrier whose declared height is too small for it. Same
+      # boolean as the cell above, different fact: the step is sound and the declaration is wrong,
+      # and the message refutes the declaration by name.
+      test-an-exhausted-height-refutes-the-declaration = {
+        expr = run { carrier = ascending; } (
+          _self: _id: prev:
+          prev + 1
+        );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 4 steps, so the declared height of 3 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
         };
       };
     };

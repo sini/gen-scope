@@ -202,12 +202,19 @@ let
     })
   ];
 
+  # The keys the structural group can contribute to a server's data row, declared beside the rules
+  # that contribute them. This list IS the convergence carrier's height: a pass that ascends adds
+  # at least one of these, so its length bounds the iteration as a theorem about the rule set
+  # rather than as a chosen cap. A rule enriching a key absent from it overruns the declared height
+  # and is refused by name, which is what keeps the list in step with the rules above.
+  demoEnrichKeys = [ "has-nginx" ];
+
   # Host configs: base modules (from nixos.nix) + gen-dispatch rule output
   hostConfigs = lib.mapAttrs (
     name: _:
     let
       base = nixosLib.evalServerModule rawFleet name;
-      ruleConfig = rulesLib.buildHostConfig evaluated.fleet demoRules name;
+      ruleConfig = rulesLib.buildHostConfig evaluated.fleet demoRules demoEnrichKeys name;
     in
     lib.recursiveUpdate base ruleConfig
   ) (rawFleet.server or { });

@@ -698,19 +698,33 @@
             attributes = {
               children = _self: _id: { };
               imports = _self: _id: [ ];
-              accuracy = genScope.circular { init = 0; } (
-                self: id: prev:
-                let
-                  target = (self.node id).decls.target-accuracy;
-                in
-                if prev >= target then
-                  prev
-                else
-                  let
-                    next = prev + ((target - prev) * 30 / 100 + 1);
-                  in
-                  if next > target then target else next
-              );
+              # The carrier is the integers 0…95 under the arithmetic order: bottom 0, and a height
+              # of 95, which is the length of that chain and so an upper bound on the strict
+              # ascents any step over it can take. The declaration is about the LATTICE, not about
+              # this step — this one converges in eleven — so a step rewritten to approach the
+              # target more slowly stays sound against the same declaration.
+              accuracy =
+                genScope.circular
+                  {
+                    carrier = {
+                      bottom = 0;
+                      leq = a: b: a <= b;
+                      height = 95;
+                    };
+                  }
+                  (
+                    self: id: prev:
+                    let
+                      target = (self.node id).decls.target-accuracy;
+                    in
+                    if prev >= target then
+                      prev
+                    else
+                      let
+                        next = prev + ((target - prev) * 30 / 100 + 1);
+                      in
+                      if next > target then target else next
+                  );
             };
           };
         in
