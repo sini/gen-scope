@@ -87,6 +87,51 @@ let
   # grammar. What this does is a lookup and a stamp.
   spawnChannel = "derived-children";
 
+  # ── THE SELECTION CHANNEL ──
+  # `children` names WHICH of the scope's nodes stand below this one. It does not make them. A
+  # record arriving here under a key the scope does not carry is a node minted while the attribute
+  # is read, and it is refused by name.
+  #
+  # WHY THE OTHER HALF OF THIS ATTRIBUTE CLOSED. The channel used to do two things under one name:
+  # select among nodes already registered, and synthesize fresh ones. The second is GROWTH, and
+  # growth is what the kind order governs — a minted child's kind was whatever its body wrote, so
+  # nothing could say it descended its host's. Requiring descent HERE was the arm that could not be
+  # taken: this binding receives records, not provenance, so a check placed on it would bind static
+  # containment too, and a directory containing a directory is same-kind by nature and would become
+  # inexpressible. So the two things are separated instead of ordered. Growth leaves through the
+  # spawn channel, where the produced kind is the DECLARATION's and descent is settled at
+  # registration; what stays here selects, and selection moves nothing through the kind order
+  # because it introduces no node to rank. ⇒ The descent guarantee covers ALL growth by
+  # construction, with no second check and no cost to same-kind containment.
+  #
+  # THE MEMBERSHIP AUTHORITY IS THE SCOPE'S OWN NODE SET, and it is the only one that is
+  # well-founded. `buildRoots` closes that set before evaluation begins — every vertex of every
+  # contribution becomes a node — so the selection shape `filterAttrs (_: n: n.parent == id) roots`
+  # yields a SUBSET of it by construction and passes without an author doing anything. The spawned
+  # set is deliberately NOT an authority: it is what the walk through this binding produces, so
+  # asking whether an id is in it is asking the question that is being answered, and a spawned node
+  # is reachable through the spawn that produces it, which is what keeps growth single-pathed.
+  #
+  # ⇒ IT IS A KEY TEST, AND THAT IS SUFFICIENT RATHER THAN CHEAP. Keys are eager and values lazy, so
+  # this forces no child record and the strictness decided at `childRecordsOf` is untouched. What
+  # makes it sufficient is that for a REGISTERED id the child record is already inert: `resolveNode`
+  # and `get` both answer from `roots` before this value is consulted, so a body returning a
+  # different record under a registered key changes no read. The only thing a body can contribute
+  # that the scope does not already hold is a new KEY — which is exactly growth, and exactly what
+  # this refuses.
+  selectionChannel = "children";
+
+  selectAmong =
+    nodes: declared: ev: id:
+    let
+      records = declared ev id;
+      unregistered = builtins.filter (childId: !(nodes ? ${childId})) (builtins.attrNames records);
+    in
+    if unregistered == [ ] then
+      records
+    else
+      throw "gen-scope: node '${id}' declares child(ren) ${builtins.toJSON unregistered} that the scope does not carry. `children` SELECTS among the nodes the scope already registered — it is not a growth channel, and a record under an unregistered key is a node minted while the attribute is read, whose kind nothing can have checked descends its host's. Growth is the spawn channel's: declare it on the host's kind as `mkKind { spawns = { <produced-kind> = builder; }; }` with the produced kind named in that kind's `below`. To keep a node here, register it in the scope and select it.";
+
   spawnFrom =
     kinds: ev: id:
     let
@@ -115,18 +160,34 @@ let
     in
     prelude.foldl' (acc: produced: acc // stamped produced) { } (builtins.attrNames spawns);
 
-  # The attribute set the evaluators actually run, which is the caller's plus the spawn channel the
-  # registry declares. Writing that channel by hand is refused: it is the one surface on which an
-  # expansion could still be declared outside the kind order, and leaving it open would make the
-  # order a convention rather than a property.
+  # The attribute set the evaluators actually run: the caller's, with the selection channel guarded
+  # and the spawn channel the registry declares added. Writing the spawn channel by hand is refused —
+  # it is the one surface on which an expansion could still be declared outside the kind order, and
+  # leaving it open would make the order a convention rather than a property.
+  #
+  # BOTH CHANNELS ARE FIXED UP HERE, at the ONE place the two evaluators build the set they run, so
+  # neither guard is a rule a call site remembers. The selection guard is unconditional on the
+  # registry: a scope with no kinds still may not grow through `children`, because an unregistered
+  # key is a node the scope does not carry whether or not any kind was declared.
   effectiveAttributes =
-    entry: kinds: attributes:
+    entry: checked: attributes:
+    let
+      kinds = checked.kinds or null;
+      selected =
+        if attributes ? ${selectionChannel} then
+          attributes
+          // {
+            ${selectionChannel} = selectAmong checked.nodes attributes.${selectionChannel};
+          }
+        else
+          attributes;
+    in
     if attributes ? ${spawnChannel} then
       throw "gen-scope.${entry}: `attributes` declares `${spawnChannel}` directly. A node expansion is declared on the KIND it expands FROM — `mkKind { spawns = { <produced-kind> = builder; }; }` — so that the produced kind is a registered name below its host's own and the descent is settled before anything fires. Written as a bare attribute the produced kind is whatever the body returns, which is a choice made at firing time and one nothing can check. Move the builder onto its host kind's `spawns`."
     else if kinds == null then
-      attributes
+      selected
     else
-      attributes
+      selected
       // {
         ${spawnChannel} = spawnFrom kinds;
       };
@@ -154,7 +215,7 @@ let
       # the vocabulary its expansions are declared in are ONE value. Two formals would be two
       # declarations that agree only while someone keeps them in step, and a disagreement between
       # them is a node whose kind is registered here and absent there.
-      runAttributes = effectiveAttributes "eval" (checked.kinds or null) attributes;
+      runAttributes = effectiveAttributes "eval" checked attributes;
 
       # The two arms of the binding above, taken once each so the divergence the five collapsed
       # copies carried has exactly two names instead of five inline spellings.
@@ -498,7 +559,7 @@ let
       # The debug evaluator runs the same effective set for the same reason: a spawn the production
       # evaluator materializes and this one cannot see would make the trace a statement about a
       # different graph.
-      runAttributes = effectiveAttributes "evalDebug" (checked.kinds or null) attributes;
+      runAttributes = effectiveAttributes "evalDebug" checked attributes;
 
       # The debug evaluator resolves on DEMAND only — it refuses materialization outright — so it
       # takes the demanding arm, which is the arm its inline copy carried.

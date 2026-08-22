@@ -271,13 +271,17 @@ in
     };
 
     # ── (b) ACYCLICITY IS REACHABLE, WITH A LIVE ACYCLIC CONTROL ──
-    # The refusal's MESSAGE belongs to the graph library now, and the sweep that reads its text is
+    # A general cycle's MESSAGE belongs to the graph library, and the sweep that reads its text is
     # an exit-code run; what these cells pin is that the refusal is reached at all, and that the
     # instrument is not one that refuses everything.
     test-two-cycle-refused = {
       expr = didThrow (mkKinds twoCycle);
       expected = true;
     };
+    # The SELF-LOOP is refused by this library, ahead of the acyclicity verdict, so that the
+    # message names DESCENT rather than a cycle — the concept a caller writing `spawns.k` on kind
+    # `k` actually violated. The refusal is unchanged, which is what this cell still pins; the
+    # text is pinned in `ci/tests-error.nix`.
     test-self-loop-refused = {
       expr = didThrow (mkKinds selfLoop);
       expected = true;

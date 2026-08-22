@@ -315,7 +315,8 @@ An instance supplies a run order (`schedule`), a way to place an item in it (`st
 | Re-evaluate incrementally against a prior evaluation | `evalWarm { …; prior; decision = mkDecision { isClean; reusable; }; }` |
 | Read a node's declared dependencies | `ctx.accessor.dependencies id`, or `ctx.trace.<id>.deps` for the same list indexed — both off `foldEquations`' seal. There is no projection between them and the relation |
 | Fold a validated schedule's equations into one sealed context | `foldEquations { scope; parseParent; schedule; declaredDependencies; }` — the schedule comes from its own library; this entry forces it and never builds one |
-| Synthesize nodes on demand | declare a `children` attribute; for a second stage that reads first-stage attrs, declare `spawns.<produced-kind>` on the HOST KIND — `derived-children` cannot be written as an attribute and is refused by name if it is |
+| Grow the node set on demand | declare `spawns.<produced-kind>` on the HOST KIND — the ONE growth channel. `derived-children` cannot be written as an attribute and is refused by name if it is, and `children` cannot grow either: it SELECTS among the scope's own nodes, and a record under a key the scope does not carry is refused naming the host and the key |
+| Say which of the scope's nodes stand below one | declare a `children` attribute — `_self: id: lib.filterAttrs (_: n: n.parent == id) scope.nodes`. Selection introduces no node to rank, so same-kind containment (a `dir` inside a `dir`) needs no order and is not an expansion |
 | Inherit a value down the parent chain | `inherit'` (first hit) / `inheritAll` (all, ordered) / `inheritSet` (all, deduped) |
 | Resolve a name across imports + parents | `query { dataFilter; }`; all reachable results `queryAll`; who imports me `queryReverse` |
 | Detect a name clash | `ambiguous` |
@@ -391,7 +392,7 @@ Claimed in `README.md` under "Theoretical Foundations", which labels each source
 
 **Implements**
 
-- **Vogt et al. (1989), *Higher-order attribute grammars*** — dynamic node synthesis via `children` / `derived-children` as non-terminal attributes (§2.4); `derived-children` extends this with second-stage stratification.
+- **Vogt et al. (1989), *Higher-order attribute grammars*** — dynamic node synthesis via `derived-children` as a non-terminal attribute (§2.4), declared on the kind it expands from so the produced symbol is the grammar's and never a runtime choice. `children` is not an NTA: it selects among nodes the scope already carries.
 
 - **Hedin (2000), *Reference attributed grammars*** — import edges as reference attributes; cross-node attribute access through computed scope references.
 

@@ -138,8 +138,9 @@ let
   # NESTED reverse fixture — the one on which the materialization walk and the codepoint
   # key order DISAGREE, which is what makes the order tests below discriminating.
   #
-  # `r` and `t` are the roots; `mid` is `r`'s child and `alpha` is `mid`'s child, so neither
-  # is a root and the walk reaches them only by descending. The walk therefore emits
+  # `r` and `t` LEAD THE DECLARED ORDER; `mid` is `r`'s child and `alpha` is `mid`'s child, so the
+  # walk reaches both by descending before their own entries in that order come up, and
+  # first-occurrence dedup keeps the descent positions. The walk therefore emits
   # [ r mid alpha t ] while `attrNames allNodes` is [ alpha mid r t ]. Both `mid` and
   # `alpha` import `t`, and they are the pair whose relative order the two readings flip.
   # `revRoots` above cannot serve here either, but no longer for the reason it once could not:
@@ -184,17 +185,20 @@ let
   };
 
   nestedResult = genScope.eval {
-    scope =
-      let
-        nodes = { inherit (nestedNodes) r t; };
-      in
-      {
-        inherit nodes;
-        # A hand-built scope states its own order at the site.
-        nodeOrder = builtins.attrNames nodes;
-      };
+    scope = {
+      nodes = nestedNodes;
+      # A hand-built scope states its own order at the site. `children` selects among the nodes
+      # the scope carries, so the contained pair is registered here too and what distinguishes
+      # them from `r` and `t` is their POSITION in the declared order, not their absence from it.
+      nodeOrder = [
+        "r"
+        "t"
+        "mid"
+        "alpha"
+      ];
+    };
     attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) nestedNodes;
+      children = _self: id: lib.filterAttrs (_: n: n.parent == id) nestedNodes;
       imports = self: id: (self.node id).decls.imports or [ ];
       needed-by = queryReverse {
         dataFilter = node: node.decls.tag or null;

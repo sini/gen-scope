@@ -187,55 +187,45 @@ in
     test-subtreeOf = {
       expr =
         let
+          # Every node this walk reaches is REGISTERED in the scope, and `children` selects among
+          # them by containment. The cell enumerates a two-level tree; MAKING the second level
+          # would be growth, and growth leaves through the spawn channel.
           roots = {
             "env:prod" = {
               id = "env:prod";
               type = "env";
               parent = null;
-              decls = {
-                hosts = [ "web" ];
-              };
+              decls = { };
             };
             "env:dev" = {
               id = "env:dev";
               type = "env";
               parent = null;
-              decls = {
-                hosts = [ "dev-1" ];
-              };
+              decls = { };
+            };
+            "host:web@env:prod" = {
+              id = "host:web@env:prod";
+              type = "host";
+              parent = "env:prod";
+              decls = { };
+            };
+            "host:dev-1@env:dev" = {
+              id = "host:dev-1@env:dev";
+              type = "host";
+              parent = "env:dev";
+              decls = { };
             };
           };
           attributes = {
-            children =
-              self: id:
-              let
-                n = self.node id;
-              in
-              lib.listToAttrs (
-                map (h: {
-                  name = "host:${h}@${id}";
-                  value = {
-                    id = "host:${h}@${id}";
-                    type = "host";
-                    parent = id;
-                    decls = { };
-                  };
-                }) (n.decls.hosts or [ ])
-              );
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots;
           };
-          parseParent =
-            id:
-            let
-              parts = lib.splitString "@" id;
-            in
-            if builtins.length parts > 1 then lib.concatStringsSep "@" (lib.drop 1 parts) else null;
           result = genScope.eval {
             scope = {
               nodes = roots;
               # A hand-built scope states its own order at the site.
               nodeOrder = builtins.attrNames roots;
             };
-            inherit attributes parseParent;
+            inherit attributes;
           };
         in
         builtins.sort builtins.lessThan (builtins.attrNames (result.subtreeOf "env:prod"));
@@ -253,45 +243,31 @@ in
               id = "env:prod";
               type = "env";
               parent = null;
-              decls = {
-                hosts = [
-                  "web"
-                  "db"
-                ];
-              };
+              decls = { };
+            };
+            "host:web@env:prod" = {
+              id = "host:web@env:prod";
+              type = "host";
+              parent = "env:prod";
+              decls = { };
+            };
+            "host:db@env:prod" = {
+              id = "host:db@env:prod";
+              type = "host";
+              parent = "env:prod";
+              decls = { };
             };
           };
           attributes = {
-            children =
-              self: id:
-              let
-                n = self.node id;
-              in
-              lib.listToAttrs (
-                map (h: {
-                  name = "host:${h}@${id}";
-                  value = {
-                    id = "host:${h}@${id}";
-                    type = "host";
-                    parent = id;
-                    decls = { };
-                  };
-                }) (n.decls.hosts or [ ])
-              );
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots;
           };
-          parseParent =
-            id:
-            let
-              parts = lib.splitString "@" id;
-            in
-            if builtins.length parts > 1 then lib.concatStringsSep "@" (lib.drop 1 parts) else null;
           result = genScope.eval {
             scope = {
               nodes = roots;
               # A hand-built scope states its own order at the site.
               nodeOrder = builtins.attrNames roots;
             };
-            inherit attributes parseParent;
+            inherit attributes;
           };
         in
         builtins.sort builtins.lessThan (builtins.attrNames (result.nodesOfType "host"));
@@ -310,7 +286,6 @@ in
               type = "env";
               parent = null;
               decls = {
-                hosts = [ "web" ];
                 secure = true;
               };
             };
@@ -319,44 +294,36 @@ in
               type = "env";
               parent = null;
               decls = {
-                hosts = [ "dev-1" ];
+                secure = false;
+              };
+            };
+            "host:web@env:prod" = {
+              id = "host:web@env:prod";
+              type = "host";
+              parent = "env:prod";
+              decls = {
+                secure = true;
+              };
+            };
+            "host:dev-1@env:dev" = {
+              id = "host:dev-1@env:dev";
+              type = "host";
+              parent = "env:dev";
+              decls = {
                 secure = false;
               };
             };
           };
           attributes = {
-            children =
-              self: id:
-              let
-                n = self.node id;
-              in
-              lib.listToAttrs (
-                map (h: {
-                  name = "host:${h}@${id}";
-                  value = {
-                    id = "host:${h}@${id}";
-                    type = "host";
-                    parent = id;
-                    decls = {
-                      secure = n.decls.secure or false;
-                    };
-                  };
-                }) (n.decls.hosts or [ ])
-              );
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots;
           };
-          parseParent =
-            id:
-            let
-              parts = lib.splitString "@" id;
-            in
-            if builtins.length parts > 1 then lib.concatStringsSep "@" (lib.drop 1 parts) else null;
           result = genScope.eval {
             scope = {
               nodes = roots;
               # A hand-built scope states its own order at the site.
               nodeOrder = builtins.attrNames roots;
             };
-            inherit attributes parseParent;
+            inherit attributes;
           };
         in
         builtins.sort builtins.lessThan (
@@ -391,6 +358,26 @@ in
           # A hand-built scope has no constructor to carry an order, so it states one here.
           nodeOrder = builtins.attrNames nodes;
         };
+      # The same hand-built scope with CONTAINMENT declared. `children` selects among the nodes the
+      # scope carries, so a cell that needs more than one level registers every level here and
+      # selects, rather than making the lower ones as it reads.
+      mkTree =
+        parents:
+        let
+          nodes = lib.mapAttrs (id: p: {
+            inherit id;
+            type = "t";
+            parent = p;
+            decls = { };
+          }) parents;
+        in
+        {
+          inherit nodes;
+          nodeOrder = builtins.attrNames nodes;
+        };
+      selectChildren =
+        nodes: _self: id:
+        lib.filterAttrs (_: n: n.parent == id) nodes;
       poison = {
         children = self: id: { };
         boom = self: id: throw "boom-${id}";
@@ -510,21 +497,13 @@ in
       test-children-always-recomputed = {
         expr =
           let
-            pRoots = mkRoots { p = { }; };
+            pRoots = mkTree {
+              p = null;
+              c = "p";
+              elsewhere = null;
+            };
             attrs = {
-              children =
-                self: id:
-                if id == "p" then
-                  {
-                    c = {
-                      id = "c";
-                      type = "t";
-                      parent = "p";
-                      decls = { };
-                    };
-                  }
-                else
-                  { };
+              children = selectChildren pRoots.nodes;
               label = self: id: "fresh-${id}";
             };
             w = genScope.evalWarm {
@@ -533,19 +512,11 @@ in
               prior = priorOf pRoots (
                 attrs
                 // {
-                  children =
-                    self: id:
-                    if id == "p" then
-                      {
-                        BOGUS = {
-                          id = "BOGUS";
-                          type = "t";
-                          parent = "p";
-                          decls = { };
-                        };
-                      }
-                    else
-                      { };
+                  # The stale answer is a DIFFERENT SELECTION over the same registered nodes —
+                  # well-typed, plausible, and wrong — which is what makes the always-recompute
+                  # branch observable. A selection cannot be made wrong by inventing a node any
+                  # more, so it is made wrong by naming the one that is not contained here.
+                  children = _self: id: if id == "p" then { inherit (pRoots.nodes) elsewhere; } else { };
                 }
               );
               decision = allClean [ "children" ];
@@ -613,34 +584,41 @@ in
           seeded = [ "old" ];
         };
       };
-      # a dirty GRANDCHILD is reachable through freshly-recomputed children
+      # a dirty DESCENDANT is reachable through freshly-recomputed structure
+      #
+      # THE CELL RUNS ON THE SPAWN CHANNEL BECAUSE THAT IS WHERE THE QUESTION STILL HAS CONTENT.
+      # `children` selects among registered nodes, and every registered node answers from the root
+      # evaluation, so a node reachable ONLY by descending a structural attribute is necessarily a
+      # spawned one. Asking this over a selection would be asking whether a root is a root.
       test-dirty-grandchild-reachable = {
         expr =
           let
-            pRoots = mkRoots { p = { }; };
+            spawnKinds = genScope.mkKinds [
+              (genScope.mkKind { name = "leaf"; })
+              (genScope.mkKind {
+                name = "host";
+                below = [ "leaf" ];
+                spawns.leaf = _self: id: {
+                  g = {
+                    id = "g";
+                    parent = id;
+                    decls = { };
+                  };
+                };
+              })
+            ];
+            pRoots = {
+              nodes.p = {
+                id = "p";
+                type = "host";
+                parent = null;
+                decls = { };
+              };
+              nodeOrder = [ "p" ];
+              kinds = spawnKinds;
+            };
             attrs = {
-              children =
-                self: id:
-                if id == "p" then
-                  {
-                    c = {
-                      id = "c";
-                      type = "t";
-                      parent = "p";
-                      decls = { };
-                    };
-                  }
-                else if id == "c" then
-                  {
-                    g = {
-                      id = "g";
-                      type = "t";
-                      parent = "c";
-                      decls = { };
-                    };
-                  }
-                else
-                  { };
+              children = _self: _id: { };
               label = self: id: "fresh-${id}";
             };
             w = genScope.evalWarm {
@@ -648,13 +626,13 @@ in
               attributes = attrs;
               prior = priorOf pRoots (attrs // { label = self: id: "stale-${id}"; });
               decision = genScope.mkDecision {
-                isClean = id: id != "g"; # g dirty, p/c clean
+                isClean = id: id != "g"; # g dirty, p clean
                 reusable = _: [ "label" ];
               };
             };
           in
           w.get "g" "label";
-        expected = "fresh-g"; # g recomputed (dirty) AND reachable (children recomputed, never reused)
+        expected = "fresh-g"; # g recomputed (dirty) AND reachable (structure recomputed, never reused)
       };
       # per-(node,attr) granularity: clean node, attr a reused / attr b recomputed
       test-mixed-warm-cold = {

@@ -70,7 +70,7 @@ gen-scope evaluates **attributes** over a tree of **nodes**. You supply two thin
 
 Evaluation is **demand-driven**: an attribute computes only when `get` reads it, and each result is memoized on a co-located `_eval` cache carried by its own node (see [Core Insight](#core-insight)). Two access tiers matter for cost — **Tier 1** navigation (`node`, `get`) is O(1)/O(depth); **Tier 2** materialization (`allNodes`) forces the full tree at O(n).
 
-The tree is not fixed. The `children` and `derived-children` attributes **synthesize new nodes on demand** (the HOAG half — [HOAG: Dynamic Tree Expansion](#hoag-dynamic-tree-expansion)), and cross-node references travel along **import edges** resolved with scope-graph queries (`query`/`queryAll`/`queryReverse`, the RAG half). The convergence of mutually-recursive attributes is driven by `circular` (least-fixed-point iteration over a declared carrier, Söderberg & Hedin 2013 §4.1) — the loop primitive consumers such as [gen-resolve](https://github.com/sini/gen-resolve) build their fold on top of.
+The tree is not fixed. **`derived-children` grows the node set on demand** — the HOAG half, declared on the kind it expands from ([HOAG: Dynamic Tree Expansion](#hoag-dynamic-tree-expansion)) — while `children` **selects** among the nodes the scope already carries. Cross-node references travel along **import edges** resolved with scope-graph queries (`query`/`queryAll`/`queryReverse`, the RAG half). The convergence of mutually-recursive attributes is driven by `circular` (least-fixed-point iteration over a declared carrier, Söderberg & Hedin 2013 §4.1) — the loop primitive consumers such as [gen-resolve](https://github.com/sini/gen-resolve) build their fold on top of.
 
 ## Gen Ecosystem
 
@@ -124,8 +124,8 @@ Nix attrset VALUES are lazy but KEYS are eager. Function application is never me
 |------|-----------|
 | Nodes | Minimal descriptors: `{ id, type, parent, decls }` |
 | Roots | Entry-point nodes (from `buildNodes` or hand-written) |
-| Children | Synthesized nodes produced by the `children` attribute |
-| Derived Children | Synthesized nodes from `derived-children` (can read sibling attrs) |
+| Children | The nodes the `children` attribute SELECTS from the scope's own node set — a selection, never a mint |
+| Derived Children | Nodes GROWN by `derived-children`, declared as `spawns.<produced-kind>` on the host kind (can read sibling attrs) |
 | Attributes | Computed values on nodes — demand-driven, memoized via `_eval` |
 | Combinators | Attribute constructors: `inherit'`, `inheritAll`, `inheritSet`, `circular`, `paramAttr`, `collectionAttr`, `query` |
 | Tier 1 | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth) |
@@ -155,7 +155,7 @@ let
   result = engine.eval {
     inherit roots;
     attributes = {
-      # Tree stays flat — no children synthesis in this example
+      # Tree stays flat — nothing is contained in anything here
       children = _self: _id: {};
 
       # Inherited: walks parent chain
@@ -175,67 +175,25 @@ in {
 
 ## HOAG: Dynamic Tree Expansion
 
-The `children` attribute synthesizes new nodes on demand. Attribute-dependent — can read other attributes to decide what to create:
+**There is ONE growth channel, and `children` is not it.** `children` SELECTS among the nodes the scope already carries; a record under a key the scope does not carry is refused by name. Everything that grows the node set is declared as `spawns.<produced-kind>` on the kind it expands from, which is what makes the descent guarantee below cover *all* growth by construction rather than one channel of two.
 
 ```nix
-let
-  roots = {
-    "env:prod" = {
-      id = "env:prod"; type = "env"; parent = null;
-      decls = { hosts = [ "web-1" "db-1" ]; isHighSec = true; };
-    };
-  };
+children = _self: id: lib.filterAttrs (_: n: n.parent == id) scope.nodes;
+```
 
-  result = engine.eval {
-    inherit roots;
-    attributes = {
-      is-high-sec = self: id: (self.node id).decls.isHighSec or false;
+That is the whole of the selection shape, and it is what every shipped example writes. It moves nothing through the kind order, because it introduces no node to rank — so **same-kind containment stays expressible**: a directory containing a directory is an ordinary selection, not an expansion that has to descend.
 
-      # Children depend on is-high-sec attribute
-      children = self: id:
-        let n = self.node id; in
-        if n.type == "env" then
-          lib.listToAttrs (map (h: {
-            name = "host:${h}@${id}";
-            value = {
-              id = "host:${h}@${id}"; type = "host"; parent = id;
-              decls = {
-                users = [ "root" ] ++ lib.optional (self.get id "is-high-sec") "auditor";
-              };
-            };
-          }) (n.decls.hosts or []))
-        else if n.type == "host" then
-          lib.listToAttrs (map (u: {
-            name = "user:${u}@${id}";
-            value = { id = "user:${u}@${id}"; type = "user"; parent = id; decls = {}; };
-          }) (n.decls.users or []))
-        else {};
+A body that returns a record the scope does not carry is refused, naming the host, the offending keys, and the remedy:
 
-      # Inherited security propagates through synthesized nodes
-      inherited-sec = self: id:
-        let n = self.node id; in
-        if n.decls ? isHighSec then n.decls.isHighSec
-        else if n.parent != null then self.get n.parent "inherited-sec"
-        else false;
-    };
-    parseParent = id:
-      let parts = lib.splitString "@" id; in
-      if builtins.length parts > 1 then lib.concatStringsSep "@" (lib.drop 1 parts)
-      else null;
-  };
-in {
-  # Auditor user only on prod (attribute-dependent synthesis)
-  prodUsers = builtins.attrNames (result.get "host:web-1@env:prod" "children");
-  # → [ "user:auditor@host:web-1@env:prod" "user:root@host:web-1@env:prod" ]
-
-  auditorSec = result.get "user:auditor@host:web-1@env:prod" "inherited-sec";
-  # → true
-}
+```
+gen-scope: node 'env:prod' declares child(ren) ["host:web-1@env:prod"] that the scope
+does not carry. `children` SELECTS among the nodes the scope already registered — it is
+not a growth channel …
 ```
 
 ### `derived-children` — Second-Stage Synthesis, DECLARED ON THE KIND IT EXPANDS FROM
 
-`derived-children` is the attribute that grows the node set, and it can read attributes of nodes produced by `children` (Vogt 1989 §2.4 NTA stratification). It is **not written as an attribute**: an expansion is declared on the kind it expands from, and writing the name directly is refused.
+`derived-children` is the ONLY attribute that grows the node set, and it can read attributes of the nodes `children` selects (Vogt 1989 §2.4 NTA stratification). It is **not written as an attribute**: an expansion is declared on the kind it expands from, and writing the name directly is refused.
 
 ```nix
 kinds = mkKinds [
@@ -261,7 +219,7 @@ So:
 - **The substrate stamps `type`** from the key the builder is declared under. A builder returning a record that carries its own `type` is refused by name — that field is the only way a firing-time kind choice could still be attempted.
 - **A node of no kind spawns nothing**, and that is the honest reading rather than a hole: an expansion descends a rank, and a node outside the kind vocabulary has none.
 
-**What this does NOT close.** `children` grows the node set through the same walk, and a `children` body may still mint a node whose kind it chooses. Such a kind must be **registered** — the spawn channel refuses an unregistered one where it reads it — but it is not required to **descend** its host's. The descent half therefore has a second channel, and whether minting through `children` counts as an expansion is not decided here.
+**And there is no second channel to close.** `children` used to grow the node set through the same walk, so a body could mint a node whose kind it chose and the descent guarantee held on one channel of two. That half is closed: `children` selects among registered nodes and a record under an unregistered key is refused by name. The two things the attribute used to do are SEPARATED rather than ordered — requiring descent of `children` itself was the arm that could not be taken, because static containment is same-kind by nature (a `dir` contains a `dir`) and a self-loop in `below` is refused at registration, so nested directories would have become inexpressible. Selection introduces no node to rank; growth leaves through the channel where the produced kind is the declaration's. **⇒ The descent guarantee covers all growth, by construction, with no second check.**
 
 ## API Reference
 
@@ -1026,7 +984,7 @@ A stratum's items are selected from everything seen so far — the seed plus wha
 | `self.allNodes` | O(n) | Each node computed once |
 | `self.allNodeIds` | O(n) | Shares `allNodes`' walk — asking for both costs one walk |
 
-**`parseParent` is mandatory at scale.** Without it, node resolution walks from ALL roots per unknown node. For 500 roots x 1500 synthesized nodes = 750,000 root checks. With `parseParent`: 1500 x O(1) = 1500.
+**`parseParent` is mandatory at scale.** Without it, node resolution walks from ALL roots per unknown node — and after the selection channel closed its minting half, an unknown node is a SPAWNED one. For 500 roots x 1500 spawned nodes = 750,000 root checks. With `parseParent`: 1500 x O(1) = 1500.
 
 ## Testing
 
@@ -1054,7 +1012,7 @@ A stack overflow is an abort rather than a throw, so `tryEval` does not contain 
 
 | Paper | Relationship | Used for |
 |-------|-------------|----------|
-| Vogt et al. (1989) "Higher-order attribute grammars" | **Implements** | Dynamic node synthesis via `children`/`derived-children` as non-terminal attributes (§2.4); `derived-children` extends this with second-stage stratification |
+| Vogt et al. (1989) "Higher-order attribute grammars" | **Implements** | Dynamic node synthesis via `derived-children` as a non-terminal attribute (§2.4), declared on the kind it expands from — the one channel that grows the node set, which is what makes the produced symbol the grammar's rather than a runtime choice |
 | Hedin (2000) "Reference attributed grammars" | **Implements** | Import edges as reference attributes; cross-node attribute access via computed scope references |
 | Hedin & Magnusson (2003) "JastAdd" | **Informed by** | Demand-driven evaluation pattern; aspect-oriented attribute extension model |
 | Neron et al. (2015) "A theory of name resolution" | **Implements** | Scope graph construction, resolution calculus (`query`/`queryAll`), D < I < P specificity ordering (Fig. 2), well-formedness of paths (§2.4), seen-imports cycle prevention (rule X), shadowing (§5 Def. 1) |

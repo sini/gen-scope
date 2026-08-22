@@ -132,17 +132,14 @@ let
     };
   };
 
-  # Build attributes with children that include synthesized manifest nodes
+  # `children` SELECTS the packages the workspace contains — nothing here makes a node. The
+  # manifest is GROWN by `spawns.manifest` on the `workspace` kind, where its descent is settled
+  # at registration.
   mkAttributes =
     rootNodes: userAttrs:
     let
       baseAttrs = {
-        children =
-          self: id:
-          let
-            staticChildren = lib.filterAttrs (_: n: n.parent == id) rootNodes;
-          in
-          staticChildren;
+        children = _self: id: lib.filterAttrs (_: n: n.parent == id) rootNodes;
         imports = _self: id: (_self.node id).decls.__edges.I or [ ];
         "edges-D" = _self: id: (_self.node id).decls.__edges.D or [ ];
       };

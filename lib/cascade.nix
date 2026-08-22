@@ -510,6 +510,18 @@ let
       allBelow = unique (concatMap (k: k.below) kindList);
       unresolved = filter (b: !(kinds ? ${b})) allBelow;
 
+      # ── THE SELF-LOOP IS A DESCENT FAILURE AND NOW SAYS SO ──
+      # A kind naming itself in its own `below` is refused either way: it is a 1-cycle, so the
+      # acyclicity verdict below already rejects it. What it was NOT doing is naming the concept
+      # the author violated — a caller who wrote `spawns.k` on kind `k` got a message about a
+      # CYCLE in a relation they were not thinking of as a graph, when what they had actually
+      # written was an expansion that descends nothing. The verdict is unchanged and this changes
+      # no registry that used to register; it moves the one case whose diagnosis is unambiguous
+      # ahead of the general one so the message can name descent. Every other cycle stays with the
+      # acyclicity verdict, where the offending path is what a caller needs and a single kind name
+      # would not be enough.
+      selfBelow = filter (k: elem k.name k.below) kindList;
+
       # One read: the measure and the acyclicity verdict come out of the same call, over the
       # relation the registry already describes.
       ranked = graph.coneRank {
@@ -529,6 +541,10 @@ let
       throw "gen-scope.mkKinds: duplicate kind name(s): ${toJSON duplicates}"
     else if unresolved != [ ] then
       throw "gen-scope.mkKinds: `below` names with no registered kind: ${toJSON unresolved}"
+    else if selfBelow != [ ] then
+      throw "gen-scope.mkKinds: kind(s) ${
+        toJSON (map (k: k.name) selfBelow)
+      } name themselves in their own `below` set. `below` is a STRICT descent order — what a kind expands into ranks strictly under it, and that is the decreasing measure the cascade terminates on. A kind cannot rank under itself, so a kind spawning its own kind expands into something no smaller than its host and descends nothing. Give the produced kind its own name and rank that below this one."
     else
       # Forcing the ranked record here is what makes a cyclic relation a definition-time refusal:
       # the verdict is decided as the registry is built, not when a reader first wants a depth.

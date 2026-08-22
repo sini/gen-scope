@@ -84,15 +84,12 @@ let
   };
 
   # The same program answered with values a cold run never produces, so a serve is visible.
+  #
+  # The `children` row's poison is a WRONG SELECTION rather than an invented node: the channel
+  # selects among registered nodes, so the distinguishable value is the one that names a node the
+  # scope carries and this host does not contain.
   priorAttrs = attrs // {
-    children =
-      self: id:
-      if id == "a" then
-        {
-          POISON = mkNode "POISON" "a" { };
-        }
-      else
-        { };
+    children = _self: id: if id == "a" then { inherit (roots) b; } else { };
     "edges-owns" = self: id: [ "POISON" ];
     imports = self: id: [ "POISON" ];
     includes = self: id: [ "POISON" ];
@@ -109,33 +106,29 @@ let
   };
 
   # A graph that actually materializes a child, for the facade-residual cells: `children` is
-  # what hands a raw node record back through `get`.
-  childRoots.p = mkNode "p" null { owns = [ "kid" ]; };
+  # what hands a raw node record back through `get`. Both levels are registered and the channel
+  # selects between them — what the cells read is the record the channel hands back, and a
+  # selected record is wrapped by the same `wrapChild` that carries `_eval`.
+  childRoots = {
+    p = mkNode "p" null { owns = [ "kid" ]; };
+    kid = mkNode "kid" "p" {
+      secret = "reachable";
+      owns = [ "p" ];
+    };
+  };
   childScope = {
     nodes = childRoots;
     nodeOrder = builtins.attrNames childRoots;
   };
   childAttrs = {
-    children =
-      self: id:
-      if id == "p" then
-        {
-          kid = mkNode "kid" "p" {
-            secret = "reachable";
-            owns = [ "p" ];
-          };
-        }
-      else
-        { };
+    children = _self: id: lib.filterAttrs (_: n: n.parent == id) childRoots;
     "edges-owns" = self: id: (self.node id).decls.owns or [ ];
     label = self: id: "fresh-${id}";
   };
-  childParseParent = id: if id == "kid" then "p" else null;
 
   childCold = genScope.eval {
     scope = childScope;
     attributes = childAttrs;
-    parseParent = childParseParent;
   };
 
   # The same program answering values a cold run never produces, so anything served from it is
@@ -146,7 +139,6 @@ let
       "edges-owns" = self: id: [ "POISON-EDGE" ];
       label = self: id: "cached-${id}";
     };
-    parseParent = childParseParent;
   };
 
   # Everything clean, reusing one STRUCTURAL and one RESOLUTIONAL name, so both can be read
@@ -154,7 +146,6 @@ let
   childWarm = genScope.evalWarm {
     scope = childScope;
     attributes = childAttrs;
-    parseParent = childParseParent;
     prior = childPrior;
     decision = genScope.mkDecision {
       isClean = _: true;

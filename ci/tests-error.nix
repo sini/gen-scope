@@ -1275,6 +1275,93 @@ in
       };
     };
 
+  # ── THE SELECTION CHANNEL'S REFUSAL, AND THE DESCENT NAMING BESIDE IT ──
+  # `ci/tests/child-selection.nix` asserts THAT a minting body is refused, and a boolean cannot say
+  # WHICH of the two things a caller must now do — register the node, or declare a spawn. That is a
+  # claim about the text, so it lives here.
+  #
+  # The two cells are one subject entered from its two ends. A caller who wrote a growth body on
+  # the wrong channel meets the first; a caller who moved it to the right channel and then declared
+  # it as an expansion into its OWN kind meets the second. The second used to answer with a CYCLE
+  # message — true, since a self-loop is a 1-cycle in `below`, and about a relation the author was
+  # not thinking of as a graph. Both messages now name the concept that was violated.
+  config.flake.testsError.child-selection-refusals =
+    let
+      selectionScope = {
+        nodes = {
+          host = {
+            id = "host";
+            type = "t";
+            parent = null;
+            decls = { };
+          };
+          kid = {
+            id = "kid";
+            type = "t";
+            parent = "host";
+            decls = { };
+          };
+        };
+        nodeOrder = [
+          "host"
+          "kid"
+        ];
+      };
+    in
+    {
+      # TWO offending keys and one registered one in the same body: the message enumerates every
+      # key it refuses rather than stopping at the first, and the registered sibling is absent from
+      # that list, so the cell reads the PREDICATE and not merely the throw.
+      test-a-minted-child-names-the-host-the-keys-and-the-ground = {
+        expr = genScope.childrenIds (genScope.eval {
+          scope = selectionScope;
+          attributes = {
+            children =
+              _self: id:
+              if id == "host" then
+                {
+                  alpha = {
+                    id = "alpha";
+                    type = "t";
+                    parent = "host";
+                    decls = { };
+                  };
+                  zeta = {
+                    id = "zeta";
+                    type = "t";
+                    parent = "host";
+                    decls = { };
+                  };
+                  inherit (selectionScope.nodes) kid;
+                }
+              else
+                { };
+          };
+        }) "host";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: node 'host' declares child(ren) [\"alpha\",\"zeta\"] that the scope does not carry. `children` SELECTS among the nodes the scope already registered — it is not a growth channel, and a record under an unregistered key is a node minted while the attribute is read, whose kind nothing can have checked descends its host's. Growth is the spawn channel's: declare it on the host's kind as `mkKind { spawns = { <produced-kind> = builder; }; }` with the produced kind named in that kind's `below`. To keep a node here, register it in the scope and select it.";
+        };
+      };
+
+      # A kind that spawns its own kind. `mkKind` accepts `spawns.a` when `below` carries `a` —
+      # `elem "a" [ "a" ]` holds — so the refusal is the REGISTRY's, and what it now names is the
+      # descent that is missing rather than the cycle that is present.
+      test-a-self-spawning-kind-names-descent-rather-than-a-cycle = {
+        expr = builtins.seq (mkKinds [
+          (mkKind {
+            name = "a";
+            below = [ "a" ];
+            spawns.a = _self: _id: { };
+          })
+        ]) null;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.mkKinds: kind(s) [\"a\"] name themselves in their own `below` set. `below` is a STRICT descent order — what a kind expands into ranks strictly under it, and that is the decreasing measure the cascade terminates on. A kind cannot rank under itself, so a kind spawning its own kind expands into something no smaller than its host and descends nothing. Give the produced kind its own name and rank that below this one.";
+        };
+      };
+    };
+
   config.flake.testsError.build-nodes-reserved-labels = {
     test-a-reserved-P-names-the-label-and-the-argument-that-owns-it = {
       expr = (collide [ "P" ]).nodes.a.parent;
