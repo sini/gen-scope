@@ -57,20 +57,63 @@
       nodeIds = prelude.attrNames ev.allNodes; # includes NTA-spawned children
       accessor = {
         nodes = nodeIds;
-        dependencies = declaredDependencies; # consumer->producer (must over-declare, soundness (c))
+        # ── THE UNION THE STALENESS CONE IS TAKEN OVER, AND THE ONE PLACE IT IS NORMALIZED ──
+        # This field and `declaredDependencies` used to be the same value under two names. They are
+        # two relations and ADR-0008 rules them two fields, so the alias was the ruling unmade: the
+        # gate reads the CONTRACTED declared relation, and a consumer computing reuse reads the
+        # relation the substrate actually induces. Only the second admits the structural half.
+        #
+        # THE DECLARED HALF ALONE IS UNSOUND BY CONSTRUCTION, which is why this is a union and not a
+        # choice. A parent reaches its children's decls and evaluated attributes through a SELF-READ
+        # — the parent's value is a function of the child's — so a parent whose child changed is
+        # stale whether or not its author wrote the edge down. That self-read is the ordinary shape
+        # of an inherited attribute (Knuth 1968), and nothing at the authoring surface is obliged to
+        # mirror it.
+        #
+        # THE TWO HALVES ARE DIRECTION-COMPATIBLE, and getting this backwards would invert the cone
+        # silently. The declared half is consumer->producer (it must over-declare, soundness (c));
+        # the structural projection is parent->child. By the self-read above the parent IS the
+        # consumer and the child IS the producer, so the two agree and `++` unions like-directed
+        # relations rather than mixing a relation with its converse.
+        #
+        # THE NORMALIZATION IS PART OF THE RELATION'S IDENTITY, NOT AN IMPLEMENTATION DETAIL. A
+        # reuse layer compares the deps it recorded against the deps it is handed, as LISTS — same
+        # members, same multiplicity, same order — and a consumer's accessor already dedups what it
+        # receives. Under the alias the asymmetry was invisible because a declared relation carries
+        # no duplicates; the union introduces them the moment a node is both declared and a child,
+        # and the two sides then disagree for exactly those nodes, permanently and silently.
+        # `prelude.unique` settles both halves in one call: dedup is what is REQUIRED, and its
+        # first-occurrence order is deterministic, so a canonical order arrives free rather than
+        # needing a sort. A consumer's own dedup becomes idempotent rather than corrective.
+        #
+        # ONE CONSTRUCTION SITE IS WHAT MAKES THE ORDER HALF FREE. The trace below derives from this
+        # field, so what the seal records and what a consumer is handed are the same list because
+        # they are the same expression — not because both ends sort. Order could diverge only if
+        # each end re-derived the union independently, and there is nowhere here for a second
+        # derivation to live.
+        #
+        # STRICTNESS, STATED BECAUSE THIS STOPPED BEING A RE-BINDING: reading this forces the
+        # structural partition and, through the projection's membership authority, the evaluated
+        # node set. Both are already forced by `nodeIds` above for any caller that reads the trace.
+        # The projection forces no resolutional attribute.
+        dependencies = id: prelude.unique (ev.structuralEdges id ++ declaredDependencies id);
         parent = id: parseParent id;
         nodeData = id: (ev.node id).decls or { };
       };
       # The trace's deps are DERIVED — read off the accessor's dependency relation, which is the
-      # same graph the gate runs over. Nothing declares a read set beside the rule, because a
-      # declared read set does not exist to declare: the body IS the read set (Van Gelder 1991
-      # Def 3.3 and §8; Sagiv 1990 printed 664; Vogt 1989 Def 3.5 p. 139). The projection that
-      # used to stand between these two lines duplicated a truth the relation already held.
+      # normalized union above and NOT the declared relation the gate runs over. Those were one
+      # graph while `dependencies` aliased `declaredDependencies`, and separating them is the whole
+      # of ADR-0008's two-field ruling made physical: the gate keeps its contracted relation at the
+      # field of that name, and the trace follows the relation a reuse decision must actually be
+      # sound over. Nothing declares a read set beside the rule, because a declared read set does
+      # not exist to declare: the body IS the read set (Van Gelder 1991 Def 3.3 and §8; Sagiv 1990
+      # printed 664; Vogt 1989 Def 3.5 p. 139). The projection that used to stand between these two
+      # lines duplicated a truth the relation already held.
       trace = prelude.listToAttrs (
         prelude.map (id: {
           name = id;
           value = {
-            deps = accessor.dependencies id; # eager, derived from the graph's declared relation
+            deps = accessor.dependencies id; # derived from the normalized union, by construction
             hash = null; # a reuse layer across evaluations is what would populate this
           };
         }) nodeIds

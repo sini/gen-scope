@@ -27,10 +27,18 @@ let
       child = {
         v = 1;
       };
+      # A node in NEITHER half of the dependency union: nothing declares an edge to it and it has no
+      # structural descendant. Since the accessor's relation became a union, `parent` is no longer
+      # such a node — it reaches `child` structurally — so the empty case needs a node that is
+      # genuinely outside both halves, or the cell asserting emptiness is asserting it of nothing.
+      orphan = {
+        v = 0;
+      };
     };
     types = {
       parent = "host";
       child = "host";
+      orphan = "host";
     };
   };
 
@@ -147,10 +155,20 @@ in
       expr = edgedCtx.trace.child.deps;
       expected = [ "parent" ];
     };
-    # A node the relation says nothing about traces empty — and this is the discriminating pair
-    # with the cell above: both nodes exist, both are traced, and only the relation separates them.
-    test-trace-deps-empty-where-no-dependency-is-declared = {
+    # The STRUCTURAL half reaches the trace on its own: `parent` declares nothing at all and still
+    # traces its child, which is the unsoundness the union closes — a parent is stale when its child
+    # changes whether or not an author wrote that edge down.
+    test-trace-deps-carry-the-structural-half-where-nothing-is-declared = {
       expr = edgedCtx.trace.parent.deps;
+      expected = [ "child" ];
+    };
+    # A node in neither half traces empty — and this is the discriminating TRIPLE with the two cells
+    # above: all three nodes exist, all three are traced, and only the relation separates them.
+    # `child` carries a declared edge and no descendant, `parent` a descendant and no declared edge,
+    # `orphan` neither. Without this cell the two above are satisfied by a relation that answers
+    # non-empty for everything.
+    test-trace-deps-empty-where-neither-half-of-the-union-holds-an-edge = {
+      expr = edgedCtx.trace.orphan.deps;
       expected = [ ];
     };
     # Every traced node carries the pair the seal promises; a derivation that skipped a node would
