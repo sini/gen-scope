@@ -29,8 +29,26 @@ let
   # formal rather than being normalized away because the disagreement is OBSERVABLE. Against an
   # attribute set carrying no `children` at all, a demanding site read `get`'s unknown-attribute
   # refusal while a walking site read `{ }` and completed over the roots. Collapsing to either arm
-  # would move live behaviour under cover of a consolidation, so the divergence is carried as an
-  # argument — visible at one site and decidable in one place — instead of being settled here.
+  # would move live behaviour under cover of a consolidation, so the divergence was carried as an
+  # argument — visible at one site and decidable in one place — rather than settled at the
+  # consolidation that surfaced it.
+  #
+  # ★ IT IS NOW SETTLED, AND BOTH ARMS ARE KEPT AS PRINCIPLED. They answer different questions and
+  # the right answers differ. An ENUMERATION must be TOTAL over a heterogeneous node set: a walk
+  # that refused at the first node lacking the attribute could not report the rest, and "no
+  # children" is a perfectly ordinary thing for a node to be. A DEMAND is a question about ONE id
+  # and its answer is either the record or a refusal — reading `{ }` there turns "this attribute
+  # set declares no `children`" into "that node has none", which is a wrong answer wearing a right
+  # shape. The split is intentional, and the formal is what says so.
+  #
+  # ★ STRICTNESS, DECIDED AND STATED, because the consolidation left it open. This binding returns
+  # the whole child-record attrset with KEYS EAGER and VALUES LAZY, and the open question was
+  # whether a soundness obligation homed here would have to read each child's `kind` — which would
+  # force EVERY sibling's record at demand sites that today force one. It does not, and that is a
+  # consequence of where the obligation ended up rather than a concession: descent is settled at
+  # registration, and the produced kind is STAMPED (written) rather than read, so nothing on this
+  # path inspects a child to decide whether it is admissible. The only record read is the HOST's,
+  # for its own kind, and a host is already resolved by the time anything asks it for children.
   childRecordsOf =
     {
       attributes,
