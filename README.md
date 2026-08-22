@@ -527,6 +527,14 @@ query { dataFilter; localShadowsImport ? true; importShadowsParent ? true; trans
 
 Neron (2015) resolution: searches local, imports, parent with specificity D < I < P. Import edges come from `self.get id "imports"` (computed attribute). `_seen` tracks visited scopes to prevent import self-resolution (Neron 2015 §2.4, rule X).
 
+**The answer is a single declaration, and a multi-candidate import set REFUSES BY NAME.** When the admitted imported candidates are contributed by **more than one distinct node**, `query` throws rather than answering. It used to dispose of the excess itself, dispatching on the runtime type of the first candidate: an attrset arm folded every candidate together — producing a value that existed at no node — and a list arm returned `builtins.head`, dropping the rest. Neither was declared at this surface, and both are gone.
+
+The predicate is over **distinct contributing nodes**, never candidate-list length and never value equality. Ambiguity is more than one declaration *occurrence*, not more than one derivation (Neron 2015 §2.2, *Duplicate Declarations*), and occurrence identity is positional — so one node reached along three identical edges, or through both routes of a diamond, is one declaration reached several ways and resolves exactly as it did before, while two distinct nodes carrying *equal* values refuse. Value equality is the wrong mechanism as well as the wrong predicate: it would force candidate values deeply, where node identity reads ids the import filter has forced already.
+
+Refusing is **this library's single-answer contract, not Neron's rule** — the calculus deliberately identifies ambiguous resolutions rather than requiring their absence. `queryAll` and `ambiguous` are that identify-all reading and are unaffected, and the refusal message points a refused caller at `queryAll` by name. The refusal is a `throw`, so `tryEval` holds it; it names the reading node and every competing source node, in declaration order. It does not name the attribute — `query` takes an opaque `dataFilter` and no attribute name is in its scope — but `eval` supplies that from the layer that knows it, wrapping every attribute read in `builtins.addErrorContext "evaluating '<attr>' on '<id>'"`.
+
+Laziness is unaffected: `imported` is forced only once `resolve`'s earlier arms fail, so a local declaration under the default `localShadowsImport = true` short-circuits the read and the refusal never fires.
+
 #### `queryAll`
 
 ```nix

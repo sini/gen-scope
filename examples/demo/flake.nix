@@ -480,10 +480,27 @@
             transitiveImports = true;
           } result "modA";
 
-          transitive-shadowing = genScope.query {
+          # Two declarers on one transitive route is an AMBIGUITY, and the query refuses by name.
+          # `modB` and `modC` both declare `y`, so under transitive imports `modA`'s read has two
+          # distinct contributing nodes -- two declaration occurrences for one read (Neron 2015
+          # §2.2, Duplicate Declarations). This output was once called `transitive-shadowing` and
+          # showed the answer the query picked: it took whichever candidate the traversal reached
+          # first and dropped the other without saying so. A defining query answers with a single
+          # declaration or refuses; the refusal is caught here so the demo still evaluates.
+          transitive-ambiguity-refuses =
+            (builtins.tryEval (
+              genScope.query {
+                dataFilter = n: n.decls.y or null;
+                transitiveImports = true;
+              } result "modA"
+            )).success; # -> false
+
+          # The remedy the refusal names: `queryAll` identifies ALL the resolutions without
+          # shadowing (Neron 2015 Fig. 3, rule R) and leaves the choice at the call site.
+          transitive-ambiguity-read-in-full = genScope.queryAll {
             dataFilter = n: n.decls.y or null;
             transitiveImports = true;
-          } result "modA";
+          } result "modA"; # -> [ "from-B" "from-C" ]
 
           include-semantics = genScope.query {
             dataFilter = n: n.decls.x or null;

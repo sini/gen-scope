@@ -229,10 +229,17 @@ in
       expected = "from-b";
     };
 
-    test-query-transitive-finds-deep = {
-      # With transitive, a→b→c; b has val so it wins (import shadows parent)
-      expr = resultTransitive.get "a" "resolved";
-      expected = "from-b";
+    # ★ RE-EXPECTED, and the comment is rewritten rather than edited, because the one it replaces
+    # described the wrong mechanism. It read "b has val so it wins (import shadows parent)" — but
+    # D < I < P never entered it: `b` and `c` are both IMPORTED candidates at `a` under transitive
+    # imports, and the old winner was whichever of them `builtins.head` reached first. Two distinct
+    # declaring nodes for one read is an ambiguity (Neron §2.2, Duplicate Declarations), and the
+    # query now refuses by name instead of choosing by traversal order. The two cells that bracket
+    # this one read the NON-transitive `result`, where `a` sees only `b` — one candidate, one
+    # answer — so they stay green and are this cell's non-refusal control.
+    test-query-transitive-finds-deep-refuses-on-two-declarers = {
+      expr = !(builtins.tryEval (builtins.deepSeq (resultTransitive.get "a" "resolved") null)).success;
+      expected = true;
     };
 
     test-query-parent-fallback = {

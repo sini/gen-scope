@@ -14,6 +14,13 @@ let
       children = _self: _id: { };
     }
     // extra;
+
+  # A refusal here is a named `throw`, so `tryEval` observes it and the suite REPORTS rather than
+  # dying — the property that separates this idiom from the anonymous attribute-missing abort.
+  # `deepSeq` is what makes the observation reach a refusal that sits inside a value rather than at
+  # it: an attrset answer survives WHNF with its refusing field unforced.
+  didRefuse = e: !(builtins.tryEval (builtins.deepSeq e null)).success;
+  resolves = e: (builtins.tryEval (builtins.deepSeq e null)).success;
 in
 {
   # === Specificity ordering (Neron 2015 §2.5, Fig. 2) ===
@@ -361,6 +368,418 @@ in
         in
         genScope.query { dataFilter = n: n.decls.x or null; } result "consumer";
       expected = "local";
+    };
+
+    # ── A multi-candidate import set REFUSES BY NAME (Neron §2.2, Duplicate Declarations) ──
+    #
+    # `query` answers with a SINGLE declaration. It used to dispose of a larger candidate set
+    # itself, dispatching on the runtime type of the first candidate: an attrset arm folded every
+    # candidate together into a value that existed at no node, a list arm took the head and dropped
+    # the rest. Both are gone.
+    #
+    # ★★ THE REFUSAL CELLS AND THE IDENTICAL-EDGE CELLS ARE ONE INSTRUMENT AND ARE READ TOGETHER.
+    # The refusals alone pass under a predicate spelled over candidate-list LENGTH; the
+    # identical-edge cells alone pass under a construction that never refuses at all. Only the pair
+    # pins the predicate where it belongs — on DISTINCT CONTRIBUTING NODES. Both are written in
+    # both type arms, because the two disposal arms they retire were different code paths and a
+    # cell in one arm says nothing about the other.
+
+    test-two-distinct-declarations-refuse-list-arm = {
+      expr = didRefuse (
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "consumer" "providerA")
+              (genScope.edge "consumer" "providerB")
+            ];
+            decls = {
+              consumer = { };
+              providerA = {
+                x = [ "a" ];
+              };
+              providerB = {
+                x = [ "b" ];
+              };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query { dataFilter = n: n.decls.x or null; } result "consumer"
+      );
+      expected = true;
+    };
+
+    test-two-distinct-declarations-refuse-attrset-arm = {
+      expr = didRefuse (
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "consumer" "providerA")
+              (genScope.edge "consumer" "providerB")
+            ];
+            decls = {
+              consumer = { };
+              providerA = {
+                x = {
+                  a = 1;
+                };
+              };
+              providerB = {
+                x = {
+                  b = 2;
+                };
+              };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query { dataFilter = n: n.decls.x or null; } result "consumer"
+      );
+      expected = true;
+    };
+
+    # ★ Occurrence identity is POSITIONAL, and takes no account of what a declaration denotes
+    # (Neron §2.2, "all occurrences b_i denote the same name b at different positions"). Two nodes
+    # carrying equal values are still two occurrences. This is also why the predicate is not
+    # spelled as value equality: that spelling would force candidate values deeply, where this one
+    # reads ids the import filters have forced already.
+    test-two-distinct-declarations-of-equal-value-still-refuse = {
+      expr = didRefuse (
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "consumer" "providerA")
+              (genScope.edge "consumer" "providerB")
+            ];
+            decls = {
+              consumer = { };
+              providerA = {
+                x = [ "same" ];
+              };
+              providerB = {
+                x = [ "same" ];
+              };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query { dataFilter = n: n.decls.x or null; } result "consumer"
+      );
+      expected = true;
+    };
+
+    # ★ THE CONTROL THAT PINS THE PREDICATE. One node reached along three identical edges is ONE
+    # declaration reached three ways — three derivations of one judgement, not three declarations.
+    # The `imports` relation is a multiset and does not deduplicate its edges, so this shape really
+    # does deliver three candidates to the disposal; a length predicate would refuse it. It is a
+    # live shape, not a hypothetical: nix-config's `dev` environment carries three identical
+    # env:dev → env:prod edges.
+    test-control-one-node-three-identical-edges-resolves-list-arm = {
+      expr =
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "consumer" "provider")
+              (genScope.edge "consumer" "provider")
+              (genScope.edge "consumer" "provider")
+            ];
+            decls = {
+              consumer = { };
+              provider = {
+                x = [ "p" ];
+              };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query { dataFilter = n: n.decls.x or null; } result "consumer";
+      expected = [ "p" ];
+    };
+
+    test-control-one-node-three-identical-edges-resolves-attrset-arm = {
+      expr =
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "consumer" "provider")
+              (genScope.edge "consumer" "provider")
+              (genScope.edge "consumer" "provider")
+            ];
+            decls = {
+              consumer = { };
+              provider = {
+                x = {
+                  p = 1;
+                };
+              };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query { dataFilter = n: n.decls.x or null; } result "consumer";
+      expected = {
+        p = 1;
+      };
+    };
+
+    # ★ THE PREMISE OF THE CELL ABOVE, ASSERTED RATHER THAN ASSUMED. If the graph layer ever begins
+    # deduplicating import edges, the three-identical-edge cells stop delivering three candidates
+    # and pass for a reason that has nothing to do with the predicate they exist to pin. This cell
+    # reds when that happens.
+    test-control-identical-import-edges-are-not-deduplicated = {
+      expr =
+        (mkRoots {
+          importGraph = genScope.overlays [
+            (genScope.edge "consumer" "provider")
+            (genScope.edge "consumer" "provider")
+            (genScope.edge "consumer" "provider")
+          ];
+          decls = {
+            consumer = { };
+            provider = {
+              x = [ "p" ];
+            };
+          };
+        }).nodes.consumer.decls.__edges.I;
+      expected = [
+        "provider"
+        "provider"
+        "provider"
+      ];
+    };
+
+    # ── Diamonds and reconvergence: one declaration reached by several ROUTES ──
+    #
+    # The seen-imports machinery exists to make repeated routes TERMINATE (Neron §2.4, rule X), not
+    # to multiply the answer. Attribution is what makes these resolve, and it is correct by
+    # construction rather than by luck: the recursion maps the collector over the NEXT node's
+    # imports, so a transitively-reached candidate carries the id of the node that DECLARED it and
+    # never that of the direct import it was reached through. Both diamond routes therefore tag the
+    # same declarer.
+
+    test-control-a-diamond-reaching-one-declaration-resolves-list-arm = {
+      expr =
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "r" "B")
+              (genScope.edge "r" "C")
+              (genScope.edge "B" "D")
+              (genScope.edge "C" "D")
+            ];
+            decls = {
+              r = { };
+              B = { };
+              C = { };
+              D = {
+                x = [ "d" ];
+              };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query {
+          dataFilter = n: n.decls.x or null;
+          transitiveImports = true;
+        } result "r";
+      expected = [ "d" ];
+    };
+
+    test-control-a-diamond-reaching-one-declaration-resolves-attrset-arm = {
+      expr =
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "r" "B")
+              (genScope.edge "r" "C")
+              (genScope.edge "B" "D")
+              (genScope.edge "C" "D")
+            ];
+            decls = {
+              r = { };
+              B = { };
+              C = { };
+              D = {
+                x = {
+                  d = 1;
+                };
+              };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query {
+          dataFilter = n: n.decls.x or null;
+          transitiveImports = true;
+        } result "r";
+      expected = {
+        d = 1;
+      };
+    };
+
+    # ★ THIS IS WHAT MAKES THE TWO DIAMOND CELLS MEAN SOMETHING. Add a second DECLARER on one route
+    # of the same fixture and it refuses — so their non-refusal is the two routes collapsing onto
+    # one occurrence, and not a fixture that failed to form two routes in the first place.
+    test-a-diamond-with-a-second-declarer-on-one-route-refuses = {
+      expr = didRefuse (
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "r" "B")
+              (genScope.edge "r" "C")
+              (genScope.edge "B" "D")
+              (genScope.edge "C" "D")
+            ];
+            decls = {
+              r = { };
+              B = {
+                x = [ "b" ];
+              };
+              C = { };
+              D = {
+                x = [ "d" ];
+              };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query {
+          dataFilter = n: n.decls.x or null;
+          transitiveImports = true;
+        } result "r"
+      );
+      expected = true;
+    };
+
+    # Reconvergence rather than a diamond: `r` imports A directly AND reaches it through B.
+    test-control-a-reconvergent-import-pair-reaching-one-declaration-resolves = {
+      expr =
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "r" "A")
+              (genScope.edge "r" "B")
+              (genScope.edge "B" "A")
+            ];
+            decls = {
+              r = { };
+              A = {
+                x = [ "a" ];
+              };
+              B = { };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query {
+          dataFilter = n: n.decls.x or null;
+          transitiveImports = true;
+        } result "r";
+      expected = [ "a" ];
+    };
+
+    # The degenerate route: one chain, one declarer. It shares the transitive machinery with the
+    # cells above and refuses nothing, so a construction that refused on route count rather than on
+    # declarer count would still have to pass this one.
+    test-control-a-single-transitive-chain-resolves = {
+      expr =
+        let
+          roots = mkRoots {
+            importGraph = genScope.overlays [
+              (genScope.edge "r" "B")
+              (genScope.edge "B" "D")
+            ];
+            decls = {
+              r = { };
+              B = { };
+              D = {
+                x = [ "d" ];
+              };
+            };
+          };
+          result = genScope.eval {
+            scope = roots;
+            attributes = withImports { };
+          };
+        in
+        genScope.query {
+          dataFilter = n: n.decls.x or null;
+          transitiveImports = true;
+        } result "r";
+      expected = [ "d" ];
+    };
+
+    # ★ CATCHABILITY, AND ITS LIVE CONTROL IN THE SAME CELL. The refusal is a `throw`, so a caller
+    # can hold it; and the single-declaration read on the same instrument still succeeds, so the
+    # `false` above is the refusal firing rather than the instrument reporting failure at
+    # everything. Spelled as `abort` or `assert`, the first field would escape `tryEval` and take
+    # the suite down instead of failing this cell.
+    test-control-the-refusal-is-catchable-and-a-single-declaration-still-reads = {
+      expr =
+        let
+          mkResult =
+            decls:
+            genScope.eval {
+              scope = mkRoots {
+                importGraph = genScope.overlays [
+                  (genScope.edge "consumer" "providerA")
+                  (genScope.edge "consumer" "providerB")
+                ];
+                inherit decls;
+              };
+              attributes = withImports { };
+            };
+          read = decls: genScope.query { dataFilter = n: n.decls.x or null; } (mkResult decls) "consumer";
+        in
+        {
+          ambiguous = resolves (read {
+            consumer = { };
+            providerA = {
+              x = [ "a" ];
+            };
+            providerB = {
+              x = [ "b" ];
+            };
+          });
+          single = resolves (read {
+            consumer = { };
+            providerA = {
+              x = [ "a" ];
+            };
+            providerB = { };
+          });
+        };
+      expected = {
+        ambiguous = false;
+        single = true;
+      };
     };
   };
 
