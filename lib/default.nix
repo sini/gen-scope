@@ -24,7 +24,12 @@ let
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
   inherit (import ./require-scope.nix { inherit prelude; }) requireScope;
-  eval = import ./eval.nix { inherit prelude requireScope; };
+  # `graph` reaches the evaluator for ONE construct: the endpoint projection that reads a node's
+  # structural attribute RECORD as an edge relation. That construct is edge vocabulary and lives in
+  # the graph library beside its other endpoint extractors, so what arrives here is the CONSTRUCTOR;
+  # what this side supplies to it are the two facts only an evaluated substrate holds — the
+  # child-bearing predicate and the evaluated node set.
+  eval = import ./eval.nix { inherit prelude requireScope graph; };
   program = import ./program.nix { inherit prelude; };
   leastModel = import ./least-model.nix { inherit prelude; };
   wellFounded = import ./well-founded.nix { inherit prelude; };

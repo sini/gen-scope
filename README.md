@@ -236,7 +236,7 @@ eval {
 }
 ```
 
-Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfType, facade, resolutional, served, structuralAttributes, decisionFindings, provenance }`:
+Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfType, facade, resolutional, served, structuralAttributes, structuralEdges, projectionFindings, decisionFindings, provenance }`:
 
 | Function | Cost | Description |
 |----------|------|-------------|
@@ -251,10 +251,29 @@ Returns `{ node, get, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfTyp
 | `result.resolutional id` | O(a) | The reuse vocabulary at a node: this attribute set minus the structural partition |
 | `result.served id` | O(a·r) | What the decision asked to reuse, intersected with that vocabulary |
 | `result.structuralAttributes id` | O(1) + per entry | The structural partition of the node's attribute set, as a record `name -> value`, readable without forcing any resolutional attribute. Its key set is the structural partition taken over the consumer's own attribute set, so a name entering the partition enters this record |
+| `result.structuralEdges id` | O(n) — forces the walk | The **same partition as a relation**, `id -> [id]`: the endpoint set of the node's structural attributes, deduplicated. Child-bearing attributes contribute their **keys**, every other structural attribute contributes **itself**. Forces no resolutional attribute, and forces no child's record — but it does force `allNodeIds`, because the codomain check below is a claim about the whole graph |
+| `result.projectionFindings id` | O(a), only if forced | Debug-mode validator for that relation: every non-child-bearing structural attribute of this node whose value is not a list of node ids, as a message; `[ ]` when clean |
 | `result.decisionFindings` | O(n·r), only if forced | Debug-mode validator: every attribute a decision named that the node's vocabulary does not contain |
 | `result.provenance` | O(1) | The provenance the caller supplied, carried back on the result rather than dropped |
 
 **Special attributes:** `children` and `derived-children` are auto-wrapped — their results are node attrsets where each child receives a co-located `_eval` cache.
+
+**The structural codomain contract.** `structuralEdges` refuses, **by name**, a structural attribute
+outside the two child-bearing families whose value is not a list of ids each naming a node of the
+evaluated graph. The child-bearing families are not re-checked: `children` selects among registered
+nodes and is refused otherwise, and `derived-children` keys become nodes by being descended, so a
+check there asks a question already answered. Every other structural attribute is **your** equation,
+and only a contract can close it.
+
+The membership authority is `allNodeIds` — the **evaluated** node set, not the registration set — so
+an endpoint naming a node the spawn channel produced is admitted. Refusals name the reading node and
+the attribute; only the membership refusal names the offending id, because a shape refusal has no id
+to name. `projectionFindings` returns those same messages instead of throwing, which is what an
+assertion should read: a caught throw proves something refused, never that it refused for the reason
+under test.
+
+`structuralEdges` is an `eval` surface only. `evalDebug` binds `allNodeIds` to a refusal, so there is
+no authority for the check to consult there.
 
 #### Materialization order
 

@@ -8,7 +8,11 @@
 # to get O(1) attribute access is an attrset entry. We co-locate the memoization
 # cache (_eval) ON each node when it is materialized by its parent's `children`
 # or `derived-children` attribute.
-{ prelude, requireScope }:
+{
+  prelude,
+  requireScope,
+  graph,
+}:
 let
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
@@ -515,6 +519,44 @@ let
         # which is not even the arity of an edge set. Naming it for the attributes it partitions
         # is what keeps it distinct from the node-level dependency relation the seal publishes.
         structuralAttributes = id: prelude.genAttrs structuralNamesAll (name: self.get id name);
+
+        # THE SAME PARTITION AS A RELATION — `id -> [id]`, which is the arity the record above is
+        # not. The projection itself is gen-graph's: it is edge vocabulary, it belongs beside the
+        # library's other endpoint extractors, and keeping it there is what stops this evaluator
+        # from growing a second copy of a contract the graph library already states.
+        #
+        # WHAT THIS SIDE SUPPLIES IS THE TWO FACTS ONLY THE SUBSTRATE HOLDS, and it supplies them
+        # as VALUES rather than as an import in the other direction. `childBearing` is taken from
+        # the same binding `evalAttr` branches on, so the predicate that decides which shape to
+        # MATERIALIZE and the predicate that decides which shape to READ are one fact seen from
+        # two sides rather than two literals that happen to agree.
+        #
+        # THE MEMBERSHIP AUTHORITY IS THE EVALUATED NODE SET, NOT THE REGISTRATION SET, and the
+        # difference is the point: a structural relation must be allowed to name a node the walk
+        # produced, so the larger set is the correct authority. `eval.nix`'s selection guard reads
+        # the registration set for the opposite reason — it runs INSIDE a descent channel, where
+        # consulting the set being produced is asking the question that is being answered. This
+        # seat is not that one: it runs over a completed record, where `allNodeIds` and
+        # `structuralAttributes` are sibling thunks.
+        #
+        # Reading this forces `allNodeIds`, hence the walk. That is the claim's meaning rather
+        # than a leak — membership is a statement about the whole graph — and it is why the
+        # surface exists on `eval` alone: `evalDebug` binds `allNodeIds` to a refusal, so there is
+        # no authority for it to check against there.
+        structuralEdges = graph.mkEndpointProjection {
+          inherit (structural) childBearing;
+          isNode = t: builtins.elem t self.allNodeIds;
+        } self.structuralAttributes;
+
+        # The debug-mode validator for that relation, as a value, in the same seat and under the
+        # same discipline as `decisionFindings` below: nothing in the production path forces it,
+        # so it alters no production result. Forcing it reports every structural attribute of this
+        # node whose value violates the codomain contract, and `[ ]` when none does — which is
+        # what lets an assertion land on the returned message rather than on a caught throw.
+        projectionFindings = graph.mkProjectionFindings {
+          inherit (structural) childBearing;
+          isNode = t: builtins.elem t self.allNodeIds;
+        } self.structuralAttributes;
 
         # The debug-mode validator, as a value. Nothing in the production path forces it, so it
         # alters no production result and is not a rule the plane must obey; forcing it reports
