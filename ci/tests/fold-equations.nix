@@ -130,9 +130,36 @@ in
         "parseParent"
         "roots"
         "schedule"
+        "scope"
         "settings"
         "trace"
       ];
+    };
+
+    # ── THE SEALED RECORD, AND WHY IT IS SEALED WHOLE ──
+    # `roots` is the node map; `scope` is the record that CONTAINS it, together with the declared
+    # vertex order and the kind registry. The distinction is the whole reason for the second field:
+    # a consumer that must call an evaluator needs the order and the registry, and neither is
+    # recoverable from the node map — so publishing only `roots` refused such a consumer by name
+    # (the input-type guard) while leaving it nowhere to be redirected.
+    test-scope-is-sealed-whole = {
+      expr = builtins.attrNames ctx.scope;
+      expected = [
+        "kinds"
+        "nodeOrder"
+        "nodes"
+      ];
+    };
+
+    # ── THE TWO FIELDS AGREE, AND THAT IS AN INVARIANT RATHER THAN A COINCIDENCE ──
+    # Publishing the same node map under two names is exactly the shape that goes stale silently:
+    # nothing in the record's type says they are the same object, so a later edit that rebuilds one
+    # and not the other leaves a consumer reading whichever it happened to pick. Both come off
+    # `checked` here, so this cell states the property the seal is relied on for rather than
+    # re-testing the constructor.
+    test-sealed-roots-is-the-sealed-scopes-node-map = {
+      expr = ctx.roots == ctx.scope.nodes;
+      expected = true;
     };
     # The equations the seal carries are the SCHEDULE'S OWN, which is what makes a schedule paired
     # with a foreign equation set inexpressible: there is no second argument to disagree with.

@@ -48,6 +48,13 @@
       # The plane re-exports the node map under its established name. That is OUTPUT data, not an
       # entry formal, so the input-type ruling does not reach it — and a consumer that hands this
       # half back to an evaluator is refused by name rather than served silently.
+      #
+      # ★ AND THE WHOLE RECORD IS SEALED BESIDE IT, as `scope` — which is what makes that refusal a
+      # REDIRECTION rather than a dead end. A consumer that must CALL an evaluator, as the warm
+      # plane does, needs the declared vertex order and the kind registry; neither is recoverable
+      # from the node map, and neither is carried by any other sealed field. Publishing only the
+      # half left that consumer refused by name with nowhere to be sent, so the seal published a
+      # surface the interface's own consumer could not be written against.
       roots = checked.nodes;
       ev = eval {
         scope = checked;
@@ -140,5 +147,9 @@
         attributes
         ;
       eval = ev;
+      # The validated record, NOT the formal. `inherit scope` would seal the raw argument and hand
+      # a consumer back the very thing `requireScope` exists to reject — the guard would have run
+      # and published its input anyway. `checked` is the value that passed it.
+      scope = checked;
     };
 }
