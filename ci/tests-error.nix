@@ -1619,11 +1619,31 @@ in
   # reached below applies it.
   config.flake.testsError.circular-refusals =
     let
-      run = carrierArg: f: circular carrierArg f null "n";
+      # The declaration is reached THROUGH THE EVALUATOR: under the kind-tagged declaration shape
+      # an applied `circular` is a record, and the carrier refusal fires at the instance's FIRST
+      # DEMAND on the demand path — the texts below survive that relocation byte-identically.
+      run =
+        carrierArg: f:
+        (genScope.eval {
+          scope = genScope.buildRoots {
+            parentGraph = genScope.vertex "n";
+            importGraph = genScope.empty;
+            decls.n = { };
+            types = { };
+          };
+          attributes = {
+            children = _self: _id: { };
+            imports = _self: _id: [ ];
+            probe = circular carrierArg f;
+          };
+        }).get
+          "n"
+          "probe";
       ascending = {
         bottom = 0;
         leq = a: b: a <= b;
         height = 3;
+        quotient = false;
       };
     in
     {

@@ -129,6 +129,10 @@ let
     bottom = { };
     leq = a: b: builtins.all (k: (b ? ${k}) && subset a.${k} b.${k}) (builtins.attrNames a);
     height = 3;
+    # Pointwise tag-set inclusion is antisymmetric on the values this step produces (equal key
+    # sets with `true` values are equal attrsets), so the order is not a quotient and the
+    # instance is a shared-round member.
+    quotient = false;
   };
 
   # ── THE STEP, AND WHERE THE SPAWNED SUBTREE ENTERS IT ──

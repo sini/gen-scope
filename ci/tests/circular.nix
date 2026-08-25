@@ -34,6 +34,10 @@ let
     bottom = 0;
     leq = a: b: a <= b;
     height = h;
+    # The arithmetic order is antisymmetric on the raw values, so this is not a quotient — the
+    # fourth term is required and total, and stating it truthfully is what admits the instance to
+    # a shared round.
+    quotient = false;
   };
 
   evalWith =
@@ -101,6 +105,7 @@ let
             bottom = 0;
             leq = a: b: a <= b;
             height = 4;
+            quotient = false;
           };
         }
         (
@@ -119,6 +124,10 @@ let
     bottom = { };
     leq = a: b: builtins.all (k: b ? ${k}) (builtins.attrNames a);
     height = 3;
+    # Key-set inclusion orders a QUOTIENT of the value space — raw values churn inside a class —
+    # and the declaration says so: a quotient instance evaluates by the per-instance ascent and is
+    # never a simultaneous member of a shared round.
+    quotient = true;
   };
 
   enrichResult = evalWith roots {

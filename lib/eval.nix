@@ -17,6 +17,135 @@ let
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
 
+  # The applicability approximation, taken from the one binding (`lib/callable.nix`): the circular
+  # carrier decides it of a `leq` exactly as the kind registry decides it of a `resolve`.
+  callable = import ./callable.nix;
+
+  # The round loop's forcing discipline, taken from where it is defined rather than written a
+  # seventh time (the same import `lib/mint.nix` takes): the shared round is `forceFields`'
+  # sixth consumer, not the second implementation.
+  inherit (import ./least-model.nix { inherit prelude; }) forceFields;
+
+  # ── THE CIRCULAR DECLARATION, READ AT THE DEMAND PATH ──
+  #
+  # A circular attribute arrives as the kind-tagged record `circular` returns — { kind; carrier;
+  # step } — and the classification over `attributes` values is TOTAL: a function is an ordinary
+  # attribute, a record carrying kind = "circular" is a circular declaration, and anything else is
+  # a malformed declaration refused by name. The evaluator therefore needs no registry of which
+  # names are circular; the declaration announces its kind, and reading the attribute set answers
+  # "which attributes are circular" without forcing any value.
+  isCircularDecl = v: builtins.isAttrs v && (v.kind or null) == "circular";
+
+  # The reason a carrier is not one, or null. Total on any value: each arm establishes what the
+  # next one reads. The reason NEVER RENDERS the carrier — an order is a function, and rendering a
+  # function is itself an abort no caller can catch, which would answer an uncatchable termination
+  # with another one while claiming to diagnose it. The refusal fires at the declaration's FIRST
+  # DEMAND, `tryEval`-catchably; at universe formation a defective declaration is simply not
+  # admitted, because forcing carrier fields there would abort anonymously before this name could
+  # be raised.
+  #
+  # The fourth term, `quotient`, is REQUIRED and TOTAL: it decides whether the instance may be a
+  # simultaneous member of a shared round, and an absent declaration would decide that soundness
+  # question silently. The field set is CAPPED at the four declared terms — a fifth is refused as
+  # a return to the design sitting, never admitted as a refinement.
+  carrierDefect =
+    c:
+    if c == null then
+      "declares no `carrier` — a circular attribute is well defined only over one, and its three terms are a bottom, an order and a bounded height (Söderberg & Hedin 2013 §4.1)"
+    else if !builtins.isAttrs c then
+      "declares a `carrier` that is a ${builtins.typeOf c} rather than a { bottom, leq, height } record"
+    else if !(c ? bottom) then
+      "declares a `carrier` with no `bottom` (the starting point of the fixed-point iteration)"
+    else if !(c ? leq) then
+      "declares a `carrier` with no `leq` (the order the step is required to ascend)"
+    else if !(callable c.leq) then
+      "declares a `carrier` whose `leq` cannot be applied (it is a ${builtins.typeOf c.leq})"
+    else if !(c ? height) then
+      "declares a `carrier` with no `height` (the lattice's bounded height, from which the iteration bound is derived)"
+    else if !builtins.isInt c.height then
+      "declares a `carrier` whose `height` is a ${builtins.typeOf c.height} rather than an integer"
+    else if c.height < 0 then
+      "declares a `carrier` whose `height` is ${toString c.height}, and a lattice has no negative height"
+    else if !(c ? quotient) then
+      "declares a `carrier` with no `quotient` (whether `leq` orders a quotient of the value space rather than the raw values — required and total, because a shared round admits only antisymmetric carriers and an absent declaration would decide that soundness question silently)"
+    else if !builtins.isBool c.quotient then
+      "declares a `carrier` whose `quotient` is a ${builtins.typeOf c.quotient} rather than a boolean"
+    else if
+      builtins.attrNames c != [
+        "bottom"
+        "height"
+        "leq"
+        "quotient"
+      ]
+    then
+      "declares a `carrier` carrying ${
+        builtins.toJSON (
+          builtins.filter (
+            n:
+            !(builtins.elem n [
+              "bottom"
+              "height"
+              "leq"
+              "quotient"
+            ])
+          ) (builtins.attrNames c)
+        )
+      } beyond its four declared terms { bottom, leq, height, quotient } — the carrier's field set is capped by ruling, and a fifth term is a return to the design sitting rather than a refinement"
+    else
+      null;
+
+  # Universe eligibility (the membership-eligibility clause): a WELL-FORMED four-term carrier AND
+  # quotient = false. Read without throwing — an instance that cannot be a member is simply not
+  # admitted, and its own refusal fires at its own first demand.
+  memberEligible =
+    d:
+    isCircularDecl d
+    &&
+      builtins.attrNames d == [
+        "carrier"
+        "kind"
+        "step"
+      ]
+    && builtins.isAttrs (d.carrier or null)
+    &&
+      builtins.attrNames d.carrier == [
+        "bottom"
+        "height"
+        "leq"
+        "quotient"
+      ]
+    && callable d.carrier.leq
+    && builtins.isInt d.carrier.height
+    && d.carrier.height >= 0
+    && d.carrier.quotient == false;
+
+  # ── THE SPAWN HANDLE — a PROJECTION, never a filtered view of the evaluator ──
+  #
+  # A spawn builder is not handed the evaluator. It is handed this restricted accessor, through
+  # which a round's in-flight value CANNOT BE NAMED by the handle's own vocabulary: the handle
+  # serves ONE name, `node`, and the record it answers is RECONSTRUCTED from the node's own four
+  # fields — never the evaluator's record with fields removed, which would re-acquire every field
+  # a later wrapping adds (`_eval` included). A spawn declares what nodes exist; it does not
+  # compute what they are worth — values are attributes, and the substrate has a place for them
+  # that is not the spawn channel (ADR-0016 ruling 7's "a same-pass relatum cannot be named";
+  # ADR-0033's "cycles across it are inexpressible, never detected"). What the handle does NOT
+  # close is a value the consumer bound into `decls`, which it serves and delivers intact — that
+  # residue is authoring law's (a computed value in a `decls` field is a modelling error), and its
+  # dangerous subset re-enters the demand path and is refused there like any other read.
+  spawnHandle = ev: {
+    node =
+      id:
+      let
+        n = ev.node id;
+      in
+      {
+        id = n.id or id;
+        parent = n.parent or null;
+        decls = n.decls or { };
+        type = n.type or null;
+      };
+  };
+
   # THE ONE CHILD-RESOLUTION BINDING. Every site that asks a node for its child records — the
   # DEMAND sites that resolve a single id, and the ENUMERATION walks that descend into all of
   # them — composes `children` with `derived-children` HERE and nowhere else. It was five inline
@@ -154,13 +283,29 @@ let
           throw "gen-scope: node '${id}' carries kind '${toString hostKind}', which the supplied registry does not carry. A node's kind is a name in a registered vocabulary — register it with `mkKinds`, or build the scope through `buildRoots`, which refuses an unregistered kind at the door.";
       stamped =
         produced:
-        builtins.mapAttrs (
-          childId: record:
-          if record ? type then
-            throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
-          else
-            record // { type = produced; }
-        ) (spawns.${produced} ev id);
+        let
+          builder = spawns.${produced};
+        in
+        builtins.mapAttrs
+          (
+            childId: record:
+            if record ? type then
+              throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
+            else if (record.parent or id) != id then
+              throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
+            else
+              record
+              // {
+                type = produced;
+                parent = id;
+              }
+          )
+          (
+            if isCircularDecl builder then
+              throw "gen-scope: kind '${hostKind}' declares spawn '${produced}' whose builder is a circular declaration. A spawn builder computes the NODE SET, and wrapping it in `circular` makes that set a fixed point of its own iterate — the per-step growth the spawn-read restriction refuses. A spawned node's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function."
+            else
+              builder (spawnHandle ev) id
+          );
     in
     prelude.foldl' (acc: produced: acc // stamped produced) { } (builtins.attrNames spawns);
 
@@ -186,7 +331,9 @@ let
         else
           attributes;
     in
-    if attributes ? ${spawnChannel} then
+    if attributes ? ${selectionChannel} && isCircularDecl attributes.${selectionChannel} then
+      throw "gen-scope.${entry}: `${selectionChannel}` is declared circular, and a child-bearing attribute cannot be. The ground is bootstrap, not growth: a shared round's universe is derived from the materialized node set, the materialization walk reads the child-bearing attributes, and a circular one there would need a round whose bound needs the walk — measured as an uncatchable infinite recursion with this refusal removed. Every other structural attribute may be circular; this one selects the node set the universe is derived from."
+    else if attributes ? ${spawnChannel} then
       throw "gen-scope.${entry}: `attributes` declares `${spawnChannel}` directly. A node expansion is declared on the KIND it expands FROM — `mkKind { spawns = { <produced-kind> = builder; }; }` — so that the produced kind is a registered name below its host's own and the descent is settled before anything fires. Written as a bare attribute the produced kind is whatever the body returns, which is a choice made at firing time and one nothing can check. Move the builder onto its host kind's `spawns`."
     else if kinds == null then
       selected
@@ -232,354 +379,895 @@ let
         requireChildrenAttribute = false;
       };
     in
-    prelude.fix (
-      self:
-      let
-        # The reuse vocabulary: this attribute set minus the structural partition. A structural
-        # name is absent from it, so it contributes nothing to what may be served — there is
-        # nothing for it to intersect with. The attribute set is one set for every node, so the
-        # projection is node-independent here; the per-node signature is the interface's,
-        # because a substrate whose attribute set varies by node must still answer per node.
-        resolutionalNamesAll = structural.resolutionalNames (builtins.attrNames runAttributes);
-        resolutionalAt = _nodeId: resolutionalNamesAll;
-        structuralNamesAll = builtins.filter structural.structural (builtins.attrNames runAttributes);
-
-        # served nodeId = reusable nodeId ∩ resolutional nodeId. A total function, not a check
-        # that can fail.
-        servedAt =
-          nodeId: builtins.filter (a: builtins.elem a resolutionalNamesAll) (decision.reusable nodeId);
-
-        servePrior =
-          nodeId: attrName:
-          if prior == null then
-            throw "gen-scope: the decision reuses '${attrName}' on '${nodeId}' but no prior evaluation was supplied"
-          else
-            prior.get nodeId attrName;
-
-        # One per-attribute evaluator, shared by rootEval + wrapChild._eval.
-        #
-        # THE STRUCTURAL BRANCH FIRES FIRST AND NEVER CONSULTS THE DECISION — by branch order,
-        # not by a check. Structure is always recomputed, so dirty descendants stay reachable
-        # and a labelled reachability relation is never read stale. That the branch tests the
-        # PARTITION rather than two literal names is what extends the law from the child
-        # attributes to the whole `edges-*` family, to the relations the resolver traverses, and
-        # to `includes`.
-        #
-        # THE COST OF THAT, ON THE RECORD: edge sets are never reused, so a warm evaluation
-        # pays edge-set recomputation. That is a cost fact, not a correctness fact, and it is
-        # taken deliberately — an edge set IS the labelled reachability relation, and the
-        # reason structure is always recomputed applies to it exactly. If the recomputation
-        # proves dominant the answer is to make the structural recompute cheaper, never to
-        # serve structure from a prior evaluation.
-        #
-        # The second branch consults the SERVED INTERSECTION, not the decision's raw list. The
-        # structural branch has already fired, so the two agree at this call site — and that is
-        # exactly why the intersection is written here rather than assumed: an agreement that
-        # holds because of a neighbouring branch is a fact about today's branch order, and the
-        # clause this implements is about what may be served, not about which branch ran. Both
-        # halves are real; neither is decoration for the other.
-        evalAttr =
-          nodeId: attrName: fn:
-          if structural.structural attrName then
-            let
-              raw = fn self nodeId;
-            in
-            if structural.childBearing attrName then builtins.mapAttrs (_: wrapChild) raw else raw
-          else if decision.isClean nodeId && builtins.elem attrName (servedAt nodeId) then
-            servePrior nodeId attrName
-          else
-            fn self nodeId;
-        wrapChild =
-          childNode:
-          childNode
-          // {
-            _eval = builtins.mapAttrs (attrName: fn: evalAttr childNode.id attrName fn) runAttributes;
-          };
-        rootEval = prelude.mapAttrs (
-          id: _: builtins.mapAttrs (attrName: fn: evalAttr id attrName fn) runAttributes
-        ) roots;
-
-        # Resolve a node by ID.
-        # Roots: direct lookup. Non-roots: via parseParent or generic walk.
-        resolveNode =
-          id:
-          if roots ? ${id} then
-            roots.${id}
-          else if parseParent != null then
-            let
-              parentId = parseParent id;
-            in
-            if parentId == null then
-              genericResolve id
-            else
-              let
-                all = childRecordsStrict self parentId;
-              in
-              if all ? ${id} then
-                all.${id}
-              else
-                throw "gen-scope: node '${id}' not reachable (parent: ${parentId})"
-          else
-            genericResolve id;
-
-        # Fallback resolution: walk from all roots through children.
-        # O(n) worst case — use parseParent for production scale.
-        genericResolve =
-          id:
+    let
+      # ── THE ROUND-INDEXED ACCESSOR FAMILY ──
+      #
+      # The evaluator is a FUNCTION OF THE ROUND STATE, and `self` is one member of the family:
+      # `self0` is bound once with the round closed and is what `eval` returns; one further
+      # accessor exists per level of an open round (and per nested ascent), dropped when the round
+      # closes. The round state is a parameter of the WHOLE evaluator rather than an argument
+      # threaded at call sites — Söderberg & Hedin's IN_CIRCLE / attr_visited are a global every
+      # attribute evaluation reads (Figure 5 lines 1-2), and the pure transcription of a global is
+      # a parameter of the fix. Route closure is then a property of WHERE the parameter is read:
+      # every value route bottoms out at one application site inside one fix, so a body handed
+      # `self` cannot reach an unguarded evaluator.
+      #
+      # The state's fields, each with its reader:
+      #   open        — the demand rule's case split, the cache lifetimes, the reuse gate
+      #   members     — the shared snapshot of the previous level a member read serves (CASE 2);
+      #                 at the outer seat's re-check it is the earlier level CLAMPED ENTRYWISE to
+      #                 the later one
+      #   qsnap       — the snapshot QUOTIENTS derive against. Normally identical to `members`;
+      #                 at the outer seat's re-check it stays the later level RAW, and the two
+      #                 must stay separable or the seat's neutrality argument is lost
+      #   level       — which level of the open round this accessor serves
+      #   provisional — the ARMING RULE: below the level the round returns, no refusal raised
+      #                 inside a nested ascent fires (the ascent returns its last iterate);
+      #                 refusals arm at the returning level, where the inputs are the ones the
+      #                 program itself produces
+      #   path        — the WALKED PATH: the circular instances whose evaluation is in progress,
+      #                 outermost first, each with the declaration it was entered under. A demand
+      #                 re-entering an instance on it IS the cycle, and the entries between the
+      #                 two occurrences are that cycle exactly — the cycle-closure check reads the
+      #                 declarations on that segment and nothing else
+      #   qcur        — the in-progress iterate of each nested ascent on the path, served to a
+      #                 re-entry whose segment carries no quotient declaration
+      closedRound = {
+        open = false;
+        members = { };
+        qsnap = { };
+        level = 0;
+        provisional = false;
+        path = [ ];
+        qcur = { };
+      };
+      mkAccessor =
+        round:
+        prelude.fix (
+          self:
           let
-            walkChildren =
-              parentId:
-              let
-                all = childRecordsStrict self parentId;
-              in
-              if all ? ${id} then
-                all.${id}
+            # The reuse vocabulary: this attribute set minus the structural partition. A structural
+            # name is absent from it, so it contributes nothing to what may be served — there is
+            # nothing for it to intersect with. The attribute set is one set for every node, so the
+            # projection is node-independent here; the per-node signature is the interface's,
+            # because a substrate whose attribute set varies by node must still answer per node.
+            resolutionalNamesAll = structural.resolutionalNames (builtins.attrNames runAttributes);
+            resolutionalAt = _nodeId: resolutionalNamesAll;
+            structuralNamesAll = builtins.filter structural.structural (builtins.attrNames runAttributes);
+
+            # served nodeId = reusable nodeId ∩ resolutional nodeId. A total function, not a check
+            # that can fail.
+            servedAt =
+              nodeId: builtins.filter (a: builtins.elem a resolutionalNamesAll) (decision.reusable nodeId);
+
+            servePrior =
+              nodeId: attrName:
+              if prior == null then
+                throw "gen-scope: the decision reuses '${attrName}' on '${nodeId}' but no prior evaluation was supplied"
               else
-                prelude.foldl' (acc: childId: if acc != null then acc else walkChildren childId) null (
-                  builtins.attrNames all
+                prior.get nodeId attrName;
+
+            # One per-attribute evaluator, shared by rootEval + wrapChild._eval.
+            #
+            # THE STRUCTURAL BRANCH FIRES FIRST AND NEVER CONSULTS THE DECISION — by branch order,
+            # not by a check. Structure is always recomputed, so dirty descendants stay reachable
+            # and a labelled reachability relation is never read stale. That the branch tests the
+            # PARTITION rather than two literal names is what extends the law from the child
+            # attributes to the whole `edges-*` family, to the relations the resolver traverses, and
+            # to `includes`.
+            #
+            # THE COST OF THAT, ON THE RECORD: edge sets are never reused, so a warm evaluation
+            # pays edge-set recomputation. That is a cost fact, not a correctness fact, and it is
+            # taken deliberately — an edge set IS the labelled reachability relation, and the
+            # reason structure is always recomputed applies to it exactly. If the recomputation
+            # proves dominant the answer is to make the structural recompute cheaper, never to
+            # serve structure from a prior evaluation.
+            #
+            # The second branch consults the SERVED INTERSECTION, not the decision's raw list. The
+            # structural branch has already fired, so the two agree at this call site — and that is
+            # exactly why the intersection is written here rather than assumed: an agreement that
+            # holds because of a neighbouring branch is a fact about today's branch order, and the
+            # clause this implements is about what may be served, not about which branch ran. Both
+            # halves are real; neither is decoration for the other.
+            # The partition test decides what may be REUSED; the declaration kind decides HOW A VALUE
+            # IS COMPUTED. They are different questions about different things, so the branch that
+            # answers the second sits inside the act of computing — `applyAttr`, downstream of the
+            # partition on BOTH arms — and the structural always-recompute law is untouched: a
+            # circular structural attribute takes the structural arm, is always recomputed, and
+            # recomputing it is running or joining the round. The reuse branch is additionally gated
+            # on the round being closed: a prior's settled value served inside a round would replace
+            # an in-flight approximation with a value from a different world.
+            evalAttr =
+              nodeId: attrName: fn:
+              if structural.structural attrName then
+                let
+                  raw = applyAttr nodeId attrName fn;
+                in
+                if structural.childBearing attrName then builtins.mapAttrs (_: wrapChild) raw else raw
+              else if !round.open && decision.isClean nodeId && builtins.elem attrName (servedAt nodeId) then
+                servePrior nodeId attrName
+              else
+                applyAttr nodeId attrName fn;
+
+            # The ONE site at which a member of `runAttributes` is applied, and the total
+            # classification over declaration shapes: a function is an ordinary attribute, a
+            # kind-tagged record is a circular declaration, and anything else is refused by name —
+            # without the third arm a malformed declaration reaches Nix as "attempt to call something
+            # which is not a function", an abort carrying no name of ours.
+            applyAttr =
+              nodeId: attrName: fn:
+              if isCircularDecl fn then
+                circularDemand nodeId attrName fn
+              else if builtins.isAttrs fn then
+                throw "gen-scope: attribute '${attrName}' on '${nodeId}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
+              else
+                fn self nodeId;
+
+            # ── THE DEMAND RULE (three cases), THE ADMISSION, AND THE SHARED ROUND ──
+            #
+            # A demand on a circular instance from OUTSIDE any round opens one (CASE 1) — the shared
+            # round when the universe holds more than one eligible instance, the degenerate own-value
+            # ascent when it holds exactly one, the per-instance nested ascent when the declaration
+            # says quotient = true (a coarsened order's convergence test is an own-value comparison,
+            # so a quotient cannot be a simultaneous member). A demand from INSIDE an open round on a
+            # fresh member reads the shared snapshot of the previous level (CASE 2). A demand
+            # re-entering an instance already on the walked path IS the cycle (CASE 3): the entries
+            # between the two occurrences are that cycle exactly, and admission is asked of it —
+            # a quotient declaration on the segment refuses BY NAME; otherwise the re-entry is served
+            # the in-progress iterate.
+            instanceKey = nodeId: attrName: "${nodeId}.${attrName}";
+
+            circularDemand =
+              nodeId: attrName: decl:
+              let
+                key = instanceKey nodeId attrName;
+                declExtras = builtins.filter (
+                  n:
+                  !(builtins.elem n [
+                    "carrier"
+                    "kind"
+                    "step"
+                  ])
+                ) (builtins.attrNames decl);
+                defect = carrierDefect (decl.carrier or null);
+                onPath = builtins.any (e: e.key == key) round.path;
+              in
+              if declExtras != [ ] then
+                throw "gen-scope: circular attribute on '${nodeId}' declares ${builtins.toJSON declExtras} beyond the declaration's three fields — `circular { carrier = ...; } step` returns exactly { kind, carrier, step }, and the field set is capped: a term beyond it is a return to the design sitting rather than a refinement"
+              else if defect != null then
+                throw "gen-scope: circular attribute on '${nodeId}' ${defect}"
+              else if onPath then
+                closeCycle decl key
+              else if round.open && !decl.carrier.quotient then
+                # CASE 2, member: one step against the previous level, served from the round's shared
+                # snapshot. A member is never pushed on the path — its reads are level-map lookups,
+                # and the cycle it closes is the round itself.
+                round.members.${key}
+                  or (throw "gen-scope: circular instance '${key}' is demanded inside an open round whose universe does not carry it — its node is outside the evaluated node set the round was derived from")
+              else if decl.carrier.quotient then
+                nestedAscent nodeId decl key
+              else
+                openRound nodeId decl key;
+
+            # CASE 3 — the cycle-closure check, over the walked path's segment. Complete for the
+            # property despite quantifying only over the path, because of the strategy split: every
+            # quotient = true instance evaluated inside an open round is PUSHED (a quotient
+            # declaration selects the nested ascent), so at any closure every quotient participating
+            # in the cycle is on the segment. A demand that closes no cycle is checked against
+            # nothing.
+            closeCycle =
+              decl: key:
+              let
+                tailFrom =
+                  entries:
+                  if entries == [ ] then
+                    [ ]
+                  else if (builtins.head entries).key == key then
+                    entries
+                  else
+                    tailFrom (builtins.tail entries);
+                seg = tailFrom round.path;
+                segKeys = map (e: e.key) seg;
+                declaring = map (e: e.key) (builtins.filter (e: e.quotient) seg);
+              in
+              if declaring != [ ] then
+                throw "gen-scope: circular demand re-entered '${key}': the walked path closes the cycle ${builtins.toJSON segKeys}, and quotient declaration(s) ${builtins.toJSON declaring} are on it. A quotient carrier cannot be driven in a shared round — its convergence is an own-value comparison over classes, which a simultaneous ascent cannot answer — so the cycle is refused rather than iterated. Declare an antisymmetric order for the instances that read each other, or keep this instance out of the other's cycle."
+              else
+                round.qcur.${key} or decl.carrier.bottom;
+
+            # The per-instance ascent — the landed `circular` loop, selected by a quotient
+            # declaration (from outside a round: today's semantics at every arity) and by every
+            # nested derivation inside an open round, where the LIFETIME RULE re-derives it from ⊥ at
+            # every level: its inputs there are the enclosing round's intermediates, and are meant to
+            # be — the primary's rule for an intermediate is DO NOT CACHE, not REFUSE. Below the
+            # level an open round returns the ascent is PROVISIONAL (the arming rule): a refusal
+            # raised inside it does not fire, and the ascent returns its LAST iterate — the value
+            # before the offending step, the only one the chain invariant still covers.
+            nestedAscent =
+              nodeId: decl: key:
+              let
+                inherit (decl.carrier) leq height;
+                entry = {
+                  inherit key;
+                  quotient = true;
+                };
+                continue =
+                  n: prev: next:
+                  let
+                    ascends = leq prev next;
+                  in
+                  if ascends && leq next prev then
+                    next
+                  else if !ascends then
+                    if round.provisional then
+                      prev
+                    else
+                      throw "gen-scope: circular attribute on '${nodeId}' took a step its declared order does not ascend, at iteration ${toString n} — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed"
+                  else if n >= height then
+                    if round.provisional then
+                      next
+                    else
+                      throw "gen-scope: circular attribute on '${nodeId}' is still ascending after ${toString (n + 1)} steps, so the declared height of ${toString height} is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget"
+                  else
+                    go (n + 1) next;
+                go =
+                  n: prev:
+                  let
+                    acc = mkAccessor (
+                      round
+                      // {
+                        members = round.qsnap;
+                        path = round.path ++ [ entry ];
+                        qcur = round.qcur // {
+                          ${key} = prev;
+                        };
+                      }
+                    );
+                  in
+                  if round.provisional then
+                    let
+                      attempt = builtins.tryEval (decl.step acc nodeId prev);
+                    in
+                    if attempt.success then continue n prev attempt.value else prev
+                  else
+                    continue n prev (decl.step acc nodeId prev);
+              in
+              go 0 decl.carrier.bottom;
+
+            # CASE 1 — a demand from outside any round on a quotient = false instance opens one.
+            # The universe is the evaluated node set × the circular attribute names that could be
+            # shared-round members (well-formed four-term carrier AND quotient = false), computed
+            # once per round; the budget is the sum of the declared heights over it, and the derived
+            # bound is Σ hᵢ + 1 — the height of the product order, a REFUSAL THRESHOLD and never a
+            # stopping rule. universe ⊇ M at every level, so the budget is sound without knowing the
+            # membership: a larger budget delays a refusal and can never cause one.
+            openRound =
+              nodeId: decl: key:
+              let
+                eligibleNames = builtins.filter (an: memberEligible runAttributes.${an}) (
+                  builtins.attrNames runAttributes
                 );
-            found = prelude.foldl' (acc: rootId: if acc != null then acc else walkChildren rootId) null (
-              builtins.attrNames roots
-            );
-          in
-          if found != null then found else throw "gen-scope: node '${id}' not reachable from roots";
-
-        # The materialization walk itself, before it is collapsed into an attrset. Both
-        # `allNodes` and `allNodeIds` are projections of this ONE list, so a consumer that
-        # wants the node set AND its order pays for a single walk.
-        walkEntries = prelude.concatMap self._walkFrom checked.nodeOrder;
-      in
-      {
-        node = resolveNode;
-
-        get =
-          id: attrName:
-          builtins.addErrorContext "evaluating '${attrName}' on '${id}'" (
-            if !(runAttributes ? ${attrName}) then
-              throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
-            else if rootEval ? ${id} then
-              rootEval.${id}.${attrName}
-            else
-              let
-                n = self.node id;
+                universe = prelude.concatMap (
+                  nid:
+                  map (an: {
+                    key = instanceKey nid an;
+                    inherit nid an;
+                    inherit (runAttributes.${an}) carrier step;
+                  }) eligibleNames
+                ) self.allNodeIds;
               in
-              if n ? _eval then n._eval.${attrName} else runAttributes.${attrName} self id # fallback (shouldn't happen)
-          );
+              if !(builtins.any (i: i.key == key) universe) then
+                throw "gen-scope: circular instance '${key}' is not in the round's universe — its node is outside the evaluated node set the universe is derived from"
+              else if builtins.length universe == 1 then
+                degenerateAscent nodeId decl key
+              else
+                runSharedRound {
+                  inherit universe;
+                  targetKey = key;
+                };
 
-        # --- Tier 2: Materialization (forces evaluation, memoized) ---
+            # The degenerate shortcut: a universe of ONE eligible instance is the k = 1 degeneration
+            # of the composed rule, and the landed single-attribute behaviour must not move — the
+            # own-value exit, the `!ascends` refusal at the first offending step and the derived
+            # `h + 1` bound, each with its landed text byte-identical.
+            degenerateAscent =
+              nodeId: decl: key:
+              let
+                inherit (decl.carrier) leq height;
+                go =
+                  n: prev:
+                  let
+                    acc = mkAccessor (
+                      round
+                      // {
+                        open = true;
+                        members = {
+                          ${key} = prev;
+                        };
+                        qsnap = {
+                          ${key} = prev;
+                        };
+                        level = n + 1;
+                        provisional = false;
+                      }
+                    );
+                    next = decl.step acc nodeId prev;
+                    ascends = leq prev next;
+                  in
+                  if ascends && leq next prev then
+                    next
+                  else if !ascends then
+                    throw "gen-scope: circular attribute on '${nodeId}' took a step its declared order does not ascend, at iteration ${toString n} — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed"
+                  else if n >= height then
+                    throw "gen-scope: circular attribute on '${nodeId}' is still ascending after ${toString (n + 1)} steps, so the declared height of ${toString height} is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget"
+                  else
+                    go (n + 1) next;
+              in
+              go 0 decl.carrier.bottom;
 
-        # Internal: walk children/derived-children from a node.
-        _walkFrom =
-          id:
-          let
-            all = childRecordsLenient self id;
-          in
-          [
-            {
-              name = id;
-              value = self.node id;
-            }
-          ]
-          ++ prelude.concatMap self._walkFrom (builtins.attrNames all);
+            # ── THE SHARED ROUND ──
+            #
+            # A level is a lazy map over the universe whose entry k is k's step under the previous
+            # level's accessor; level 0 pins every member at ITS OWN declared bottom. Nix forces only
+            # what is demanded, so a level costs exactly the instances the demand transitively forces
+            # and NOTHING UNDEMANDED IS EVALUATED — which matters more than economy: forcing an
+            # undemanded instance would evaluate a circular attribute at a node its author never
+            # meant it for, an error rather than a wasted step. "How a member joins" is Nix's own
+            # laziness; there is no member list, no join, no widen, no eq and no maxIter.
+            #
+            # Two seats ride each demanded entry, and they refute DIFFERENT things:
+            #
+            #   THE HEIGHT SEAT refutes a DECLARATION. The witness is the instance's LONGEST STRICTLY
+            #   ASCENDING RUN — extended by a strict ascent, left alone by a quiet level, RESET BY A
+            #   DESCENT — because k consecutive strict ascents are a chain of k edges in the
+            #   instance's own carrier whatever produced the inputs, where a mere tally of ascents
+            #   composes no chain. It needs no membership and is scoped by nothing.
+            #
+            #   THE OUTER SEAT refutes a member's STEP, and only where it can construct a pair it has
+            #   ordered: at a transition where the member itself descended, the member's own step is
+            #   re-applied to the earlier level's member map CLAMPED ENTRYWISE to the later one —
+            #   entrywise, inside each entry's own thunk, so an entry the step never demands is never
+            #   compared — with quotients derived against the LATER snapshot raw (the same derivation
+            #   at both accessors, so a quotient coordinate contributes nothing to the verdict). If
+            #   that application still does not ascend to the value under test, the step is refuted
+            #   outright; where it cannot be established — it raises, or a refusal trips inside the
+            #   hybrid — the seat is PROVISIONAL and nothing is refused, because a claim about the
+            #   program may be raised only at an input the program produces.
+            #
+            # At the bound the round asks whether ITS DEMAND CONE has stopped moving RAW: the
+            # settlement walk re-derives an in-cone member's final value with every member read
+            # routed back through the walk, so the compared set is READ-CLOSED BY CONSTRUCTION and
+            # nothing undemanded is ever forced. A cone stationary across two consecutive levels IS a
+            # fixed point of the round's deterministic step on everything the answer is computed
+            # from — no counting precondition — and any member still moving refuses BY NAME.
+            runSharedRound =
+              { universe, targetKey }:
+              let
+                index = builtins.listToAttrs (
+                  map (i: {
+                    name = i.key;
+                    value = i;
+                  }) universe
+                );
+                budget = builtins.foldl' (a: i: a + i.carrier.height) 0 universe;
+                bound = budget + 1;
+                bottoms = builtins.listToAttrs (
+                  map (i: {
+                    name = i.key;
+                    value = i.carrier.bottom;
+                  }) universe
+                );
 
-        # Full tree materialization. Forces all children attributes recursively.
-        # O(n) — each node computed once. Use for gen-graph global ops, diagrams.
-        # An attrset is a SET: `attrNames` on it answers in bytewise codepoint order, and the
-        # order the walk found the nodes in is not recoverable from this value. Consumers
-        # that need that order read `allNodeIds`.
-        allNodes = prelude.listToAttrs walkEntries;
+                levelsRaw = prelude.genList (
+                  j:
+                  if j == 0 then
+                    bottoms
+                  else
+                    let
+                      prev = builtins.elemAt levelsChecked (j - 1);
+                      acc = mkAccessor (
+                        round
+                        // {
+                          open = true;
+                          members = prev;
+                          qsnap = prev;
+                          level = j;
+                          provisional = j < bound;
+                        }
+                      );
+                    in
+                    builtins.listToAttrs (
+                      map (i: {
+                        name = i.key;
+                        value = i.step acc i.nid (prev.${i.key});
+                      }) universe
+                    )
+                ) (bound + 1);
 
-        # The SAME node set as `allNodes`, as an ORDERED list of ids in MATERIALIZATION
-        # order: root order, then pre-order depth-first through `children` /
-        # `derived-children`, so a subtree is contiguous and a parent precedes its
-        # descendants. This is the survey order a gather or a reverse reference attribute is
-        # defined over — contributions combine in a traversal order of the tree, not in a
-        # codepoint order of node names. The rule is this library's own and is argued at
-        # `lib/resolve.nix:queryReverse` from the duality with `queryAll`; the citation it
-        # once carried ("Hedin & Magnusson 2003 inter-type declarations; Sloane 2010 §7
-        # collection attributes") named nothing in either paper — see that comment for the
-        # measurements.
-        #
-        # Two tie-breaks, declared because a declared order is the whole point:
-        #
-        # 1. Root and sibling ties break on `attrNames`, which is BYTEWISE CODEPOINT order,
-        #    not dictionary order — `attrNames { z; A; a; _b; "1"; }` is
-        #    `[ "1" "A" "_b" "a" "z" ]`, uppercase before underscore before lowercase. This
-        #    is NOT because an attrset "carries no order". The algebraic graph layer carries
-        #    a declaration-ordered vertex LIST (`lib/graph.nix`, where `overlay` and
-        #    `connect` concatenate), and `lib/build-nodes.nix` collapses that list through
-        #    `listToAttrs` and back out through `attrNames` — the same construction this
-        #    walk exists to stop doing — so `eval` receives `roots` already set-shaped and
-        #    the declared order is gone before anything here runs. The codepoint tie-break
-        #    is that collapse's residue. Recovering the declared order is a change to the
-        #    constructor, not to this walk.
-        #
-        # 2. A `derived-children` node INTERLEAVES with its `children` siblings rather than
-        #    following them: `_walkFrom` descends what `childRecordsOf` returns, and that is the
-        #    two halves merged into ONE attrset, so a derived id sorts into the sibling run under
-        #    the same codepoint rule and nothing in this list marks it as derived.
-        #
-        # Repeats are dropped FIRST-OCCURRENCE-WINS, the same rule `listToAttrs` applies to
-        # `allNodes`, so `allNodeIds` is exactly `attrNames allNodes` as a set. A node
-        # reached both as a root and as another root's child is common (`buildNodes` makes
-        # every vertex a root), so the walk really does repeat. The dedup is index-based —
-        # one `listToAttrs` recording first positions, one pass reading them back — because
-        # a fold carrying a `seen` attrset copies that attrset per node (quadratic) and
-        # recurses once per node (Nix's call-depth ceiling), and this is an O(n) surface.
-        allNodeIds =
-          let
-            names = map (e: e.name) walkEntries;
-            n = builtins.length names;
-            firstAt = prelude.listToAttrs (
-              prelude.genList (i: {
-                name = builtins.elemAt names i;
-                value = i;
-              }) n
-            );
-          in
-          prelude.concatMap (
-            i:
-            let
-              nodeId = builtins.elemAt names i;
-            in
-            prelude.optional (firstAt.${nodeId} == i) nodeId
-          ) (prelude.genList (i: i) n);
+                levelsChecked = prelude.genList (
+                  j:
+                  if j == 0 then
+                    bottoms
+                  else
+                    builtins.mapAttrs (key: v: builtins.seq (checkAt j key) v) (builtins.elemAt levelsRaw j)
+                ) (bound + 1);
 
-        # Selective materialization: forces only nodes matching a predicate.
-        # Predicate receives structural node data. Descends into ALL children
-        # but only INCLUDES matching nodes in the result.
-        # O(n) walk but result size ≤ matching nodes.
-        allNodesWhere =
-          pred:
-          let
-            walkFrom =
+                # The run counter, per member per level, off the raw trajectory.
+                runs = prelude.genList (
+                  j:
+                  if j == 0 then
+                    builtins.mapAttrs (_: _: 0) bottoms
+                  else
+                    let
+                      rawJ = builtins.elemAt levelsRaw j;
+                      rawP = builtins.elemAt levelsRaw (j - 1);
+                      runsP = builtins.elemAt runs (j - 1);
+                    in
+                    builtins.mapAttrs (
+                      key: b:
+                      let
+                        inherit (index.${key}.carrier) leq;
+                        a = rawP.${key};
+                      in
+                      if leq a b && !leq b a then
+                        runsP.${key} + 1
+                      else if !leq a b then
+                        0
+                      else
+                        runsP.${key}
+                    ) rawJ
+                ) (bound + 1);
+
+                checkAt = j: key: builtins.seq (heightCheck j key) (outerCheck j key);
+
+                heightCheck =
+                  j: key:
+                  let
+                    i = index.${key};
+                    r = (builtins.elemAt runs j).${key};
+                  in
+                  if r > i.carrier.height then
+                    let
+                      blame = blameAt j i;
+                      base = "gen-scope: circular attribute on '${i.nid}' is still ascending after ${toString r} steps, so the declared height of ${toString i.carrier.height} is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
+                    in
+                    throw (
+                      if blame == [ ] then
+                        base
+                      else
+                        base + " (the still-moving members its step reads: ${builtins.toJSON blame})"
+                    )
+                  else
+                    true;
+
+                # THE FAILURE-PATH PASS — run only when refusing, so its cost lands on the error path
+                # alone. It poisons one universe instance at a time and reads the answer off whether
+                # the failing step survives: a LOWER bound on the read set, which is honest for a
+                # blame set (under-approximation is a shorter list, and the text never reads as a
+                # completeness claim). Where the pass cannot observe — anything in it dies — the
+                # refusal declares itself partial by naming no blame set at all.
+                blameAt =
+                  j: i:
+                  let
+                    prevRaw = builtins.elemAt levelsRaw (j - 1);
+                    curRaw = builtins.elemAt levelsRaw j;
+                    others = builtins.filter (k2: k2 != i.key) (builtins.attrNames index);
+                    reads =
+                      k2:
+                      let
+                        poisoned = prevRaw // {
+                          ${k2} = throw "gen-scope: failure-path poison";
+                        };
+                        accP = mkAccessor (
+                          round
+                          // {
+                            open = true;
+                            members = poisoned;
+                            qsnap = poisoned;
+                            level = j;
+                            provisional = false;
+                          }
+                        );
+                      in
+                      !(builtins.tryEval (builtins.seq (i.step accP i.nid (poisoned.${i.key})) true)).success;
+                    moving = k2: prevRaw.${k2} != curRaw.${k2};
+                    blame = builtins.filter (k2: reads k2 && moving k2) others;
+                    attempt = builtins.tryEval (builtins.deepSeq blame blame);
+                  in
+                  if attempt.success then attempt.value else [ ];
+
+                outerCheck =
+                  j: key:
+                  if j < 2 then
+                    true
+                  else
+                    let
+                      i = index.${key};
+                      inherit (i.carrier) leq;
+                      vk = (builtins.elemAt levelsRaw j).${key};
+                      p1 = builtins.elemAt levelsRaw (j - 1);
+                      p2 = builtins.elemAt levelsRaw (j - 2);
+                      est = builtins.tryEval (leq p1.${key} vk);
+                    in
+                    if !est.success || est.value then
+                      true
+                    else
+                      let
+                        star = builtins.mapAttrs (
+                          k2: _:
+                          let
+                            a = p2.${k2};
+                            b = p1.${k2};
+                          in
+                          if index.${k2}.carrier.leq a b then a else b
+                        ) bottoms;
+                        accStar = mkAccessor (
+                          round
+                          // {
+                            open = true;
+                            members = star;
+                            qsnap = p1;
+                            level = j;
+                            provisional = false;
+                          }
+                        );
+                        attempt = builtins.tryEval (i.step accStar i.nid (star.${key}));
+                      in
+                      if !attempt.success then
+                        true
+                      else if !(leq attempt.value vk) then
+                        throw "gen-scope: circular attribute on '${i.nid}' took a step its declared order does not ascend, at iteration ${toString (j - 1)} — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed"
+                      else
+                        true;
+
+                # The demand pass: the round's own demand is the target's entry at every level, in
+                # order, as a bounded iteration under the shared forcing discipline — never a
+                # self-applying recursion, whose frame cost would lose the catchable blame at exactly
+                # the depth the blame exists for.
+                demandPass = prelude.iterateBounded forceFields (
+                  st: builtins.seq (builtins.elemAt levelsChecked st.j).${targetKey} { j = st.j + 1; }
+                ) { j = 1; } (prelude.genList (x: x) bound);
+
+                # The settlement walk at the bound.
+                priorRaw = builtins.elemAt levelsRaw (bound - 1);
+                settleWalk =
+                  visited: key:
+                  let
+                    i = index.${key};
+                    accS = mkAccessor (
+                      round
+                      // {
+                        open = true;
+                        members = builtins.mapAttrs (
+                          k2: v: if builtins.elem k2 visited then v else builtins.seq (settleWalk (visited ++ [ k2 ]) k2) v
+                        ) priorRaw;
+                        qsnap = priorRaw;
+                        level = bound;
+                        provisional = false;
+                      }
+                    );
+                    b = i.step accS i.nid (priorRaw.${key});
+                  in
+                  if b != priorRaw.${key} then
+                    throw "gen-scope: a shared circular round is still moving at its derived bound: instance '${key}' takes a step across levels ${toString (bound - 1)} and ${toString bound} that its declared order cannot separate from movement, against the composed bound ${toString bound} (the sum of the declared heights over the round's universe, plus one). The bound is a theorem over the declared carriers, so what this refutes is a declaration — a carrier said `quotient = false` of an order too coarse to settle the states it serves. Declare a finer carrier."
+                  else
+                    true;
+              in
+              builtins.seq (demandPass) (
+                builtins.seq (settleWalk [ targetKey ] targetKey) (builtins.elemAt levelsRaw bound).${targetKey}
+              );
+
+            wrapChild =
+              childNode:
+              childNode
+              // {
+                # THE LIFETIME RULE: a round's memo is reachable only through the round's own
+                # accessor. While a round is open the co-located cache refuses by name rather than
+                # serving — the alternative measured is a silent wrong answer from a snapshot the
+                # round has left behind; `self.get` on the same instance is unaffected and serves the
+                # round's current level.
+                _eval =
+                  if round.open then
+                    builtins.mapAttrs (
+                      attrName: _:
+                      throw "gen-scope: the `_eval` cache for '${attrName}' on '${childNode.id or "<child>"}' is not readable inside an open circular round — a round's memo lives on the round's own accessor, and a value cached here would be an approximation wearing a final value's clothes. Read through `self.get`, which serves the round's current level."
+                    ) runAttributes
+                  else
+                    builtins.mapAttrs (attrName: fn: evalAttr childNode.id attrName fn) runAttributes;
+              };
+            rootEval = prelude.mapAttrs (
+              id: _: builtins.mapAttrs (attrName: fn: evalAttr id attrName fn) runAttributes
+            ) roots;
+
+            # Resolve a node by ID.
+            # Roots: direct lookup. Non-roots: via parseParent or generic walk.
+            resolveNode =
+              id:
+              if roots ? ${id} then
+                roots.${id}
+              else if parseParent != null then
+                let
+                  parentId = parseParent id;
+                in
+                if parentId == null then
+                  genericResolve id
+                else
+                  let
+                    all = childRecordsStrict self parentId;
+                  in
+                  if all ? ${id} then
+                    all.${id}
+                  else
+                    throw "gen-scope: node '${id}' not reachable (parent: ${parentId})"
+              else
+                genericResolve id;
+
+            # Fallback resolution: walk from all roots through children.
+            # O(n) worst case — use parseParent for production scale.
+            genericResolve =
               id:
               let
-                node = self.node id;
-                all = childRecordsLenient self id;
-                childResults = prelude.concatMap walkFrom (builtins.attrNames all);
+                walkChildren =
+                  parentId:
+                  let
+                    all = childRecordsStrict self parentId;
+                  in
+                  if all ? ${id} then
+                    all.${id}
+                  else
+                    prelude.foldl' (acc: childId: if acc != null then acc else walkChildren childId) null (
+                      builtins.attrNames all
+                    );
+                found = prelude.foldl' (acc: rootId: if acc != null then acc else walkChildren rootId) null (
+                  builtins.attrNames roots
+                );
               in
-              (
-                if pred node then
-                  [
-                    {
-                      name = id;
-                      value = node;
-                    }
-                  ]
-                else
-                  [ ]
-              )
-              ++ childResults;
+              if found != null then found else throw "gen-scope: node '${id}' not reachable from roots";
+
+            # The materialization walk itself, before it is collapsed into an attrset. Both
+            # `allNodes` and `allNodeIds` are projections of this ONE list, so a consumer that
+            # wants the node set AND its order pays for a single walk.
+            walkEntries = prelude.concatMap self._walkFrom checked.nodeOrder;
           in
-          prelude.listToAttrs (prelude.concatMap walkFrom (builtins.attrNames roots));
+          {
+            node = resolveNode;
 
-        # Subtree materialization: forces only the subtree rooted at a given node.
-        # O(subtree size). Does not touch nodes outside the subtree.
-        subtreeOf = rootId: prelude.listToAttrs (self._walkFrom rootId);
+            get =
+              id: attrName:
+              builtins.addErrorContext "evaluating '${attrName}' on '${id}'" (
+                if !(runAttributes ? ${attrName}) then
+                  throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
+                else if rootEval ? ${id} then
+                  rootEval.${id}.${attrName}
+                else
+                  let
+                    n = self.node id;
+                  in
+                  # While a round is open the co-located cache is not consulted — its fields refuse
+                  # by construction (the lifetime rule at `wrapChild`) — and the demand routes
+                  # through the guarded per-attribute evaluator instead.
+                  if !round.open && n ? _eval then
+                    n._eval.${attrName}
+                  else
+                    evalAttr id attrName runAttributes.${attrName}
+              );
 
-        # Type-targeted materialization: all nodes of a given type.
-        # Walks full tree but only includes matching types.
-        # O(n) walk, result size = nodes of that type.
-        nodesOfType = type: self.allNodesWhere (node: node.type == type);
+            # --- Tier 2: Materialization (forces evaluation, memoized) ---
 
-        # --- The plane interface ---
+            # Internal: walk children/derived-children from a node.
+            _walkFrom =
+              id:
+              let
+                all = childRecordsLenient self id;
+              in
+              [
+                {
+                  name = id;
+                  value = self.node id;
+                }
+              ]
+              ++ prelude.concatMap self._walkFrom (builtins.attrNames all);
 
-        # What an incremental plane reads this evaluation through. It is handed the FACADE,
-        # never `self`: the materialization surfaces, the node accessor and the combinators are
-        # absent from the RECORD, so a read outside those three names cannot be written against
-        # this value at all.
-        #
-        # ★ That closes the KEY SET, not reachability. `get id "children"` answers node records
-        # carrying `decls` / `parent` and the co-located `_eval` cache, so a caller holding one
-        # can evaluate through `_eval` without passing through `get`; and `get` takes any
-        # string, so a dynamically constructed name is issuable whether or not the combinators
-        # travel. Measured, and pinned by the facade cells. What survives that residual is the
-        # property reuse rests on — the always-recompute branch below fires before the decision
-        # is consulted, so no structural value is ever served from a prior evaluation.
-        facade = interface.mkFacade {
-          get = self.get;
-          nodeIds = self.allNodeIds;
-          resolutional = resolutionalAt;
-        };
+            # Full tree materialization. Forces all children attributes recursively.
+            # O(n) — each node computed once. Use for gen-graph global ops, diagrams.
+            # An attrset is a SET: `attrNames` on it answers in bytewise codepoint order, and the
+            # order the walk found the nodes in is not recoverable from this value. Consumers
+            # that need that order read `allNodeIds`.
+            allNodes = prelude.listToAttrs walkEntries;
 
-        # The reuse vocabulary, per node, and the subset of a decision's request that is
-        # actually served. Both are the same projection the facade carries, exposed so the
-        # intersection is inspectable rather than only inferable from behaviour.
-        resolutional = resolutionalAt;
-        served = servedAt;
+            # The SAME node set as `allNodes`, as an ORDERED list of ids in MATERIALIZATION
+            # order: root order, then pre-order depth-first through `children` /
+            # `derived-children`, so a subtree is contiguous and a parent precedes its
+            # descendants. This is the survey order a gather or a reverse reference attribute is
+            # defined over — contributions combine in a traversal order of the tree, not in a
+            # codepoint order of node names. The rule is this library's own and is argued at
+            # `lib/resolve.nix:queryReverse` from the duality with `queryAll`; the citation it
+            # once carried ("Hedin & Magnusson 2003 inter-type declarations; Sloane 2010 §7
+            # collection attributes") named nothing in either paper — see that comment for the
+            # measurements.
+            #
+            # Two tie-breaks, declared because a declared order is the whole point:
+            #
+            # 1. Root and sibling ties break on `attrNames`, which is BYTEWISE CODEPOINT order,
+            #    not dictionary order — `attrNames { z; A; a; _b; "1"; }` is
+            #    `[ "1" "A" "_b" "a" "z" ]`, uppercase before underscore before lowercase. This
+            #    is NOT because an attrset "carries no order". The algebraic graph layer carries
+            #    a declaration-ordered vertex LIST (`lib/graph.nix`, where `overlay` and
+            #    `connect` concatenate), and `lib/build-nodes.nix` collapses that list through
+            #    `listToAttrs` and back out through `attrNames` — the same construction this
+            #    walk exists to stop doing — so `eval` receives `roots` already set-shaped and
+            #    the declared order is gone before anything here runs. The codepoint tie-break
+            #    is that collapse's residue. Recovering the declared order is a change to the
+            #    constructor, not to this walk.
+            #
+            # 2. A `derived-children` node INTERLEAVES with its `children` siblings rather than
+            #    following them: `_walkFrom` descends what `childRecordsOf` returns, and that is the
+            #    two halves merged into ONE attrset, so a derived id sorts into the sibling run under
+            #    the same codepoint rule and nothing in this list marks it as derived.
+            #
+            # Repeats are dropped FIRST-OCCURRENCE-WINS, the same rule `listToAttrs` applies to
+            # `allNodes`, so `allNodeIds` is exactly `attrNames allNodes` as a set. A node
+            # reached both as a root and as another root's child is common (`buildNodes` makes
+            # every vertex a root), so the walk really does repeat. The dedup is index-based —
+            # one `listToAttrs` recording first positions, one pass reading them back — because
+            # a fold carrying a `seen` attrset copies that attrset per node (quadratic) and
+            # recurses once per node (Nix's call-depth ceiling), and this is an O(n) surface.
+            allNodeIds =
+              let
+                names = map (e: e.name) walkEntries;
+                n = builtins.length names;
+                firstAt = prelude.listToAttrs (
+                  prelude.genList (i: {
+                    name = builtins.elemAt names i;
+                    value = i;
+                  }) n
+                );
+              in
+              prelude.concatMap (
+                i:
+                let
+                  nodeId = builtins.elemAt names i;
+                in
+                prelude.optional (firstAt.${nodeId} == i) nodeId
+              ) (prelude.genList (i: i) n);
 
-        # THE STRUCTURAL PARTITION OF THE ATTRIBUTE SET, PER NODE — the children /
-        # derived-children / edges-* / includes attributes, materialized by the always-recompute
-        # branch, readable WITHOUT forcing any resolutional attribute. Reads derive from it
-        # statically. It is derived rather than declared: the substrate constructed these
-        # attributes, so no impossibility argument is owed for them.
-        #
-        # It is an attribute-name-indexed RECORD and not a relation — `id -> {name -> value}`,
-        # which is not even the arity of an edge set. Naming it for the attributes it partitions
-        # is what keeps it distinct from the node-level dependency relation the seal publishes.
-        structuralAttributes = id: prelude.genAttrs structuralNamesAll (name: self.get id name);
+            # Selective materialization: forces only nodes matching a predicate.
+            # Predicate receives structural node data. Descends into ALL children
+            # but only INCLUDES matching nodes in the result.
+            # O(n) walk but result size ≤ matching nodes.
+            allNodesWhere =
+              pred:
+              let
+                walkFrom =
+                  id:
+                  let
+                    node = self.node id;
+                    all = childRecordsLenient self id;
+                    childResults = prelude.concatMap walkFrom (builtins.attrNames all);
+                  in
+                  (
+                    if pred node then
+                      [
+                        {
+                          name = id;
+                          value = node;
+                        }
+                      ]
+                    else
+                      [ ]
+                  )
+                  ++ childResults;
+              in
+              prelude.listToAttrs (prelude.concatMap walkFrom (builtins.attrNames roots));
 
-        # THE SAME PARTITION AS A RELATION — `id -> [id]`, which is the arity the record above is
-        # not. The projection itself is gen-graph's: it is edge vocabulary, it belongs beside the
-        # library's other endpoint extractors, and keeping it there is what stops this evaluator
-        # from growing a second copy of a contract the graph library already states.
-        #
-        # WHAT THIS SIDE SUPPLIES IS THE TWO FACTS ONLY THE SUBSTRATE HOLDS, and it supplies them
-        # as VALUES rather than as an import in the other direction. `childBearing` is taken from
-        # the same binding `evalAttr` branches on, so the predicate that decides which shape to
-        # MATERIALIZE and the predicate that decides which shape to READ are one fact seen from
-        # two sides rather than two literals that happen to agree.
-        #
-        # THE MEMBERSHIP AUTHORITY IS THE EVALUATED NODE SET, NOT THE REGISTRATION SET, and the
-        # difference is the point: a structural relation must be allowed to name a node the walk
-        # produced, so the larger set is the correct authority. `eval.nix`'s selection guard reads
-        # the registration set for the opposite reason — it runs INSIDE a descent channel, where
-        # consulting the set being produced is asking the question that is being answered. This
-        # seat is not that one: it runs over a completed record, where `allNodeIds` and
-        # `structuralAttributes` are sibling thunks.
-        #
-        # Reading this forces `allNodeIds`, hence the walk. That is the claim's meaning rather
-        # than a leak — membership is a statement about the whole graph — and it is why the
-        # surface exists on `eval` alone: `evalDebug` binds `allNodeIds` to a refusal, so there is
-        # no authority for it to check against there.
-        structuralEdges = graph.mkEndpointProjection {
-          inherit (structural) childBearing;
-          isNode = t: builtins.elem t self.allNodeIds;
-        } self.structuralAttributes;
+            # Subtree materialization: forces only the subtree rooted at a given node.
+            # O(subtree size). Does not touch nodes outside the subtree.
+            subtreeOf = rootId: prelude.listToAttrs (self._walkFrom rootId);
 
-        # The debug-mode validator for that relation, as a value, in the same seat and under the
-        # same discipline as `decisionFindings` below: nothing in the production path forces it,
-        # so it alters no production result. Forcing it reports every structural attribute of this
-        # node whose value violates the codomain contract, and `[ ]` when none does — which is
-        # what lets an assertion land on the returned message rather than on a caught throw.
-        projectionFindings = graph.mkProjectionFindings {
-          inherit (structural) childBearing;
-          isNode = t: builtins.elem t self.allNodeIds;
-        } self.structuralAttributes;
+            # Type-targeted materialization: all nodes of a given type.
+            # Walks full tree but only includes matching types.
+            # O(n) walk, result size = nodes of that type.
+            nodesOfType = type: self.allNodesWhere (node: node.type == type);
 
-        # The debug-mode validator, as a value. Nothing in the production path forces it, so it
-        # alters no production result and is not a rule the plane must obey; forcing it reports
-        # every attribute a decision named that this node's vocabulary does not contain.
-        decisionFindings = interface.decisionFindings {
-          inherit decision;
-          resolutional = resolutionalAt;
-          nodeIds = self.allNodeIds;
-        };
+            # --- The plane interface ---
 
-        # PROVENANCE RIDES THE RESULT. Plain data the caller receives with its answer, never a
-        # side channel and never debug-only: a print goes to stderr, which the evaluation cache
-        # swallows after the first run, and a debug-only field is invisible in ordinary use.
-        # A field that IS the result survives caching because it is what was cached.
-        #
-        # This library carries the field and never invents a record for it. The facts that get
-        # stamped — an input past a benchmark-verified bound, and the bound itself — are the
-        # engine's, derived from a cost curve measured there; the substrate holds no threshold
-        # and makes no comparison. Carried, so no layer between the engine and the caller can
-        # silently drop it.
-        inherit provenance;
-      }
-    );
+            # What an incremental plane reads this evaluation through. It is handed the FACADE,
+            # never `self`: the materialization surfaces, the node accessor and the combinators are
+            # absent from the RECORD, so a read outside those three names cannot be written against
+            # this value at all.
+            #
+            # ★ That closes the KEY SET, not reachability. `get id "children"` answers node records
+            # carrying `decls` / `parent` and the co-located `_eval` cache, so a caller holding one
+            # can evaluate through `_eval` without passing through `get`; and `get` takes any
+            # string, so a dynamically constructed name is issuable whether or not the combinators
+            # travel. Measured, and pinned by the facade cells. What survives that residual is the
+            # property reuse rests on — the always-recompute branch below fires before the decision
+            # is consulted, so no structural value is ever served from a prior evaluation.
+            facade = interface.mkFacade {
+              get = self.get;
+              nodeIds = self.allNodeIds;
+              resolutional = resolutionalAt;
+            };
+
+            # The reuse vocabulary, per node, and the subset of a decision's request that is
+            # actually served. Both are the same projection the facade carries, exposed so the
+            # intersection is inspectable rather than only inferable from behaviour.
+            resolutional = resolutionalAt;
+            served = servedAt;
+
+            # THE STRUCTURAL PARTITION OF THE ATTRIBUTE SET, PER NODE — the children /
+            # derived-children / edges-* / includes attributes, materialized by the always-recompute
+            # branch, readable WITHOUT forcing any resolutional attribute. Reads derive from it
+            # statically. It is derived rather than declared: the substrate constructed these
+            # attributes, so no impossibility argument is owed for them.
+            #
+            # It is an attribute-name-indexed RECORD and not a relation — `id -> {name -> value}`,
+            # which is not even the arity of an edge set. Naming it for the attributes it partitions
+            # is what keeps it distinct from the node-level dependency relation the seal publishes.
+            structuralAttributes = id: prelude.genAttrs structuralNamesAll (name: self.get id name);
+
+            # THE SAME PARTITION AS A RELATION — `id -> [id]`, which is the arity the record above is
+            # not. The projection itself is gen-graph's: it is edge vocabulary, it belongs beside the
+            # library's other endpoint extractors, and keeping it there is what stops this evaluator
+            # from growing a second copy of a contract the graph library already states.
+            #
+            # WHAT THIS SIDE SUPPLIES IS THE TWO FACTS ONLY THE SUBSTRATE HOLDS, and it supplies them
+            # as VALUES rather than as an import in the other direction. `childBearing` is taken from
+            # the same binding `evalAttr` branches on, so the predicate that decides which shape to
+            # MATERIALIZE and the predicate that decides which shape to READ are one fact seen from
+            # two sides rather than two literals that happen to agree.
+            #
+            # THE MEMBERSHIP AUTHORITY IS THE EVALUATED NODE SET, NOT THE REGISTRATION SET, and the
+            # difference is the point: a structural relation must be allowed to name a node the walk
+            # produced, so the larger set is the correct authority. `eval.nix`'s selection guard reads
+            # the registration set for the opposite reason — it runs INSIDE a descent channel, where
+            # consulting the set being produced is asking the question that is being answered. This
+            # seat is not that one: it runs over a completed record, where `allNodeIds` and
+            # `structuralAttributes` are sibling thunks.
+            #
+            # Reading this forces `allNodeIds`, hence the walk. That is the claim's meaning rather
+            # than a leak — membership is a statement about the whole graph — and it is why the
+            # surface exists on `eval` alone: `evalDebug` binds `allNodeIds` to a refusal, so there is
+            # no authority for it to check against there.
+            structuralEdges = graph.mkEndpointProjection {
+              inherit (structural) childBearing;
+              isNode = t: builtins.elem t self.allNodeIds;
+            } self.structuralAttributes;
+
+            # The debug-mode validator for that relation, as a value, in the same seat and under the
+            # same discipline as `decisionFindings` below: nothing in the production path forces it,
+            # so it alters no production result. Forcing it reports every structural attribute of this
+            # node whose value violates the codomain contract, and `[ ]` when none does — which is
+            # what lets an assertion land on the returned message rather than on a caught throw.
+            projectionFindings = graph.mkProjectionFindings {
+              inherit (structural) childBearing;
+              isNode = t: builtins.elem t self.allNodeIds;
+            } self.structuralAttributes;
+
+            # The debug-mode validator, as a value. Nothing in the production path forces it, so it
+            # alters no production result and is not a rule the plane must obey; forcing it reports
+            # every attribute a decision named that this node's vocabulary does not contain.
+            decisionFindings = interface.decisionFindings {
+              inherit decision;
+              resolutional = resolutionalAt;
+              nodeIds = self.allNodeIds;
+            };
+
+            # PROVENANCE RIDES THE RESULT. Plain data the caller receives with its answer, never a
+            # side channel and never debug-only: a print goes to stderr, which the evaluation cache
+            # swallows after the first run, and a debug-only field is invisible in ordinary use.
+            # A field that IS the result survives caching because it is what was cached.
+            #
+            # This library carries the field and never invents a record for it. The facts that get
+            # stamped — an input past a benchmark-verified bound, and the bound itself — are the
+            # engine's, derived from a cost curve measured there; the substrate holds no threshold
+            # and makes no comparison. Carried, so no layer between the engine and the caller can
+            # silently drop it.
+            inherit provenance;
+          }
+        );
+    in
+    mkAccessor closedRound;
 
   # Diagnostic variant with shadow-stack cycle tracing.
   #
@@ -637,8 +1325,54 @@ let
                 else if visited ? ${traceEntry} then
                   throw "gen-scope: cycle detected: ${builtins.concatStringsSep " -> " path}"
                 else
-                  runAttributes.${attrName} (mkSelf (visited // { ${traceEntry} = true; }) path) id;
+                  let
+                    fn = runAttributes.${attrName};
+                    s = mkSelf (visited // { ${traceEntry} = true; }) path;
+                  in
+                  # The debug evaluator's production reading of a circular declaration is the
+                  # per-instance ascent: its fresh-self-per-get shadow stack already detects the
+                  # cross-instance re-entry a shared round exists to drive, and driving one here
+                  # would defeat the tracing the evaluator exists for.
+                  if isCircularDecl fn then
+                    debugCircular id fn s
+                  else if builtins.isAttrs fn then
+                    throw "gen-scope: attribute '${attrName}' on '${id}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
+                  else
+                    fn s id;
             };
+          debugCircular =
+            id: decl: s:
+            let
+              declExtras = builtins.filter (
+                n:
+                !(builtins.elem n [
+                  "carrier"
+                  "kind"
+                  "step"
+                ])
+              ) (builtins.attrNames decl);
+              defect = carrierDefect (decl.carrier or null);
+              go =
+                n: prev:
+                let
+                  next = decl.step s id prev;
+                  ascends = decl.carrier.leq prev next;
+                in
+                if ascends && decl.carrier.leq next prev then
+                  next
+                else if !ascends then
+                  throw "gen-scope: circular attribute on '${id}' took a step its declared order does not ascend, at iteration ${toString n} — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed"
+                else if n >= decl.carrier.height then
+                  throw "gen-scope: circular attribute on '${id}' is still ascending after ${toString (n + 1)} steps, so the declared height of ${toString decl.carrier.height} is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget"
+                else
+                  go (n + 1) next;
+            in
+            if declExtras != [ ] then
+              throw "gen-scope: circular attribute on '${id}' declares ${builtins.toJSON declExtras} beyond the declaration's three fields — `circular { carrier = ...; } step` returns exactly { kind, carrier, step }, and the field set is capped: a term beyond it is a return to the design sitting rather than a refinement"
+            else if defect != null then
+              throw "gen-scope: circular attribute on '${id}' ${defect}"
+            else
+              go 0 decl.carrier.bottom;
         in
         {
           inherit getTraced;
