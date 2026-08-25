@@ -475,12 +475,13 @@ Set-discipline sibling of `inheritAll`: a node's value = its own contribution �
 #### `circular`
 
 ```nix
-circular { carrier = { bottom; leq; height; }; } f self id
+circular { carrier = { bottom; leq; height; quotient; }; } f
+# ⇒ { kind = "circular"; carrier = { … }; step = f; } — the DECLARATION the evaluator reads
 ```
 
-Least-fixed-point iteration over a **declared carrier**. `f` receives `self`, `id`, and the previous value.
+Least-fixed-point iteration over a **declared carrier**. The combinator **declares**; the ascent runs at the evaluator, which reads the kind-tagged record at demand time — JastAdd's own shape, the lattice data stated at the declaration and read where the demand arrives. `f` receives `self`, `id`, and the previous value. Two instances that read each other iterate **together in one shared round** to a common fixed point, with the bound derived as the sum of the declared heights over the round's universe plus one; a lone instance keeps the `height + 1` per-instance ascent unchanged.
 
-The three terms are Söderberg & Hedin 2013 §4.1's, and they are what makes the result well defined: *"a lattice of bounded height, that the semantic function is monotonic, and that a bottom value is provided as the starting point of the fixed-point iteration"* (printed 311; the condition itself is stated at §2.4, printed 305). None of the three is derivable from an opaque `f`, so **the declaration is required and total** — an absent or malformed carrier is refused **by name**, never defaulted.
+The first three terms are Söderberg & Hedin 2013 §4.1's, and they are what makes the result well defined: *"a lattice of bounded height, that the semantic function is monotonic, and that a bottom value is provided as the starting point of the fixed-point iteration"* (printed 311; the condition itself is stated at §2.4, printed 305). The fourth, `quotient`, states whether `leq` orders a **quotient** of the value space rather than the raw values — a quotient instance evaluates by the per-instance ascent and is never a simultaneous member of a shared round, whose settlement needs antisymmetry. None of the four is derivable from an opaque `f`, so **the declaration is required and total** — an absent or malformed carrier is refused **by name** at the instance's first demand, never defaulted.
 
 What the declaration buys:
 

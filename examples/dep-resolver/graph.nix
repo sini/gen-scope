@@ -27,14 +27,17 @@ let
     (genScope.mkKind {
       name = "workspace";
       below = [ "manifest" ];
-      spawns.manifest = self: _id: {
+      # The builder DECLARES what the manifest is and nothing else: a spawn builder is handed a
+      # declarations-only handle, so an attribute value has no name here — and it never belonged
+      # in `decls`, because a value computed from other nodes' attributes IS an attribute. The
+      # manifest's `resolvedDeps` / `totalAPIs` are attributes on the manifest node
+      # (`attributes.nix`), computed where the substrate computes values.
+      spawns.manifest = _self: _id: {
         "resolved:app@1.0" = {
           id = "resolved:app@1.0";
           parent = "workspace";
           decls = {
             package = "app@1.0";
-            resolvedDeps = self.get "app@1.0" "allDeps";
-            totalAPIs = self.get "app@1.0" "availableAPIs";
           };
         };
       };

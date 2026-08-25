@@ -91,6 +91,10 @@ let
       in
       builtins.all (k: (rowB ? ${k}) && rowB.${k} == rowA.${k}) (builtins.attrNames rowA);
     height = builtins.length enrichKeys;
+    # The comment above already says it: this is a QUOTIENT carrier — the order is read off the
+    # data row and says nothing about the context's other fields — and the fourth term states it,
+    # which is what selects the per-instance ascent and keeps the instance out of shared rounds.
+    quotient = true;
   };
 
   buildHostConfig =
@@ -116,13 +120,30 @@ let
         classify = fx.classify;
         groupOrder = groupOrderList;
       };
+      # The declaration is reached THROUGH THE EVALUATOR: `circular` returns a kind-tagged
+      # record the demand path reads, so the loop runs where the carrier is readable rather than
+      # inside an applied closure.
       converged =
-        (genScope.circular { carrier = mkConvergenceCarrier serverName serverData enrichKeys; } (
-          _self: _id: ctx:
-          (dispatch (cfg // { context = ctx; })).context
-        ))
-          { }
-          serverName;
+        (genScope.eval {
+          scope = genScope.buildRoots {
+            parentGraph = genScope.vertex serverName;
+            importGraph = genScope.empty;
+            decls.${serverName} = { };
+            types = { };
+          };
+          attributes = {
+            children = _self: _id: { };
+            imports = _self: _id: [ ];
+            converged-context =
+              genScope.circular { carrier = mkConvergenceCarrier serverName serverData enrichKeys; }
+                (
+                  _self: _id: ctx:
+                  (dispatch (cfg // { context = ctx; })).context
+                );
+          };
+        }).get
+          serverName
+          "converged-context";
       nixosActions = (dispatch (cfg // { context = converged; })).actions.config or [ ];
     in
     lib.foldl' lib.recursiveUpdate { } (map (a: builtins.removeAttrs a [ "__action" ]) nixosActions);

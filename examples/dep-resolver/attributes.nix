@@ -33,4 +33,22 @@
       transitive = lib.concatMap (iid: self.get iid "allDeps") direct;
     in
     lib.unique (direct ++ transitive);
+
+  # The manifest's projections — attributes ON the manifest node, computed from the package it
+  # DECLARES. They used to be computed inside the spawn builder and baked into `decls`, which is a
+  # category error the declarations-only spawn handle makes inexpressible: a spawn declares what
+  # nodes exist, and values are attributes.
+  resolvedDeps =
+    self: id:
+    let
+      pkg = (self.node id).decls.package or null;
+    in
+    if pkg == null then [ ] else self.get pkg "allDeps";
+
+  totalAPIs =
+    self: id:
+    let
+      pkg = (self.node id).decls.package or null;
+    in
+    if pkg == null then [ ] else self.get pkg "availableAPIs";
 }

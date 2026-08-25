@@ -749,6 +749,9 @@
                       bottom = 0;
                       leq = a: b: a <= b;
                       height = 95;
+                      # Antisymmetric arithmetic order: not a quotient, and the required fourth
+                      # term says so.
+                      quotient = false;
                     };
                   }
                   (

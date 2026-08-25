@@ -21,8 +21,11 @@
   logging-not-in-runtime-deps = !(builtins.elem "lib-logging@3.1" (result.get "app@1.0" "allDeps"));
 
   manifest-exists = result.allNodes ? "resolved:app@1.0";
-  manifest-resolved-deps = builtins.sort builtins.lessThan (result.node "resolved:app@1.0")
-  .decls.resolvedDeps;
+  # The resolved set is an ATTRIBUTE of the manifest node now — the spawn declares only the
+  # package, and the projection is computed where the substrate computes values.
+  manifest-resolved-deps = builtins.sort builtins.lessThan (
+    result.get "resolved:app@1.0" "resolvedDeps"
+  );
   manifest-type = (result.node "resolved:app@1.0").type;
 
   json-version-conflict =

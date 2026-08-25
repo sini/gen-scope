@@ -53,6 +53,9 @@
           bottom = 0;
           leq = a: b: a <= b;
           height = 4;
+          # The arithmetic order is antisymmetric on the raw percentages, so this is not a
+          # quotient — the required fourth term, stated truthfully.
+          quotient = false;
         };
       }
       (

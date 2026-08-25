@@ -15,9 +15,12 @@
 # graph D(T) contains an oriented cycle" (printed 135) — and each extension carries its own
 # soundness condition:
 #
-#   the DOMAIN carrier, for spawning — Söderberg & Hedin (2013) §7, printed 320, reporting
-#   Krishnan & Van Wyk: "ordering the nonterminals (the node types), so that each new NTA has a
-#   lower order than its host";
+#   the DOMAIN carrier, for spawning — a ranked kind vocabulary every expansion STRICTLY
+#   descends. The strictness is gen's own (`mkKind`'s registered rank, refused at registration):
+#   the primary's ordering — Krishnan & Van Wyk 2012, Lemma 4, reported via Söderberg & Hedin
+#   2013 §7 printed 320 — is NON-INCREASING, equal-order steps permitted and named (constant
+#   tree creation sequences), so gen is the stricter of the two and owes its strictness to the
+#   registry, never to them;
 #
 #   the VALUES carrier, for circularity — §4.1, printed 311: "a lattice of bounded height, that the
 #   semantic function is monotonic, and that a bottom value is provided as the starting point of
