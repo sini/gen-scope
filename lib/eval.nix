@@ -715,16 +715,30 @@ let
             # meant it for, an error rather than a wasted step. "How a member joins" is Nix's own
             # laziness; there is no member list, no join, no widen, no eq and no maxIter.
             #
-            # Two seats ride each demanded entry, and they refute DIFFERENT things:
+            # Two seats ride THE TARGET'S column — the one column the round's own demand pass
+            # constructs at every level — and they refute DIFFERENT things. The scope is not
+            # economy but the laziness law above turned on the seats themselves: BOTH seats read
+            # the column's HISTORY (the run counter reaches back through every earlier level; the
+            # descent observation reads the level before the one under test), and on any other
+            # member that history is exactly what the demand never produced. Computing it would
+            # force undemanded entries, whose steps transitively run undemanded instances — the
+            # error class named above, reintroduced by the protection itself. Pure Nix cannot
+            # observe which entries a demand forced, so the one column known demanded BY
+            # CONSTRUCTION is the target's; a non-target member's protection RE-SEATS AT THE
+            # BOUND, where the settlement walk is read-closed and refuses any cone member still
+            # moving. The price, stated: an under-declared height or a non-monotone step on a
+            # non-target member is refused only where its movement survives to the bound — the cap
+            # is INCOMPLETE exactly where its tally would have been UNSOUND.
             #
             #   THE HEIGHT SEAT refutes a DECLARATION. The witness is the instance's LONGEST STRICTLY
             #   ASCENDING RUN — extended by a strict ascent, left alone by a quiet level, RESET BY A
             #   DESCENT — because k consecutive strict ascents are a chain of k edges in the
             #   instance's own carrier whatever produced the inputs, where a mere tally of ascents
-            #   composes no chain. It needs no membership and is scoped by nothing.
+            #   composes no chain. It needs no membership; its scope is the target's column, per the
+            #   law above.
             #
-            #   THE OUTER SEAT refutes a member's STEP, and only where it can construct a pair it has
-            #   ordered: at a transition where the member itself descended, the member's own step is
+            #   THE OUTER SEAT refutes the target's STEP, and only where it can construct a pair it
+            #   has ordered: at a transition where the target itself descended, its own step is
             #   re-applied to the earlier level's member map CLAMPED ENTRYWISE to the later one —
             #   entrywise, inside each entry's own thunk, so an entry the step never demands is never
             #   compared — with quotients derived against the LATER snapshot raw (the same derivation
@@ -784,47 +798,51 @@ let
                     )
                 ) (bound + 1);
 
+                # Only the target's entry carries the seats: a checked non-target entry would hand
+                # the seats a history the demand never produced (the law at the seats' comment).
                 levelsChecked = prelude.genList (
                   j:
                   if j == 0 then
                     bottoms
                   else
-                    builtins.mapAttrs (key: v: builtins.seq (checkAt j key) v) (builtins.elemAt levelsRaw j)
+                    let
+                      raw = builtins.elemAt levelsRaw j;
+                    in
+                    raw
+                    // {
+                      ${targetKey} = builtins.seq (checkAt j) raw.${targetKey};
+                    }
                 ) (bound + 1);
 
-                # The run counter, per member per level, off the raw trajectory.
+                # The run counter, off the target's raw column alone — every level of which the
+                # demand pass forces by construction, so the counter's own computation forces
+                # nothing the demand did not.
                 runs = prelude.genList (
                   j:
                   if j == 0 then
-                    builtins.mapAttrs (_: _: 0) bottoms
+                    0
                   else
                     let
-                      rawJ = builtins.elemAt levelsRaw j;
-                      rawP = builtins.elemAt levelsRaw (j - 1);
+                      inherit (index.${targetKey}.carrier) leq;
+                      a = (builtins.elemAt levelsRaw (j - 1)).${targetKey};
+                      b = (builtins.elemAt levelsRaw j).${targetKey};
                       runsP = builtins.elemAt runs (j - 1);
                     in
-                    builtins.mapAttrs (
-                      key: b:
-                      let
-                        inherit (index.${key}.carrier) leq;
-                        a = rawP.${key};
-                      in
-                      if leq a b && !leq b a then
-                        runsP.${key} + 1
-                      else if !leq a b then
-                        0
-                      else
-                        runsP.${key}
-                    ) rawJ
+                    if leq a b && !leq b a then
+                      runsP + 1
+                    else if !leq a b then
+                      0
+                    else
+                      runsP
                 ) (bound + 1);
 
-                checkAt = j: key: builtins.seq (heightCheck j key) (outerCheck j key);
+                checkAt = j: builtins.seq (heightCheck j) (outerCheck j);
 
                 heightCheck =
-                  j: key:
+                  j:
                   let
-                    i = index.${key};
-                    r = (builtins.elemAt runs j).${key};
+                    i = index.${targetKey};
+                    r = builtins.elemAt runs j;
                   in
                   if r > i.carrier.height then
                     let
@@ -877,17 +895,17 @@ let
                   if attempt.success then attempt.value else [ ];
 
                 outerCheck =
-                  j: key:
+                  j:
                   if j < 2 then
                     true
                   else
                     let
-                      i = index.${key};
+                      i = index.${targetKey};
                       inherit (i.carrier) leq;
-                      vk = (builtins.elemAt levelsRaw j).${key};
+                      vk = (builtins.elemAt levelsRaw j).${targetKey};
                       p1 = builtins.elemAt levelsRaw (j - 1);
                       p2 = builtins.elemAt levelsRaw (j - 2);
-                      est = builtins.tryEval (leq p1.${key} vk);
+                      est = builtins.tryEval (leq p1.${targetKey} vk);
                     in
                     if !est.success || est.value then
                       true
@@ -911,7 +929,7 @@ let
                             provisional = false;
                           }
                         );
-                        attempt = builtins.tryEval (i.step accStar i.nid (star.${key}));
+                        attempt = builtins.tryEval (i.step accStar i.nid (star.${targetKey}));
                       in
                       if !attempt.success then
                         true
