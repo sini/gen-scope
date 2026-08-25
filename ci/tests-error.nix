@@ -273,6 +273,12 @@ let
   # seeded variants are defined there, so the grammar a refusal is earned on and the grammar the
   # clean path converges on are one value rather than two that agree while someone keeps them so.
   circularNta = import ./tests/_fixtures/circular-nta.nix { inherit genScope; };
+
+  # The shared-round corpus: the tracked model of record's forty fixtures, ported. The refusing
+  # fixtures are asserted here — WHICH refusal fires is a claim about a message — and the
+  # answering fixtures next door in `tests/scc-round.nix`. Provenance and the hand-derived
+  # expectations are documented at the fixture file.
+  sccCorpus = import ./tests/_fixtures/scc-corpus.nix { inherit genScope; };
 in
 {
   # Same type as `flake.tests`, because it is the same kind of thing read by the same runner —
@@ -1859,4 +1865,411 @@ in
       };
     };
   };
+
+  # ── THE SHARED ROUND'S REFUSALS — the corpus's refusing fixtures, each by its own text ──
+  # The fixtures and their provenance live in `tests/_fixtures/scc-corpus.nix`; the expected
+  # VERDICT KIND of every cell here is the tracked model's hand-derived default column, and the
+  # texts are the landed refusal idiom those verdicts arrive in. The ascent and height texts are
+  # the landed `circular` texts byte-identically — the k = 1 degeneration and the composed round
+  # share one wording, which is what the shipped errors suite already pins.
+  config.flake.testsError.scc-round-refusals = {
+    # The hybrid-only quotient at value 9: the constructed pair is ordered on both coordinates, so the seat's refutation stands — the value-0 twin answers next door.
+    test-unevalxc-the-hybrid-quotient-at-nine-is-refused = {
+      expr = sccCorpus.results."UNEVALXC-ZR9";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # An unread hybrid-only quotient whose value DESCENDS: the entrywise clamp keeps the refusal a whole-map gate would lose.
+    test-udesc-an-unread-descending-quotient-does-not-disarm-the-seat = {
+      expr = sccCorpus.results."UDESC";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # The discriminating twin: the same declaration ASCENDING leaves the verdict refused, so the family keys on the member's own step and not on the extra declaration's presence.
+    test-control-uasc-the-ascending-twin-still-refuses = {
+      expr = sccCorpus.results."UASC";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    test-control-uflat-the-flat-twin-still-refuses = {
+      expr = sccCorpus.results."UFLAT";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # A member non-monotone in a MEMBER it reads: the shared round applies it at the intermediates and refuses — the row's own stated cost, with the remedy the row's own.
+    test-h10b-a-step-nonmonotone-in-a-member-it-reads-is-refused = {
+      expr = sccCorpus.results."H10B";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # UNSHOW's ordered twin: where the clamp CAN order the pair, the descent is real and the refusal returns — separating the neutral fallback from a seat that never fires.
+    test-unshoword-the-ordered-twin-is-refused = {
+      expr = sccCorpus.results."UNSHOWORD";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    test-nonrefl-a-non-reflexive-order-reads-quiet-as-descent = {
+      expr = sccCorpus.results."NONREFL";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 1 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    test-flip-a-descending-quotient-driving-a-branch-flip-is-refused = {
+      expr = sccCorpus.results."FLIP";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # The TWIN family: an antitone member refuses on every arm; the presence and the order of an unread quotient beside it move nothing.
+    test-twin-an-antitone-member-is-refused = {
+      expr = sccCorpus.results."TWIN";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 1 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    test-control-twin-with-a-present-unread-quotient-still-refuses = {
+      expr = sccCorpus.results."TWINP";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 1 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    test-control-twin-with-an-unread-descending-quotient-still-refuses = {
+      expr = sccCorpus.results."TWIN2";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 1 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # The corpus's own refusal control: a member step that descends on its trajectory with no quotient anywhere.
+    test-control-a-plainly-antitone-member-is-refused = {
+      expr = sccCorpus.results."CTLREFUSAL";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # The clamp is ENTRYWISE, inside each entry's own thunk: a declaration pair nothing reads descends across the compared levels, and the verdict is byte-identical to UNEVALXC's because the undemanded entry is never compared — a whole-map clamp would have to compare it.
+    test-clamplazy-an-undemanded-descending-pair-is-never-compared = {
+      expr = sccCorpus.results."CLAMPLAZY";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # One member read DIRECTLY (the clamped map) and THROUGH A QUOTIENT (the later snapshot raw) inside one step: the constructed pair stays ordered on both coordinates and the refutation stands. An implementation memoising the member once for both routes breaks this cell.
+    test-qsplit-one-accessor-serves-two-values-for-one-member-by-route = {
+      expr = sccCorpus.results."QSPLIT";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 4 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # A wide flat carrier whose step walks off the order, no quotient anywhere — the degenerate universe's own ascent seat.
+    test-wideflat-a-self-driven-walk-off-the-order-is-refused = {
+      expr = sccCorpus.results."WIDEFLAT";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 1 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # The height seat refutes the DECLARATION on a witness intrinsic to one carrier: a genuine chain 0 < 2 < 4 against a declared height of one, whatever else the program contains — the quotient beside it moves nothing.
+    test-h8b-a-genuine-chain-past-a-truthful-height-is-refused = {
+      expr = sccCorpus.results."H8B";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 2 steps, so the declared height of 1 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
+      };
+    };
+
+    test-control-h8c-the-same-chain-with-no-quotient-refuses-identically = {
+      expr = sccCorpus.results."H8C";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 2 steps, so the declared height of 1 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
+      };
+    };
+
+    # TRIPLE with the mutual quotient pair removed: the under-declared member is the one live seat left, and it fires with the landed text.
+    test-triple-noq-the-height-seat-names-the-same-refutation = {
+      expr = sccCorpus.results."TRIPLE-NOQ";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 2 steps, so the declared height of 1 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
+      };
+    };
+
+    # ★ ADAPTED from the model's hand-derived R-CLOSURE: all three seats are live in this program, and WHICH an implementation reports is deliberately underivable from the spec (SM§2.4: a phase structure that runs level-seated checks along the demand makes them pre-empt; the model forces the whole ascent first). The height refutation is true of the program — TRIPLE-NOQ above proves the same chain refuses with the quotients gone — and the closure expectation is carried unchanged by TRIPLE-HONEST below: repairing the height meets the closure, the spec's own two-step fix.
+    test-triple-the-under-declared-height-pre-empts-the-closure = {
+      expr = sccCorpus.results."TRIPLE";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 2 steps, so the declared height of 1 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
+      };
+    };
+
+    # The honesty residue's ONE detector: a `leq` answering true everywhere, declared `quotient = false`, churns raw values the order cannot separate — still moving at the composed bound. The unread `n.b` is outside the demand cone and correctly outside the comparison.
+    test-liar-a-coarse-order-declared-quotient-false-is-caught-at-the-bound = {
+      expr = sccCorpus.results."LIAR";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: a shared circular round is still moving at its derived bound: instance 'n.k' takes a step across levels 4 and 5 that its declared order cannot separate from movement, against the composed bound 5 (the sum of the declared heights over the round's universe, plus one). The bound is a theorem over the declared carriers, so what this refutes is a declaration — a carrier said `quotient = false` of an order too coarse to settle the states it serves. Declare a finer carrier.";
+      };
+    };
+
+    # The attempted silent arm: the height over-declared so the run cap cannot fire, and the oscillation is caught LOUD at the bound instead.
+    test-boundplateau-an-over-declared-height-cannot-mask-the-bound = {
+      expr = sccCorpus.results."BOUNDPLATEAU";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: a shared circular round is still moving at its derived bound: instance 'n.m' takes a step across levels 14 and 15 that its declared order cannot separate from movement, against the composed bound 15 (the sum of the declared heights over the round's universe, plus one). The bound is a theorem over the declared carriers, so what this refutes is a declaration — a carrier said `quotient = false` of an order too coarse to settle the states it serves. Declare a finer carrier.";
+      };
+    };
+
+    # The priced loud refusal: a converging program whose quotient-gated ascent has not finished at the composed bound. The refusal is a stated price of the bound being a theorem over declared heights (the remedy is the fathomed twin next door).
+    test-boundshort-a-gated-ascent-still-moving-at-the-bound-is-refused = {
+      expr = sccCorpus.results."BOUNDSHORT";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: a shared circular round is still moving at its derived bound: instance 'n.z' takes a step across levels 4 and 5 that its declared order cannot separate from movement, against the composed bound 5 (the sum of the declared heights over the round's universe, plus one). The bound is a theorem over the declared carriers, so what this refutes is a declaration — a carrier said `quotient = false` of an order too coarse to settle the states it serves. Declare a finer carrier.";
+      };
+    };
+
+    # ★ The silent-wrong-answer class: the demanded value is stationary across the last two levels while members it depends on are still moving. A demanded-only settlement returns 0 at exit 0 against a true fixed point of 1; the cone-scoped comparison catches it LOUD — with nothing undemanded forced (BOUNDQUIET-NOOSC's cell next door).
+    test-boundquiet-a-quiet-demanded-value-does-not-mask-moving-members = {
+      expr = sccCorpus.results."BOUNDQUIET";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: a shared circular round is still moving at its derived bound: instance 'n.z' takes a step across levels 6 and 7 that its declared order cannot separate from movement, against the composed bound 7 (the sum of the declared heights over the round's universe, plus one). The bound is a theorem over the declared carriers, so what this refutes is a declaration — a carrier said `quotient = false` of an order too coarse to settle the states it serves. Declare a finer carrier.";
+      };
+    };
+
+    # ★ THE CLOSURE SEAT (E-a): a mutually-reading quotient pair inside an open round re-enters the walked path at the ARMED level, and the refusal names the re-entered instance, the cycle, the declaring instances and the remedy — where today's tree aborts with an uncatchable stack overflow. The height is declared honestly here, so the closure is the seat that fires.
+    test-triple-honest-a-quotient-pair-closing-a-cycle-is-refused-by-name = {
+      expr = sccCorpus.results."TRIPLE-HONEST";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular demand re-entered 'n.q': the walked path closes the cycle [\"n.q\",\"n.r\"], and quotient declaration(s) [\"n.q\",\"n.r\"] are on it. A quotient carrier cannot be driven in a shared round — its convergence is an own-value comparison over classes, which a simultaneous ascent cannot answer — so the cycle is refused rather than iterated. Declare an antisymmetric order for the instances that read each other, or keep this instance out of the other's cycle.";
+      };
+    };
+
+    # DEMERR — the control that isolates UNDEMANDEDNESS: the same erroring member as the
+    # blind-spot cell, but READ by the target, so the death rides the demand itself. The error
+    # is Nix's own (a division by zero is not a refusal of ours), which is the point: only an
+    # UNDEMANDED erroring member is survivable, and only because it is never forced.
+    test-control-demerr-a-demanded-erroring-member-dies-on-its-own-error = {
+      expr = sccCorpus.results.DEMERR;
+      expectedError = {
+        type = "EvalError";
+        msg = "division by zero";
+      };
+    };
+  };
+
+  # ── THE MIGRATION'S OWN GUARDS — each new refusal shown able to fire, beside its clean path ──
+  config.flake.testsError.scc-admission-refusals =
+    let
+      sccRun = sccCorpus.run;
+      intCarrier = h: {
+        bottom = 0;
+        leq = a: b: a <= b;
+        height = h;
+        quotient = false;
+      };
+    in
+    {
+      # The fourth carrier term is REQUIRED and TOTAL: an absent `quotient` would decide the
+      # shared round's admission question silently, and an absent declaration is itself a
+      # decision.
+      test-a-carrier-with-no-quotient-term-is-refused = {
+        expr = sccRun {
+          a = circular { carrier = builtins.removeAttrs (intCarrier 2) [ "quotient" ]; } (
+            _self: _id: _prev:
+            1
+          );
+        } "a";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares a `carrier` with no `quotient` (whether `leq` orders a quotient of the value space rather than the raw values — required and total, because a shared round admits only antisymmetric carriers and an absent declaration would decide that soundness question silently)";
+        };
+      };
+
+      # The FIELD-SET CAP, carrier side: a fifth term is a return to the design sitting, and the
+      # cell must red on a widening rather than pass any record carrying the four names.
+      test-a-fifth-carrier-term-is-refused-by-the-cap = {
+        expr = sccRun {
+          a =
+            circular
+              {
+                carrier = intCarrier 2 // {
+                  widen = 1;
+                };
+              }
+              (
+                _self: _id: _prev:
+                1
+              );
+        } "a";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares a `carrier` carrying [\"widen\"] beyond its four declared terms { bottom, leq, height, quotient } — the carrier's field set is capped by ruling, and a fifth term is a return to the design sitting rather than a refinement";
+        };
+      };
+
+      # The cap, declaration side: the record `circular` returns is exactly { kind, carrier,
+      # step }, and a hand-assembled extra field is refused rather than carried.
+      test-a-fourth-declaration-field-is-refused-by-the-cap = {
+        expr = sccRun {
+          a =
+            (circular { carrier = intCarrier 2; } (
+              _self: _id: _prev:
+              1
+            ))
+            // {
+              extra = 1;
+            };
+        } "a";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' declares [\"extra\"] beyond the declaration's three fields — `circular { carrier = ...; } step` returns exactly { kind, carrier, step }, and the field set is capped: a term beyond it is a return to the design sitting rather than a refinement";
+        };
+      };
+
+      # The classification's third arm: a record that is not a circular declaration is refused by
+      # name rather than reaching Nix as an anonymous "attempt to call a set".
+      test-a-record-that-is-not-a-circular-declaration-is-refused-by-name = {
+        expr = sccRun {
+          a = {
+            not = "a-declaration";
+          };
+        } "a";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: attribute 'a' on 'n' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error";
+        };
+      };
+
+      # A child-bearing attribute may not be declared circular — the bootstrap ground: the
+      # universe needs the walk, and the walk reads the child-bearing attributes.
+      test-a-circular-children-declaration-is-refused-at-the-entry = {
+        expr = sccRun {
+          children =
+            circular
+              {
+                carrier = {
+                  bottom = { };
+                  leq = _a: _b: true;
+                  height = 1;
+                  quotient = false;
+                };
+              }
+              (
+                _self: _id: _prev:
+                { }
+              );
+        } "a";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.eval: `children` is declared circular, and a child-bearing attribute cannot be. The ground is bootstrap, not growth: a shared round's universe is derived from the materialized node set, the materialization walk reads the child-bearing attributes, and a circular one there would need a round whose bound needs the walk — measured as an uncatchable infinite recursion with this refusal removed. Every other structural attribute may be circular; this one selects the node set the universe is derived from.";
+        };
+      };
+
+      # The height refusal NAMES THE STILL-MOVING MEMBERS the failing step reads — the
+      # failure-path pass, run only when refusing. The corpus's own height cells exercise the
+      # VACUOUS degeneration (the movers are the instance the text already names, and the landed
+      # text stands byte-identically); this one is the arm with a genuine blame set.
+      test-the-height-refusal-names-the-still-moving-members-its-step-reads = {
+        expr = sccRun {
+          a = circular { carrier = intCarrier 2; } (
+            self: _id: _prev:
+            self.get "n" "b"
+          );
+          b = circular { carrier = intCarrier 8; } (
+            self: _id: _prev:
+            let
+              b = self.get "n" "b";
+            in
+            if b + 1 >= 6 then 6 else b + 1
+          );
+        } "a";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 3 steps, so the declared height of 2 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget (the still-moving members its step reads: [\"n.b\"])";
+        };
+      };
+
+      # A circular declaration in spawn-builder position is refused at REGISTRATION by the
+      # shipped callability guard: under the kind-tagged declaration shape a builder that is a
+      # declaration is inexpressible at definition time, never detected at firing — the node set
+      # may not be a fixed point of its own iterate.
+      test-a-circular-spawn-builder-is-refused-at-registration = {
+        expr = mkKinds [
+          (mkKind { name = "ep"; })
+          (mkKind {
+            name = "host";
+            below = [ "ep" ];
+            spawns.ep =
+              circular
+                {
+                  carrier = {
+                    bottom = { };
+                    leq = _a: _b: true;
+                    height = 1;
+                    quotient = false;
+                  };
+                }
+                (
+                  _self: _id: _prev:
+                  { }
+                );
+          })
+        ];
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.mkKind: kind 'host' declares a spawn for kind(s) [\"ep\"] whose builder cannot be applied";
+        };
+      };
+
+      # THE LIFETIME RULE: a round's memo is reachable only through the round's own accessor —
+      # a body naming a child record's co-located `_eval` cache from inside an open round meets
+      # a named, catchable refusal at the field the cache would have occupied. The clean path
+      # (the same demand through `self.get`) answers in `tests/scc-round.nix`.
+      test-the-eval-cache-refuses-by-name-inside-an-open-round = {
+        expr = sccCorpus.lifetime.cacheRead;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: the `_eval` cache for 'plain' on 'c' is not readable inside an open circular round — a round's memo lives on the round's own accessor, and a value cached here would be an approximation wearing a final value's clothes. Read through `self.get`, which serves the round's current level.";
+        };
+      };
+    };
 }
