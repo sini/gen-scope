@@ -11,7 +11,8 @@
 # default column) — derived before any cell here ran, not read off this implementation. The
 # blind-spot family (UNDEMERR and its two controls) is deliberately included: the pre-round-28
 # tracked suite was measured blind to the demand-cone/undemanded-forcing class, and porting the
-# corpus without those cells would re-import the blind spot.
+# corpus without those cells would re-import the blind spot. The LATEREAD family is the ONE
+# exception to the port provenance — not among the forty — and says so where it stands.
 #
 # ENCODING. The model's programs declare every attribute circular on one node `n`; a member read
 # `a.get("n.x")` and a quotient read `a.getq("n.x")` both port to `self.get "n" "x"` — the real
@@ -610,6 +611,63 @@ let
   undemok = undem false false;
   demerr = undem true true;
 
+  # ── THE LATEREAD FAMILY — the LAZYI × UNDEMERR crossing the forty lack ──
+  # Not among the model's forty programs: these are the exec gate's differential probes, kept
+  # because no ported fixture crosses a DEMAND-GAPPED member with an UNDEMANDED EARLY LEVEL that
+  # errors. The model of record answers 3 on every arm (its force-gated height counter never
+  # reads an unforced pair); a counter computed over a demanded member's WHOLE raw column dies on
+  # `b`'s level-1 entry (LATEREAD) and transitively runs the never-demanded `c`'s step
+  # (LATEREAD2) — the undemanded-forcing class the bound's cone rule excludes, reintroduced at
+  # the height seat. Expectations hand-derived before any cell ran: `a` self-ascends 0→1→2→3 and
+  # reads `b` only from level 4 on, `b` mirrors `a`'s settled 3, nothing moves at the bound.
+  lateReadTarget = circular { carrier = num 0 5; } (
+    self: _id: _prev:
+    let
+      av = self.get "n" "a";
+    in
+    if av < 3 then
+      av + 1
+    else
+      let
+        bv = self.get "n" "b";
+      in
+      if bv > av then bv else av
+  );
+  lateread = {
+    a = lateReadTarget;
+    b = circular { carrier = num 0 5; } (
+      self: _id: _prev:
+      let
+        av = self.get "n" "a";
+      in
+      if av == 0 then 1 / 0 else av
+    );
+  };
+  latereadCtl = {
+    a = lateReadTarget;
+    b = circular { carrier = num 0 5; } (
+      self: _id: _prev:
+      let
+        av = self.get "n" "a";
+      in
+      if av == 0 then 0 else av
+    );
+  };
+  lateread2 = {
+    a = lateReadTarget;
+    b = circular { carrier = num 0 5; } (
+      self: _id: _prev:
+      let
+        av = self.get "n" "a";
+      in
+      if av < 2 then self.get "n" "c" else av
+    );
+    c = circular { carrier = num 0 5; } (
+      _self: _id: _prev:
+      1 / 0
+    );
+  };
+
   # ── A11a — the saturating ratchet: the composed bound is Σhᵢ + 1, never max(hᵢ) + 1 ──
   # Two members over subsets of {1,2,3}, each of declared height 3, ascending in ALTERNATION:
   # six strictly ascending levels saturate Σhᵢ = 6 and the seventh observes the fixed point.
@@ -787,6 +845,18 @@ let
     DEMERR = {
       attrs = demerr;
       out = "t";
+    };
+    LATEREAD = {
+      attrs = lateread;
+      out = "a";
+    };
+    "LATEREAD-CTL" = {
+      attrs = latereadCtl;
+      out = "a";
+    };
+    LATEREAD2 = {
+      attrs = lateread2;
+      out = "a";
     };
   };
 in

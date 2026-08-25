@@ -123,6 +123,41 @@ let
         in
         if builtins.length parts > 1 then builtins.head parts else null;
   };
+
+  # A builder that records what its handle SERVES: the observation rides the spawned child's own
+  # `decls`, so the measurement is taken at the one position the handle exists for.
+  spawnHandleObs =
+    (genScope.eval {
+      scope = genScope.buildRoots {
+        parentGraph = genScope.vertex "h";
+        importGraph = genScope.empty;
+        decls.h = { };
+        types.h = "host";
+        kinds = genScope.mkKinds [
+          (genScope.mkKind { name = "low"; })
+          (genScope.mkKind {
+            name = "host";
+            below = [ "low" ];
+            spawns = {
+              low = handle: id: {
+                "${id}-obs" = {
+                  id = "${id}-obs";
+                  decls = {
+                    handleNames = builtins.attrNames handle;
+                    nodeRecordNames = builtins.attrNames (handle.node id);
+                  };
+                };
+              };
+            };
+          })
+        ];
+      };
+      attributes = {
+        children = _self: _id: { };
+        imports = _self: _id: [ ];
+      };
+    }).node
+      "h-obs";
 in
 {
   flake.tests."hoag" = {
@@ -205,6 +240,28 @@ in
     test-the-spawned-kind-is-stamped-on-the-enumeration-path = {
       expr = proxyResult.allNodes."cluster-proxy".type;
       expected = "proxy";
+    };
+
+    # ── THE SPAWN HANDLE'S NAME SET IS AN EXACT SET, never a presence check ──
+    # The handle is a PROJECTION rebuilt from named fields, and only name-set equality separates
+    # that from a FILTER over the evaluator — a filter passes every presence check identically
+    # while carrying whatever its author forgot and re-acquiring every field a later wrapper
+    # adds. Compared on NAMES, so a widening, a narrowing or a rename each fail these cells (the
+    # ground `fold-equations.nix` pins ResolveCtx's ten fields on, in its own words). The exact
+    # set is ALSO what bounds the builder: the in-flight value has no name through the handle —
+    # `get` and `_eval` are absent BY THE SET, not by two deletions.
+    test-the-spawn-handles-name-set-is-exactly-node = {
+      expr = spawnHandleObs.decls.handleNames;
+      expected = [ "node" ];
+    };
+    test-the-node-record-a-builder-reads-has-exactly-its-four-fields = {
+      expr = spawnHandleObs.decls.nodeRecordNames;
+      expected = [
+        "decls"
+        "id"
+        "parent"
+        "type"
+      ];
     };
 
     # ── THE SPAWN CHANNEL CANNOT BE WRITTEN BY HAND ──

@@ -18,6 +18,19 @@
 let
   corpus = import ./_fixtures/scc-corpus.nix { inherit genScope; };
   inherit (corpus) results;
+
+  # Carrier vocabulary for the oracle-row cells below (the corpus keeps its own copy private).
+  num = bottom: height: {
+    inherit bottom height;
+    leq = a: b: a <= b;
+    quotient = false;
+  };
+  qnum = bottom: height: {
+    inherit bottom height;
+    leq = a: b: a <= b;
+    quotient = true;
+  };
+  inherit (genScope) circular;
 in
 {
   flake.tests."scc-round" = {
@@ -137,6 +150,40 @@ in
       expr = results.UNDEMOK;
       expected = 2;
     };
+    # ── THE HEIGHT SEAT'S DEMAND SCOPE (LAZYI × UNDEMERR) ──
+    # ★ THE CROSSING CELL: the member `n.b` joins the demand only from level 4 on, and its step
+    # DIVIDES BY ZERO at exactly the level-1 input no demand ever produces. The value 3 at exit 0
+    # asserts that the seats' own computation forced NOTHING the demand never did — a run counter
+    # computed over a demanded member's whole raw column dies here uncatchably, the same
+    # undemanded-forcing class the bound's cone rule excludes, one seat over.
+    test-lateread-an-undemanded-early-level-is-never-forced-by-the-seats = {
+      expr = results.LATEREAD;
+      expected = 3;
+    };
+    # The strict UNDEMERR half at the same seats: `n.c` is an INSTANCE no demand ever forces —
+    # `n.b` reads it only at early levels the demand skips — and its step always errors. The
+    # value asserts no undemanded instance's step is run by the seats' own computation.
+    test-lateread-an-undemanded-instance-behind-a-demand-gap-is-never-forced = {
+      expr = results.LATEREAD2;
+      expected = 3;
+    };
+    # The control that isolates the ERROR from the demand gap: the same wiring, total step.
+    test-control-lateread-with-a-total-step-answers = {
+      expr = results."LATEREAD-CTL";
+      expected = 3;
+    };
+    # ★ The re-seat's stated price, pinned as a cell rather than prose: with TRIPLE's quotient
+    # pair removed, the under-declared member (`n.m`, height 1, a genuine chain of three) is not
+    # the demanded target, so no seat can read its history — and its iteration SETTLES before the
+    # composed bound, so the re-seated protection has nothing left to refuse and the round
+    # answers. The model of record, which can observe forcing, still refuses this program at the
+    # height seat; the cap here is INCOMPLETE exactly where its tally would have been unsound.
+    # H8B/H8C next door pin that the same lie ON THE TARGET still refuses with the landed text.
+    test-triple-noq-a-non-target-height-lie-that-settles-is-answered = {
+      expr = results."TRIPLE-NOQ";
+      expected = 0;
+    };
+
     # Round 27's own control, no longer forcing the member its demand never read.
     test-control-boundquiet-without-the-oscillation-answers = {
       expr = results."BOUNDQUIET-NOOSC";
@@ -156,6 +203,95 @@ in
     test-control-a-childs-attribute-through-get-inside-a-round-answers = {
       expr = corpus.lifetime.getRead;
       expected = 3;
+    };
+
+    # ── THE ORACLE-TABLE ROWS GIVEN DEDICATED CELLS ──
+    # Not corpus ports: each cell below is one row of the migration's oracle table that was
+    # covered only transitively, landed as its own cell. Expectations hand-derived before the
+    # cells ran. (The MEMOIZATION row — one evaluation for three reads of one attribute — is NOT
+    # cellable here: the count is observable only as a `builtins.trace` on stderr, which this
+    # runner cannot read. It lives as the instrument `ci/bench/eval-memo.sh`, defect arm included.)
+
+    # A cycle closed THROUGH AN ORDINARY ATTRIBUTE converges: the ordinary attribute is re-derived
+    # per level against the round's snapshot, so the cycle m → ord → m is the member's own
+    # iteration wearing one extra hop, and a name-level condensation that refused it would raise
+    # a false red. Hand-derived: m ascends 0→1→2→3 off its own previous level, settles at 3.
+    test-a-cycle-closed-through-an-ordinary-attribute-converges = {
+      expr = corpus.run {
+        m = circular { carrier = num 0 4; } (
+          self: _id: _prev:
+          let
+            o = self.get "n" "ord";
+          in
+          if o >= 3 then 3 else o + 1
+        );
+        ord = self: _id: self.get "n" "m";
+      } "m";
+      expected = 3;
+    };
+
+    # A circular STRUCTURAL attribute reaches the guard and iterates: the declaration-kind branch
+    # sits inside the application, downstream of the partition on BOTH arms, so an `edges-*` name
+    # selects the structural arm and still runs the ascent. Hand-derived: 0→1→2, settles at 2.
+    test-a-circular-structural-attribute-reaches-the-guard-and-iterates = {
+      expr = corpus.run {
+        "edges-x" = circular { carrier = num 0 3; } (
+          self: _id: _prev:
+          let
+            v = self.get "n" "edges-x";
+          in
+          if v >= 2 then 2 else v + 1
+        );
+      } "edges-x";
+      expected = 2;
+    };
+
+    # Two quotient instances that DO NOT read each other both answer: the closure refusal keys on
+    # the JOIN — a re-entry on the walked path — so a pair of independent ascents is never
+    # checked against anything. Hand-derived: each ascent is bottom → constant, 5 and 7.
+    test-two-quotient-instances-that-do-not-read-each-other-both-answer = {
+      expr =
+        let
+          attrs = {
+            q1 = circular { carrier = qnum 0 3; } (
+              _self: _id: _prev:
+              5
+            );
+            q2 = circular { carrier = qnum 0 3; } (
+              _self: _id: _prev:
+              7
+            );
+          };
+        in
+        {
+          q1 = corpus.run attrs "q1";
+          q2 = corpus.run attrs "q2";
+        };
+      expected = {
+        q1 = 5;
+        q2 = 7;
+      };
+    };
+
+    # A fresh member demanded inside a TOP-LEVEL quotient's ascent opens its own round: the
+    # quotient's accessor carries no open round, so the member's demand is CASE 1 and the member
+    # is driven to ITS OWN least fixed point rather than one step against the quotient's iterate.
+    # Hand-derived: m's own round settles at 3, the quotient ascends to 3 + 1 = 4.
+    test-a-member-demanded-inside-a-top-level-quotients-ascent-opens-its-own-round = {
+      expr = corpus.run {
+        q = circular { carrier = qnum 0 4; } (
+          self: _id: _prev:
+          self.get "n" "m" + 1
+        );
+        m = circular { carrier = num 0 4; } (
+          self: _id: _prev:
+          let
+            v = self.get "n" "m";
+          in
+          if v >= 3 then 3 else v + 1
+        );
+      } "q";
+      expected = 4;
     };
   };
 }

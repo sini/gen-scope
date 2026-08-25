@@ -2020,21 +2020,18 @@ in
       };
     };
 
-    # TRIPLE with the mutual quotient pair removed: the under-declared member is the one live seat left, and it fires with the landed text.
-    test-triple-noq-the-height-seat-names-the-same-refutation = {
-      expr = sccCorpus.results."TRIPLE-NOQ";
-      expectedError = {
-        type = "ThrownError";
-        msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 2 steps, so the declared height of 1 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
-      };
-    };
-
-    # ★ ADAPTED from the model's hand-derived R-CLOSURE: all three seats are live in this program, and WHICH an implementation reports is deliberately underivable from the spec (SM§2.4: a phase structure that runs level-seated checks along the demand makes them pre-empt; the model forces the whole ascent first). The height refutation is true of the program — TRIPLE-NOQ above proves the same chain refuses with the quotients gone — and the closure expectation is carried unchanged by TRIPLE-HONEST below: repairing the height meets the closure, the spec's own two-step fix.
-    test-triple-the-under-declared-height-pre-empts-the-closure = {
+    # TRIPLE reports the hand-derived column's OWN verdict, R-CLOSURE: the under-declared member
+    # (`n.m`, height 1) is not the demanded target, so the height seat — live on the target's
+    # column alone — cannot read its history, and the quotient pair's re-entry is what fires at
+    # the armed level, byte-identical to TRIPLE-HONEST's text. (A previous build's per-member
+    # seats reported R-HEIGHT here, recorded then as an adaptation; the demand-scoped seats
+    # retire it.) The price of not seeing `n.m`'s lie is pinned next door in the VALUE suite:
+    # TRIPLE-NOQ, the same program with the pair removed, is answered.
+    test-triple-a-non-target-height-lie-does-not-pre-empt-the-closure = {
       expr = sccCorpus.results."TRIPLE";
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 2 steps, so the declared height of 1 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
+        msg = exactly "gen-scope: circular demand re-entered 'n.q': the walked path closes the cycle [\"n.q\",\"n.r\"], and quotient declaration(s) [\"n.q\",\"n.r\"] are on it. A quotient carrier cannot be driven in a shared round — its convergence is an own-value comparison over classes, which a simultaneous ascent cannot answer — so the cycle is refused rather than iterated. Declare an antisymmetric order for the instances that read each other, or keep this instance out of the other's cycle.";
       };
     };
 
