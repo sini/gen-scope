@@ -2344,4 +2344,50 @@ in
       };
     };
   };
+
+  # ── THE SEAL'S GUARDED TRACE LOOKUP ──
+  # `trace.<id>` selection on a missing id is the interpreter's own `attribute missing` abort —
+  # uncatchable and naming neither the id nor the relation — so the seal's accessor carries a
+  # guarded lookup that refuses BY NAME (ADR-0025 item 1), in the same message family as its
+  # sibling `accessor.dependencies <missing>`. The clean arm (a present id answering the sealed
+  # entry unchanged, and the `trace.<id> or default` opt-out) is in `tests/fold-equations.nix`.
+  config.flake.testsError.fold-equations-refusals =
+    let
+      sealCtx = genScope.foldEquations {
+        scope = genScope.buildRoots {
+          kinds = genScope.mkKinds [ (genScope.mkKind { name = "host"; }) ];
+          parentGraph = genScope.edge "kid" "top";
+          decls = {
+            top = { };
+            kid = { };
+          };
+          types = {
+            top = "host";
+            kid = "host";
+          };
+        };
+        schedule = {
+          equations = {
+            children = {
+              name = "children";
+              kind = "nta";
+              readsAttrs = [ ];
+              stratum = "structural";
+              compute = _self: _id: { };
+            };
+          };
+        };
+        parseParent = _: null;
+        declaredDependencies = _: [ ];
+      };
+    in
+    {
+      test-the-seals-trace-lookup-on-a-missing-id-refuses-by-name = {
+        expr = sealCtx.accessor.trace "ghost";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: no trace for node 'ghost' — node not reachable from roots";
+        };
+      };
+    };
 }

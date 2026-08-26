@@ -106,6 +106,16 @@
         dependencies = id: prelude.unique (ev.structuralEdges id ++ declaredDependencies id);
         parent = id: parseParent id;
         nodeData = id: (ev.node id).decls or { };
+        # ── THE GUARDED TRACE LOOKUP ──
+        # `trace.<id>` selection on a MISSING id is the interpreter's own `attribute missing`
+        # abort — uncatchable by `tryEval`, naming neither the id nor the relation — and attribute
+        # selection is not interceptable, so the refusal cannot live on the sealed attrset itself.
+        # It lives here instead, beside `dependencies`, whose missing-id read already refuses the
+        # same way: every operation returns a value or a NAMED refusal (ADR-0025 item 1). Present
+        # ids answer the sealed `trace` entry unchanged — one derivation site — and
+        # `trace.<id> or default` remains the caller-side opt-out (ordinary selection).
+        trace =
+          id: trace.${id} or (throw "gen-scope: no trace for node '${id}' — node not reachable from roots");
       };
       # The trace's deps are DERIVED — read off the accessor's dependency relation, which is the
       # normalized union above and NOT the declared relation the gate runs over. Those were one

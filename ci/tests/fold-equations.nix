@@ -207,6 +207,20 @@ in
         "hash"
       ];
     };
+    # ── THE GUARDED TRACE LOOKUP, on its clean arm ──
+    # For a PRESENT id the guarded lookup answers the sealed entry itself — one derivation site,
+    # so the two cannot drift. The missing-id arm is a message cell in `tests-error.nix`: that
+    # refusal's whole value is WHICH text fires, and `tryEval` discards the text.
+    test-accessor-trace-lookup-agrees-with-the-sealed-entry = {
+      expr = edgedCtx.accessor.trace "child" == edgedCtx.trace.child;
+      expected = true;
+    };
+    # The caller-side opt-out the guard must not disturb: `trace.<id> or default` is ordinary
+    # selection on the sealed attrset and still answers the default on a missing id.
+    test-trace-or-default-opt-out-still-selects = {
+      expr = edgedCtx.trace.ghost or "absent";
+      expected = "absent";
+    };
     # The declared dependencies are the topology consumers' oracle and nothing on the cold path
     # walks them, so a CYCLIC declaration resolves exactly as an acyclic one does.
     test-cyclic-declared-dependencies-leave-the-cold-path-alone = {

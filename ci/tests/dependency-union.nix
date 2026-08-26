@@ -289,17 +289,18 @@ in
     };
 
     # ══ THE RECORD THE CONSUMER READS THROUGH ══
-    # The accessor's field set, pinned as an EXACT set. The union changed what one of these fields
-    # ANSWERS and nothing about which fields exist, and this cell is what says so: a field added,
-    # dropped or renamed here is a change to the interface a consumer binds against, and it should
-    # redden a cell rather than surface as a missing attribute inside somebody else's fold.
-    test-the-accessor-publishes-exactly-its-four-fields = {
+    # The accessor's field set, pinned as an EXACT set: a field added, dropped or renamed here is
+    # a change to the interface a consumer binds against, and it should redden a cell rather than
+    # surface as a missing attribute inside somebody else's fold. The fifth field is the guarded
+    # trace lookup — the by-name refusal the sealed `trace.<id>` selection cannot carry.
+    test-the-accessor-publishes-exactly-its-five-fields = {
       expr = builtins.attrNames structuralOnly.accessor;
       expected = [
         "dependencies"
         "nodeData"
         "nodes"
         "parent"
+        "trace"
       ];
     };
     # The relation is total over the node set: every node the accessor enumerates answers, so a
