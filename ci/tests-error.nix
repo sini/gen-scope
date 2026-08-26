@@ -280,6 +280,7 @@ let
   # expectations are documented at the fixture file.
   sccCorpus = import ./tests/_fixtures/scc-corpus.nix { inherit genScope; };
   sccForceGate = import ./tests/_fixtures/scc-force-gate.nix { inherit genScope; };
+  firstTransition = import ./tests/_fixtures/first-transition.nix { inherit genScope; };
 
   # The spawned-visibility witness, shared with `tests/spawned-visibility.nix`: the refusal below
   # is earned on the same graph whose clean path answers there.
@@ -1871,7 +1872,8 @@ in
     };
   };
 
-  # ── THE SHARED ROUND'S REFUSALS — the corpus's refusing fixtures, each by its own text ──
+  # ── THE SHARED ROUND'S REFUSALS — the corpus's refusing fixtures, each by its own text
+  # (plus the first-transition family at the end, which states its own provenance) ──
   # The fixtures and their provenance live in `tests/_fixtures/scc-corpus.nix`; the expected
   # VERDICT KIND of every cell here is the tracked model's hand-derived default column, and the
   # texts are the landed refusal idiom those verdicts arrive in. The ascent and height texts are
@@ -2145,6 +2147,34 @@ in
       expectedError = {
         type = "EvalError";
         msg = "division by zero";
+      };
+    };
+
+    # ── THE FIRST-TRANSITION FAMILY (not corpus ports; fixtures and provenance at
+    # `tests/_fixtures/first-transition.nix`) ──
+    # A PERSISTENTLY non-monotone member whose first descent lands at the walk's own first
+    # transition is still refused by name — one transition up, where the outer seat's clamp is
+    # in-domain. At the first transition the seat is provisional by construction (the only
+    # in-domain candidate for the earlier snapshot is the later one itself, and a step re-applied
+    # to that clamp reproduces the value under test), so this cell is what says the provisional
+    # first transition leaves NO REFUSAL HOLE.
+    test-a-persistent-first-transition-descent-is-still-refused-by-name = {
+      expr = firstTransition.desc2;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' took a step its declared order does not ascend, at iteration 3 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # The unobserved-prefix control (13(e)): the SAME height lie the value suite answers when it
+    # lives wholly below `f(x)` is refused by name when read from level one — the walk from 0
+    # counts the run of ascents the late walk never observes. Without this cell the answering
+    # twin's green is an absence claim with no live control.
+    test-the-same-lie-observed-from-level-one-is-refused = {
+      expr = firstTransition.p1lieCtl;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 2 steps, so the declared height of 1 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget (the still-moving members its step reads: [\"n.da\"])";
       };
     };
   };

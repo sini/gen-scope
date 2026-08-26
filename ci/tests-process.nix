@@ -87,6 +87,11 @@
             # descent turns answer 3 into an anonymous abort; the monotone twin never reads it.
             diesAnonymously f1-div "$libSrc"
             answers f1-div-ctl "$libSrc" 3
+            # The trace-channel positive control: the probe AT f(m) — the level-2 entry, inside
+            # the domain, demanded by the walked program itself — fires exactly once, invariant
+            # across the clamp floor: the live-channel proof beside the trace arms' counts.
+            answers f1-within "$libSrc" 3
+            traceCount f1-within 1
 
             # hctl2 — the seed-level control. Patch a copy of lib/, assert the patch landed
             # exactly once, and require the mis-seeded ladder to die by infinite recursion.
@@ -103,8 +108,8 @@
             grep -q 'infinite recursion' "$TMPDIR/err" || die hctl2 "death is not the infinite-recursion channel"
 
             # 0/0 is a false pass: the runner must have executed every cell above.
-            [ "$ran" = "8" ] || die runner "expected 8 evaluations, ran $ran"
-            echo "tests-process: 8 cells, every exit read unpiped, every death on its named channel" > $out
+            [ "$ran" = "9" ] || die runner "expected 9 evaluations, ran $ran"
+            echo "tests-process: 9 cells, every exit read unpiped, every death on its named channel" > $out
           '';
     };
 }

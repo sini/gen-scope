@@ -149,8 +149,11 @@ let
   # does not settle (its only words are "the clamp the outer seat already constructs"), and a
   # cell must not settle it silently. If a floor ever lands, the div arm's verdict flips loudly
   # and this comment is the record of what the flip means.
+  # `probeAt` selects which `da` value routes `m` through the probe branch: 0 puts the probe on
+  # the level-1 entry (below `f(m)` — the trace/div arms), 1 puts it on the level-2 entry (AT
+  # `f(m)`, inside the domain — the `f1-within` channel control).
   f1 =
-    probe: descVal:
+    probeAt: probe: descVal:
     run {
       da = circular { carrier = num 0 6; } (
         self: _id: _prev:
@@ -170,7 +173,7 @@ let
         in
         if qv == 8 then
           builtins.seq (self.get "n" "m") descVal
-        else if self.get "n" "da" == 0 then
+        else if self.get "n" "da" == probeAt then
           probe
         else
           5
@@ -204,12 +207,18 @@ else if arm == "lrp2-ctl" then
 else if arm == "undemerr" then
   undemerr
 else if arm == "f1-trace" then
-  f1 (builtins.trace "F1-PROBE" 5) 2
+  f1 0 (builtins.trace "F1-PROBE" 5) 2
 else if arm == "f1-trace-ctl" then
-  f1 (builtins.trace "F1-PROBE" 5) 5
+  f1 0 (builtins.trace "F1-PROBE" 5) 5
 else if arm == "f1-div" then
-  f1 (1 / 0) 2
+  f1 0 (1 / 0) 2
 else if arm == "f1-div-ctl" then
-  f1 (1 / 0) 5
+  f1 0 (1 / 0) 5
+else if arm == "f1-within" then
+  # The trace-channel positive control: the same fixture with the probe moved to the level-2
+  # entry — AT `f(m)`, inside the domain, demanded by the walked program itself — so the
+  # F1-PROBE channel is proven live in the same runner run whatever the trace arms read. Exactly
+  # one firing, invariant across the clamp floor (the floor withdraws only below-domain reads).
+  f1 1 (builtins.trace "F1-PROBE" 5) 2
 else
   throw "tests-process-cells: unknown arm '${arm}'"

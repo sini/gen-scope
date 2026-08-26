@@ -18,6 +18,7 @@
 let
   corpus = import ./_fixtures/scc-corpus.nix { inherit genScope; };
   forceGate = import ./_fixtures/scc-force-gate.nix { inherit genScope; };
+  firstTransition = import ./_fixtures/first-transition.nix { inherit genScope; };
   inherit (corpus) results;
 
   # Carrier vocabulary for the oracle-row cells below (the corpus keeps its own copy private).
@@ -291,6 +292,19 @@ in
         );
       } "q";
       expected = 4;
+    };
+
+    # ── THE HEIGHT SEAT'S UNOBSERVED-PREFIX SCOPE (13(e)) ──
+    # The mechanism's own stated scope, quoted from the seat gate's comment in `lib/eval.nix`:
+    # "a lie living wholly inside that prefix is answered: a stated scope, not an incompleteness
+    # to be repaired later." This cell is that sentence as a measurement rather than prose: a
+    # member with `f(x) = 4` whose declared height 1 is refuted by a run of 3 — every strict
+    # ascent strictly below the walk's first comparison — is ANSWERED. The live control on the
+    # same predicate is next door in `tests-error.nix`: the same lie read from level one is
+    # refused by name.
+    test-a-height-lie-wholly-inside-the-unobserved-prefix-is-answered = {
+      expr = firstTransition.p1lie;
+      expected = 5;
     };
   };
 }
