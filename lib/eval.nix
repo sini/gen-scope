@@ -1172,6 +1172,16 @@ let
               ]
               ++ prelude.concatMap self._walkFrom (builtins.attrNames all);
 
+            # Internal: the composed child-record read — `children` with the spawn channel's half —
+            # published under one name so the sibling query and resolver modules can reach it. They
+            # receive only this accessor, and the guard that makes the composition safe on a
+            # kindless scope (`attributes ? "derived-children"`) is a test on the running attribute
+            # set, which is not in scope there — so the composition is expressible here and nowhere
+            # they could spell it. The demanding (strict) arm: every caller asks ONE id for its
+            # records, so the `children` half is exactly the guarded `get` and the refusal axis
+            # does not move.
+            _childRecords = childRecordsStrict self;
+
             # Full tree materialization. Forces all children attributes recursively.
             # O(n) — each node computed once. Use for gen-graph global ops, diagrams.
             # An attrset is a SET: `attrNames` on it answers in bytewise codepoint order, and the
@@ -1505,6 +1515,13 @@ let
               throw "gen-scope: evalDebug requires parseParent for non-root nodes";
 
           get = id: attrName: (getTraced id attrName).value;
+
+          # Internal: the composed child-record read, mirroring the production accessor's
+          # `_childRecords` so the query surface answers against either evaluator. Its argument is
+          # built the way `node` above builds one — from `mkSelf visited traceList`, never from a
+          # captured outer accessor — so the reads it makes land in the trace rather than
+          # bypassing the recording this evaluator exists for.
+          _childRecords = id: childRecordsStrict (mkSelf visited traceList) id;
 
           allNodes = throw "gen-scope: evalDebug does not support allNodes (use eval for materialization)";
 

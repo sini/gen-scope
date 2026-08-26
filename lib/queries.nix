@@ -1,14 +1,18 @@
-# Structural queries as thin wrappers over self.node and self.get.
+# Structural queries as thin wrappers over self.node and self._childRecords.
 #
-# parent is structural (on the node). children, ancestors, descendants,
-# siblings are derived via computed attributes (self.get id "children").
+# parent is structural (on the node). children, descendants, siblings and the
+# descendant tests read the child direction through the accessor's composed
+# child-record read (`self._childRecords`), which is `children` with the spawn
+# channel's half — a spawned node is a node (one graph, one node notion), so a
+# query surface reading the declared half alone answers about a different node
+# set than the evaluator materializes.
 { prelude }:
 let
   parent = self: id: (self.node id).parent;
 
-  children = self: id: self.get id "children";
+  children = self: id: self._childRecords id;
 
-  childrenIds = self: id: builtins.attrNames (self.get id "children");
+  childrenIds = self: id: builtins.attrNames (self._childRecords id);
 
   ancestors =
     self: id:
@@ -35,7 +39,7 @@ let
     if p == null then
       [ ]
     else
-      builtins.filter (cid: cid != id) (builtins.attrNames (self.get p "children"));
+      builtins.filter (cid: cid != id) (builtins.attrNames (self._childRecords p));
 
   descendants =
     self: id:
@@ -43,7 +47,7 @@ let
       go =
         visited: nid:
         let
-          cids = builtins.attrNames (self.get nid "children");
+          cids = builtins.attrNames (self._childRecords nid);
         in
         prelude.concatMap (
           cid: if visited ? ${cid} then [ ] else [ cid ] ++ go (visited // { ${cid} = true; }) cid
@@ -78,7 +82,7 @@ let
       go =
         visited: nid:
         let
-          cids = builtins.attrNames (self.get nid "children");
+          cids = builtins.attrNames (self._childRecords nid);
         in
         builtins.any (
           cid:

@@ -440,7 +440,9 @@ let
     };
 
   # Collection attribute combinator (Sloane 2010 §7).
-  # Traversal uses COMPUTED attributes (self.get), not structural fields.
+  # Traversal uses COMPUTED attributes, not structural fields; the child direction reads the
+  # accessor's composed child-record read (`self._childRecords`), so a traversal gathers over
+  # spawned children exactly as the query surface enumerates them.
   collectionAttr =
     {
       traverse,
@@ -456,7 +458,7 @@ let
         else if traverse == relations.imports then
           self.get id relations.imports
         else if traverse == "children" then
-          builtins.attrNames (self.get id "children")
+          builtins.attrNames (self._childRecords id)
         else if traverse == "siblings" then
           let
             p = (self.node id).parent;
@@ -464,7 +466,7 @@ let
           if p == null then
             [ ]
           else
-            builtins.filter (cid: cid != id) (builtins.attrNames (self.get p "children"))
+            builtins.filter (cid: cid != id) (builtins.attrNames (self._childRecords p))
         else if traverse == "ancestors" then
           let
             go =

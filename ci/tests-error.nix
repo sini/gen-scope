@@ -280,6 +280,10 @@ let
   # expectations are documented at the fixture file.
   sccCorpus = import ./tests/_fixtures/scc-corpus.nix { inherit genScope; };
   sccForceGate = import ./tests/_fixtures/scc-force-gate.nix { inherit genScope; };
+
+  # The spawned-visibility witness, shared with `tests/spawned-visibility.nix`: the refusal below
+  # is earned on the same graph whose clean path answers there.
+  spawnedVisibility = import ./tests/_fixtures/spawned-visibility.nix { inherit lib genScope; };
 in
 {
   # Same type as `flake.tests`, because it is the same kind of thing read by the same runner —
@@ -2321,4 +2325,23 @@ in
         };
       };
     };
+
+  # ── THE DEBUG EVALUATOR'S COMPOSED-READ REFUSAL ──
+  # The composed child-record read forces a node acquisition at the id whose children are asked
+  # for — on the spawn channel, `(ev.node id).type` decides which builders run — and the debug
+  # evaluator can satisfy that for a non-root id only through `parseParent`. Without it the read
+  # refuses BY NAME. The message is asserted, not merely that something threw: several other
+  # throws are reachable from the same fixture (the kindless `unknown attribute` among them), and
+  # a `tryEval` cell would be equally satisfied by any of them. The clean arm — the same read with
+  # `parseParent` supplied — answers in `tests/spawned-visibility.nix`, so the pair varies exactly
+  # one formal.
+  config.flake.testsError.spawned-visibility-refusals = {
+    test-debug-composed-read-without-parseParent-refuses-by-name = {
+      expr = genScope.childrenIds spawnedVisibility.debugNoParse "winnow";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: evalDebug requires parseParent for non-root nodes";
+      };
+    };
+  };
 }
