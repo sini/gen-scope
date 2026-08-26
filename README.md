@@ -582,8 +582,8 @@ Parameterized attribute (Sloane 2010 §3).
 | `shadow inner outer` | Inner shadows outer by key (Neron 2015 §5 Def. 1) |
 | `resolve { local?, imported?, inherited? }` | Specificity-ordered resolution (Neron 2015 Fig. 2) |
 | `collectImports extract self id` | Collect from imported scopes (Neron 2015 §2.4, rule I) |
-| `collect { filter? } extract self` | Global collection (Tier 2, forces `allNodes`) |
-| `collectByType type extract self` | Filter by node type (Tier 2) |
+| `collect { filter? } extract self` | Global collection (Tier 2, forces the full tree). Answers in [materialization order](#materialization-order) (`allNodeIds`), not codepoint key order |
+| `collectByType type extract self` | Filter by node type (Tier 2); same materialization order as `collect` |
 | `followEdge label self id` | Custom edge label targets (van Antwerpen 2018 §2.1) |
 | `collectByLabel label extract self id` | Collect via custom edges |
 | `subtypeOf { eq? } self idA idB` | Structural subtyping (van Antwerpen 2018 §2.3) |

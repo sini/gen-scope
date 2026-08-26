@@ -530,7 +530,11 @@ let
     extract: self: id:
     prelude.concatMap (importId: extract self importId) (self.get id relations.imports);
 
-  # Global collection (WARNING: forces full tree via allNodes — Tier 2).
+  # Global collection (WARNING: forces full tree — Tier 2). Answers in MATERIALIZATION
+  # order (`self.allNodeIds`), not the codepoint key order `attrNames self.allNodes` would
+  # give — the same undeclared-order defect `queryReverse` had (see its ORDER comment
+  # above): an attrset is a set, so enumerating it and discarding the walk that built it
+  # loses a declared order to an incidental one. `allNodeIds` is the walk kept.
   collect =
     {
       filter ? _: true,
@@ -542,7 +546,7 @@ let
         node = self.node id;
       in
       if filter node then extract self id else [ ]
-    ) (builtins.attrNames self.allNodes);
+    ) self.allNodeIds;
 
   # Typed collection: filter nodes by type field.
   collectByType =

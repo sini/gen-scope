@@ -5,6 +5,8 @@ let
     queryAll
     queryReverse
     ambiguous
+    collect
+    collectByType
     ;
 
   # Graph: a imports b, b imports c. Parent: a → root.
@@ -369,6 +371,36 @@ in
           "C"
         ];
       };
+    };
+
+    # ── collect / collectByType answer in materialization order ──
+    # The SAME undeclared-order defect `queryReverse` had one surface over: `collect`
+    # enumerated `self.allNodes` via `attrNames`, discarding the walk order the same way.
+    # `nestedResult`'s premise (walk `[r mid alpha t]` vs keys `[alpha mid r t]`) is already
+    # asserted above by `test-nested-walk-order-differs-from-key-order`; these cells reuse
+    # that fixture rather than building a second one.
+
+    # Unfiltered `collect` answers in `allNodeIds` order directly — codepoint order would
+    # give `[alpha mid r t]`.
+    test-collect-discovery-order = {
+      expr = collect { } (_self: id: [ id ]) nestedResult;
+      expected = [
+        "r"
+        "mid"
+        "alpha"
+        "t"
+      ];
+    };
+
+    # THE discriminator. `mid` and `alpha` are both type "node"; discovery order reaches
+    # `mid` first (it is `r`'s child, `alpha` sits below it), codepoint key order reaches
+    # `alpha` first. `collectByType` delegates to `collect`, so it inherits the same order.
+    test-collectByType-discovery-order = {
+      expr = collectByType "node" (_self: id: [ id ]) nestedResult;
+      expected = [
+        "mid"
+        "alpha"
+      ];
     };
 
     test-ambiguity-not-when-single = {

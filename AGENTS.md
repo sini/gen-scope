@@ -136,8 +136,8 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 | `circular` | `{ carrier = { bottom, leq, height, quotient } } -> (self -> id -> prev -> next) -> { kind; carrier; step }` — returns the KIND-TAGGED DECLARATION the evaluator reads at demand time; the carrier is REQUIRED and TOTAL at four terms, refused by name at the first demand; the iteration bound is DERIVED (`height + 1` per instance, `Σ heights + 1` for a shared round over an instance SCC) |
 | `collectionAttr` | `{ traverse, extract, combine ? (a: b: a ++ b), filter ? (_: true) } -> self -> id -> [value]` |
 | `collectImports` | `extract -> self -> id -> [value]` |
-| `collect` | `{ filter ? (_: true) } -> extract -> self -> [value]` — Tier 2, **no `id` argument** |
-| `collectByType` | `type -> extract -> self -> [value]` — Tier 2, no `id` argument |
+| `collect` | `{ filter ? (_: true) } -> extract -> self -> [value]` — Tier 2, **no `id` argument**. Answers in `allNodeIds` materialization order, NOT `attrNames` codepoint order |
+| `collectByType` | `type -> extract -> self -> [value]` — Tier 2, no `id` argument; same materialization order as `collect` (delegates to it) |
 | `followEdge` | `label -> self -> id -> [id]` |
 | `collectByLabel` | `label -> extract -> self -> id -> [value]` |
 | `subtypeOf` | `{ eq ? (_k: _a: _b: true) } -> self -> idA -> idB -> bool` |
