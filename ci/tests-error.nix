@@ -279,6 +279,7 @@ let
   # answering fixtures next door in `tests/scc-round.nix`. Provenance and the hand-derived
   # expectations are documented at the fixture file.
   sccCorpus = import ./tests/_fixtures/scc-corpus.nix { inherit genScope; };
+  sccForceGate = import ./tests/_fixtures/scc-force-gate.nix { inherit genScope; };
 in
 {
   # Same type as `flake.tests`, because it is the same kind of thing read by the same runner —
@@ -2054,6 +2055,35 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 2 steps, so the declared height of 1 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
+      };
+    };
+
+    # ★ A26 CELL 1 — A MEMBER OTHER THAN THE DEMANDED TARGET, DESCENDING ON ITS OWN TRAJECTORY,
+    # IS REFUSED BY NAME. The fixture is multi-node (`tests/_fixtures/scc-force-gate.nix`)
+    # because the `!ascends` text names the refusing instance by NODE, and naming the member is
+    # the assertion: the target RATCHETS, so its own seat can never fire, and the message must
+    # blame 'dsc' — the descending non-target — never 'tgt'. The cell was RED on the
+    # target-column-scoped build (measured at `1b222fd`: EXIT 0, value 1, stderr empty), and the
+    # value 1 is exactly what the monotone twin answers in the value suite, so a cell asserting
+    # the returned value alone could not separate a least fixed point from a silent non-least
+    # one — which is what makes this class silent and the message the only honest oracle.
+    test-a-descending-non-target-member-is-refused-by-name = {
+      expr = sccForceGate.refused;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'dsc' took a step its declared order does not ascend, at iteration 2 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
+      };
+    };
+
+    # A26's second control: the same program DEMANDED AT the descending member refuses on the
+    # target-column-scoped build as well, so a harness that lost the seat outright cannot pass
+    # as the capability — the refusal must move with the SEATING of the non-target, not with
+    # whether any seat exists.
+    test-control-the-same-program-demanded-at-the-descending-member-refuses = {
+      expr = sccForceGate.refusedAtMember;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'dsc' took a step its declared order does not ascend, at iteration 2 — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed";
       };
     };
 

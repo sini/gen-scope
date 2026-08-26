@@ -17,6 +17,7 @@
 { genScope, ... }:
 let
   corpus = import ./_fixtures/scc-corpus.nix { inherit genScope; };
+  forceGate = import ./_fixtures/scc-force-gate.nix { inherit genScope; };
   inherit (corpus) results;
 
   # Carrier vocabulary for the oracle-row cells below (the corpus keeps its own copy private).
@@ -181,6 +182,16 @@ in
     # cone is stationary at the bound.
     test-control-boundquiet-with-a-fathomed-height-answers = {
       expr = results."BOUNDQUIET-FATH";
+      expected = 1;
+    };
+
+    # ── THE FORCE GATE'S NON-TARGET SEAT (A26), ANSWERING SIDE ──
+    # The monotone twin of the descending non-target member: the same three-node program with
+    # dsc ascending answers — and answers the SAME value 1 the target-column-scoped build
+    # returned on the descending fixture, which is why the refusal cell next door asserts the
+    # message and never the value. Isolates the descent as the whole cause.
+    test-control-a-monotone-non-target-member-answers = {
+      expr = forceGate.monotoneAnswers;
       expected = 1;
     };
 

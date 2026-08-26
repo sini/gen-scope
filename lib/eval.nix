@@ -835,10 +835,23 @@ let
                 # second materialization is the price of (D3): an upward walk must read a column
                 # seat-free at every level at or above its own seat, and one ladder cannot both be
                 # read by the steps (which is what makes laziness the gate) and be seat-free.
+                #
+                # LEVEL 1 IS SHARED WITH `levelsRaw`, NOT RE-MATERIALIZED. `levelsRaw[1]` is built
+                # from `levelsChecked[0]`, and level 0 of the checked ladder IS `bottoms` — no seat
+                # rides it — so `levelsRaw[1]` carries no seat in its transitive dependency and is
+                # a legal seed. The seed LEVEL is load-bearing, not a convenience: `levelsRaw[j]`
+                # for j ≥ 2 is built from `levelsChecked[j − 1]`, which carries every member's
+                # seat, and a ladder seeded there re-enters its own seat's walk — `infinite
+                # recursion encountered`, uncatchable. The per-process suite pins that boundary
+                # (`ci/tests-process-cells.nix`, arm `hctl2`): if a later revision ever seats
+                # level 0, this seed becomes that shape, and the control is what says so loudly.
+                # The second materialization therefore starts at level 2.
                 shadow = prelude.genList (
                   j:
                   if j == 0 then
                     bottoms
+                  else if j == 1 then
+                    builtins.elemAt levelsRaw 1
                   else
                     let
                       prev = builtins.elemAt shadow (j - 1);
