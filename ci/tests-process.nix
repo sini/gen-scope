@@ -76,16 +76,17 @@
             # UNDEMERR — a member the demand reaches at no level has its step applied at no level.
             answers undemerr "$libSrc" 2
 
-            # The (F1) residual pair, trace arms: the clamp at the first live transition forces
-            # shadow[f(m) − 1] — the probe fires exactly once on the descending arm and never on
-            # the monotone twin, at the same answer.
+            # The (F1) floor pair, trace arms: the clamp is floored at the walk's own seed, so
+            # the probe on shadow[f(m) − 1] never fires — on the descending arm or the monotone
+            # twin — at the same answer. The f1-within cell below is the channel's live control.
             answers f1-trace "$libSrc" 3
-            traceCount f1-trace 1
+            traceCount f1-trace 0
             answers f1-trace-ctl "$libSrc" 3
             traceCount f1-trace-ctl 0
-            # The (F1) residual pair, div arms: the same below-f(m) coordinate poisoned — the
-            # descent turns answer 3 into an anonymous abort; the monotone twin never reads it.
-            diesAnonymously f1-div "$libSrc"
+            # The (F1) floor pair, div arms: the same below-f(m) coordinate poisoned — and the
+            # descending arm ANSWERS, because the floored clamp never reads it (pre-floor this
+            # arm died anonymously; the flip is the floor's engineered signature).
+            answers f1-div "$libSrc" 3
             answers f1-div-ctl "$libSrc" 3
             # The trace-channel positive control: the probe AT f(m) — the level-2 entry, inside
             # the domain, demanded by the walked program itself — fires exactly once, invariant

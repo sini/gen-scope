@@ -767,8 +767,11 @@ let
             #   re-applied to the earlier level's member map CLAMPED ENTRYWISE to the later one —
             #   entrywise, inside each entry's own thunk, so an entry the step never demands is never
             #   compared — with quotients derived against the LATER snapshot raw (the same derivation
-            #   at both accessors, so a quotient coordinate contributes nothing to the verdict). If
-            #   that application still does not ascend to the value under test, the step is refuted
+            #   at both accessors, so a quotient coordinate contributes nothing to the verdict). The
+            #   clamp is FLOORED AT `f(m)`: it never reads below the member's own domain, so at a
+            #   walk's first transition — where the earlier snapshot would sit below the walk's
+            #   seed — the seat is provisional and no clamp is built. If elsewhere the re-applied
+            #   step still does not ascend to the value under test, the step is refuted
             #   outright; where it cannot be established — it raises, or a refusal trips inside the
             #   hybrid — the seat is PROVISIONAL and nothing is refused, because a claim about the
             #   program may be raised only at an input the program produces.
@@ -897,6 +900,12 @@ let
                 # general would reach `(m, f(m) − 1)`, a step-computed entry outside `D`, which is
                 # the undemanded forcing one level deep. A later re-entry seeds at its own higher
                 # level and can only UNDER-count, so it adds no false refusal.
+                #
+                # `j0` also FLOORS THE OUTER SEAT'S CLAMP: `outerCheck` receives the seed and
+                # short-circuits any transition whose earlier snapshot (`j − 2`) would sit below
+                # it, so the clamp never reads below the member's own domain either. A re-entry
+                # walk thereby loses only its own first transition's refinement — vacuous inside
+                # the domain — the same under-counting posture as the run counter above.
                 checkAt =
                   j: k:
                   let
@@ -917,7 +926,7 @@ let
                             st.runs;
                       in
                       builtins.seq (heightCheck jj i r) (
-                        builtins.seq (outerCheck jj i st.prev b) {
+                        builtins.seq (outerCheck j0 jj i st.prev b) {
                           j = jj;
                           prev = b;
                           runs = r;
@@ -982,9 +991,21 @@ let
                   in
                   if attempt.success then attempt.value else [ ];
 
+                # THE CLAMP IS FLOORED AT THE WALK'S OWN SEED. The guard generalizes the old
+                # `j < 2` — which guarded exactly the first transition of a walk seeded at 0, and
+                # to which this reduces literally at `j0 = 0` — to THIS walk's first transition:
+                # at `j = j0 + 1` the earlier snapshot would be `shadow[j0 − 1]`, below the
+                # member's own domain, and the seat never reads below the domain. Inside the
+                # domain the first transition has nothing to refine against anyway: the only
+                # in-domain candidate for the lower snapshot is `shadow[j0]` itself, a clamp of a
+                # level to itself is that level, and the re-applied step reproduces the value
+                # under test — so the seat is PROVISIONAL there by construction, no refusal is
+                # withdrawn that the domain could have established, and a real first-transition
+                # descent is caught by the later transitions' clamps, the settlement walk, or the
+                # height seat.
                 outerCheck =
-                  j: i: vprev: vk:
-                  if j < 2 then
+                  j0: j: i: vprev: vk:
+                  if j - 2 < j0 then
                     true
                   else
                     let

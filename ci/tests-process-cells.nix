@@ -129,26 +129,27 @@ let
     );
   } "t";
 
-  # ── THE (F1) LATENT EXPOSURE, PINNED AS A RESIDUAL (the A9-row convention: a PASSING pair,
-  # never a defect cell). At a member's FIRST live transition the outer seat's clamp is built
-  # from `shadow[f(m) − 1]` — below `f(m)`, outside `D`. The fixture reaches it: `m` is first
-  # demanded at level 2 (`t` reads its checked entry once, from t's level-3 computation), and
-  # `m` DESCENDS at its first walked transition 2 → 3, so the clamp pairs levels 1 and 2. The
-  # self-read that forces the clamp's own coordinate is steered by the quotient `q`, whose
-  # hybrid derivation runs against the LATER snapshot (`qsnap = p1`) — so `m` reads its own
-  # entry at the hybrid and at ladder levels ≥ 3, and NEVER at levels ≤ 2: `shadow[1].m` is
-  # reached by the clamp and by nothing else. Measured with a `builtins.trace` probe on the
-  # level-1 entry: one firing on the descending arm, zero on the monotone twin, at answer 3 on
-  # both — the trace arms are tracked here so the reachability stays a measurement.
+  # ── THE (F1) DISCHARGE, MEASURED (the A9-row convention: a PASSING pair, never a defect
+  # cell). The outer seat's clamp is FLOORED at the walk's own seed: it never reads below the
+  # member's domain. This fixture is the one whose first live transition USED to reach below —
+  # `m` is first demanded at level 2 (`t` reads its checked entry once, from t's level-3
+  # computation), and `m` DESCENDS at its first walked transition 2 → 3, so an unfloored clamp
+  # paired levels 1 and 2. The self-read that would force the clamp's own coordinate is steered
+  # by the quotient `q`, whose hybrid derivation runs against the LATER snapshot (`qsnap = p1`)
+  # — so `m` reads its own entry at the hybrid and at ladder levels ≥ 3, and NEVER at levels
+  # ≤ 2: `shadow[1].m` was reachable through the first-transition clamp and through nothing
+  # else, which is what makes these arms the floor's measurement. The trace arm asserts ZERO
+  # firings of a probe on that level-1 entry — nothing below `f(m)` is read — with the
+  # `f1-within` arm as the same channel's live control, and the monotone twin at zero on both
+  # sides of the change.
   #
-  # WHAT THE PAIR PINS AND WHAT IT DOES NOT. The div arms pin the CONSEQUENCE: a poisoned
-  # below-`f(m)` entry turns the same program from answer 3 into an anonymous abort, on the
-  # descent alone (the control differs in ONE table value and never dies). This is the CURRENT,
-  # well-defined behaviour, deliberately pinned as a residual: whether the clamp OWES a floor at
-  # `f(m)` — or the first transition owes a provisional seat — is a design question the spec
-  # does not settle (its only words are "the clamp the outer seat already constructs"), and a
-  # cell must not settle it silently. If a floor ever lands, the div arm's verdict flips loudly
-  # and this comment is the record of what the flip means.
+  # WHAT THE PAIR MEASURES. The div arms pin the floor's CONSEQUENCE: the same below-`f(m)`
+  # coordinate poisoned with a division by zero, and the descending arm ANSWERS 3 — before the
+  # floor it died as an anonymous uncatchable abort, and that loud flip was the engineered
+  # signature of exactly this change (a level-0 clamp instead of a floor would have kept it
+  # dying: the re-applied step at a bottoms-shaped input runs the poisoned `da == 0` branch
+  # itself). No refusal is withdrawn with the read: a persistent first-transition descent is
+  # refused by name one transition up (`tests-error.nix`, the first-transition family).
   # `probeAt` selects which `da` value routes `m` through the probe branch: 0 puts the probe on
   # the level-1 entry (below `f(m)` — the trace/div arms), 1 puts it on the level-2 entry (AT
   # `f(m)`, inside the domain — the `f1-within` channel control).
