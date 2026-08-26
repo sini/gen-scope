@@ -197,6 +197,85 @@ let
           3
       );
     } "t";
+  # ── EG-B — THE OUTER SEAT'S HYBRID DEATH, NAMED. A shared round whose WALKED member itself
+  # descends: the outer seat probes the descent by re-applying the member's step at a clamped
+  # pair whose halves come from DIFFERENT levels by design, so the accessor can serve a
+  # coordinate combination the program's own trajectory never produces — here `(c = 0, q = 1)`:
+  # on every real level members and qsnap are the same map, so `q == 1` implies `c >= 1`; at
+  # the hybrid `c` is clamped back to 0 while `q` derives at the later snapshot where `c == 1`.
+  # At that pair the step demands `z`, an entry NOTHING on the trajectory reads (SM§2.4a's
+  # EXISTENCE axis), and `z`'s step is `div 1 0` — not `tryEval`-catchable, so the abort is
+  # uncatchable BY SUBSTRATE and the reachable repair is the NAME, never a catch (ADR-0025 §1).
+  # `c` ascends 0..4, `z` never moves on the trajectory, `q` is a quotient (excluded from the
+  # universe by `memberEligible`): the TARGET is the ONLY descending instance — the honest
+  # probe, which no non-target seat can re-mask. The ctl arms are the SAME universe refusing
+  # BY NAME (`!ascends`, iteration 1): `z`'s mere membership forces nothing, the hybrid read is
+  # the whole death. The mask arm adds a descending NON-target `d` — the bounds cell: it dies
+  # at the walked member's own clamp, named the same way.
+  drv = circular { carrier = num 0 4; } (
+    self: _id: _prev:
+    let
+      c = self.get "n" "c";
+    in
+    if c >= 4 then 4 else c + 1
+  );
+  egbWith = tstep: {
+    c = drv;
+    # never forced on the real trajectory
+    z = circular { carrier = num 0 8; } (
+      _self: _id: _prev:
+      builtins.div 1 0
+    );
+    # a QUOTIENT — excluded from the universe
+    q = circular { carrier = qnum 0 4; } (
+      self: _id: _prev:
+      if self.get "n" "c" >= 1 then 1 else 0
+    );
+    # the TARGET; descends 5 -> 0
+    t2 = circular { carrier = num 0 5; } tstep;
+  };
+  egbHybridStep =
+    self: _id: _prev:
+    let
+      c = self.get "n" "c";
+      q = self.get "n" "q";
+    in
+    if c == 0 && q == 1 then
+      self.get "n" "z"
+    else if c == 0 then
+      5
+    else
+      0;
+  egb = run (egbWith egbHybridStep) "t2";
+  # identical universe; the hybrid-only branch returns the same persistent 5 — refuses by name
+  egbCtlNoz = run (egbWith (
+    self: _id: _prev:
+    let
+      c = self.get "n" "c";
+      q = self.get "n" "q";
+    in
+    if c == 0 && q == 1 then
+      5
+    else if c == 0 then
+      5
+    else
+      0
+  )) "t2";
+  # no quotient branch at all — the clamp is reached without the quotient trick
+  egbCtlPlain = run (egbWith (
+    self: _id: _prev:
+    if self.get "n" "c" == 0 then 5 else 0
+  )) "t2";
+  # the obvious probe: a descending NON-target member beside the descending target
+  egbMask = run (
+    egbWith egbHybridStep
+    // {
+      d = circular { carrier = num 0 5; } (
+        self: _id: _prev:
+        if self.get "n" "c" <= 0 then 5 else 0
+      );
+    }
+  ) "t2";
 in
 if arm == "lrp2" then
   lrp2 (builtins.div 1 0)
@@ -221,5 +300,13 @@ else if arm == "f1-within" then
   # F1-PROBE channel is proven live in the same runner run whatever the trace arms read. Exactly
   # one firing, invariant across the clamp floor (the floor withdraws only below-domain reads).
   f1 1 (builtins.trace "F1-PROBE" 5) 2
+else if arm == "egb" then
+  egb
+else if arm == "egb-ctl-noz" then
+  egbCtlNoz
+else if arm == "egb-ctl-plain" then
+  egbCtlPlain
+else if arm == "egb-mask" then
+  egbMask
 else
   throw "tests-process-cells: unknown arm '${arm}'"

@@ -1017,33 +1017,47 @@ let
                     if !est.success || est.value then
                       true
                     else
-                      let
-                        star = builtins.mapAttrs (
-                          k2: _:
+                      # The probe's two halves come from DIFFERENT levels by design, so the
+                      # accessor can serve a coordinate combination the program's own
+                      # trajectory never produces — and there the re-applied step may demand
+                      # an instance nothing on the trajectory reads (SM§2.4a's EXISTENCE
+                      # axis). A fault forced only at that combination can die on a channel
+                      # `tryEval` does not catch — division by zero, deep recursion — so the
+                      # abort is uncatchable BY SUBSTRATE, and this context is what keeps it
+                      # from being ANONYMOUS: the death carries the seat, the instance, and
+                      # the coordinate, joining the refusal vocabulary even where no refusal
+                      # value can be returned.
+                      builtins.addErrorContext
+                        "gen-scope: the outer seat is re-applying the walked member's step on '${i.nid}' at a constructed clamped pair, probing the descent it detected at iteration ${toString (j - 1)} — a coordinate combination the program's own trajectory does not produce, where the step may demand an entry nothing on the trajectory reads"
+                        (
                           let
-                            lo = p2.${k2};
-                            hi = p1.${k2};
+                            star = builtins.mapAttrs (
+                              k2: _:
+                              let
+                                lo = p2.${k2};
+                                hi = p1.${k2};
+                              in
+                              if index.${k2}.carrier.leq lo hi then lo else hi
+                            ) bottoms;
+                            accStar = mkAccessor (
+                              round
+                              // {
+                                open = true;
+                                members = star;
+                                qsnap = p1;
+                                level = j;
+                                provisional = false;
+                              }
+                            );
+                            attempt = builtins.tryEval (i.step accStar i.nid (star.${i.key}));
                           in
-                          if index.${k2}.carrier.leq lo hi then lo else hi
-                        ) bottoms;
-                        accStar = mkAccessor (
-                          round
-                          // {
-                            open = true;
-                            members = star;
-                            qsnap = p1;
-                            level = j;
-                            provisional = false;
-                          }
+                          if !attempt.success then
+                            true
+                          else if !(leq attempt.value vk) then
+                            throw "gen-scope: circular attribute on '${i.nid}' took a step its declared order does not ascend, at iteration ${toString (j - 1)} — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed"
+                          else
+                            true
                         );
-                        attempt = builtins.tryEval (i.step accStar i.nid (star.${i.key}));
-                      in
-                      if !attempt.success then
-                        true
-                      else if !(leq attempt.value vk) then
-                        throw "gen-scope: circular attribute on '${i.nid}' took a step its declared order does not ascend, at iteration ${toString (j - 1)} — the step is not monotone on the declared carrier, so the iteration is not a Kleene ascent and no least fixed point is being computed"
-                      else
-                        true;
 
                 # The demand pass: the round's own demand is the target's entry at every level, in
                 # order, as a bounded iteration under the shared forcing discipline — never a

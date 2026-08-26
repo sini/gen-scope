@@ -42,7 +42,7 @@
             # value variable is `val`, never `out` — `out` is the derivation's own output path.
             evalArm() {
               rc=0
-              val=$(nix-instantiate --eval --strict --readonly-mode \
+              val=$(nix-instantiate --eval --strict --readonly-mode ''${3:+"$3"} \
                 --argstr arm "$1" \
                 --argstr genPreludeSrc "$genPreludeSrc" \
                 --argstr genGraphSrc "$genGraphSrc" \
@@ -62,6 +62,19 @@
               if grep -q 'gen-scope:' "$TMPDIR/err"; then
                 die "$1" "death is NOT anonymous — a named refusal fired"
               fi
+            }
+            # <arm> <libdir> <node>: non-zero exit, division by zero, AND the outer seat's
+            # context line naming the node — the positive twin of diesAnonymously on the same
+            # predicate, in the same run. `--show-trace` so a step with deep internal
+            # evaluation cannot push the context frame into the trace's truncated middle —
+            # and NEVER on diesAnonymously arms, where a full trace prints source snippets
+            # that could carry the literal `gen-scope:` from eval.nix's own throw texts and
+            # false-trip the absence assertion.
+            diesNamed() {
+              evalArm "$1" "$2" --show-trace
+              [ "$rc" -ne 0 ] || die "$1" "expected a death, got exit 0 with '$val'"
+              grep -q 'division by zero' "$TMPDIR/err" || die "$1" "death is not the division-by-zero channel"
+              grep -Fq "gen-scope: the outer seat is re-applying the walked member's step on '$3'" "$TMPDIR/err" || die "$1" "death does not carry the outer seat's context naming '$3'"
             }
             traceCount() { # <arm> <n>: the F1 probe fired exactly n times
               n=$(grep -c 'trace: F1-PROBE' "$TMPDIR/err" || true)
@@ -94,6 +107,25 @@
             answers f1-within "$libSrc" 3
             traceCount f1-within 1
 
+            # EG-B — the outer seat's hybrid death carries the seat's name. The honest probe
+            # (the walked member is the ONLY descending instance in the universe) and the mask
+            # bound (a descending non-target beside it) both die on the div-zero channel WITH
+            # the outer-seat context naming the node (the single-node message family names the
+            # node; member attribution rests on the fixture); the ctl arms are the SAME universe refusing
+            # BY NAME at iteration 1 — z's mere membership forces nothing. The anti-masking
+            # fence is this run's own pairing: a re-masked death would surface on the THROW
+            # channel blaming a non-target and fail diesNamed's predicate, and the
+            # `diesAnonymously lrp2` cell above is the live control that the name did NOT leak
+            # into the (P2) walk channel.
+            diesNamed egb "$libSrc" n
+            evalArm egb-ctl-noz "$libSrc"
+            [ "$rc" -ne 0 ] || die egb-ctl-noz "expected a by-name refusal, got exit 0 with '$val'"
+            grep -q 'does not ascend, at iteration 1' "$TMPDIR/err" || die egb-ctl-noz "refusal is not the by-name non-ascent at iteration 1"
+            evalArm egb-ctl-plain "$libSrc"
+            [ "$rc" -ne 0 ] || die egb-ctl-plain "expected a by-name refusal, got exit 0 with '$val'"
+            grep -q 'does not ascend, at iteration 1' "$TMPDIR/err" || die egb-ctl-plain "refusal is not the by-name non-ascent at iteration 1"
+            diesNamed egb-mask "$libSrc" n
+
             # hctl2 — the seed-level control. Patch a copy of lib/, assert the patch landed
             # exactly once, and require the mis-seeded ladder to die by infinite recursion.
             cp -r "$libSrc" lib-patched
@@ -109,8 +141,8 @@
             grep -q 'infinite recursion' "$TMPDIR/err" || die hctl2 "death is not the infinite-recursion channel"
 
             # 0/0 is a false pass: the runner must have executed every cell above.
-            [ "$ran" = "9" ] || die runner "expected 9 evaluations, ran $ran"
-            echo "tests-process: 9 cells, every exit read unpiped, every death on its named channel" > $out
+            [ "$ran" = "13" ] || die runner "expected 13 evaluations, ran $ran"
+            echo "tests-process: 13 cells, every exit read unpiped, every death on its named channel" > $out
           '';
     };
 }
