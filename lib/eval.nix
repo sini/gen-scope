@@ -715,30 +715,55 @@ let
             # meant it for, an error rather than a wasted step. "How a member joins" is Nix's own
             # laziness; there is no member list, no join, no widen, no eq and no maxIter.
             #
-            # Two seats ride THE TARGET'S column — the one column the round's own demand pass
-            # constructs at every level — and they refute DIFFERENT things. The scope is not
-            # economy but the laziness law above turned on the seats themselves: BOTH seats read
-            # the column's HISTORY (the run counter reaches back through every earlier level; the
-            # descent observation reads the level before the one under test), and on any other
-            # member that history is exactly what the demand never produced. Computing it would
-            # force undemanded entries, whose steps transitively run undemanded instances — the
-            # error class named above, reintroduced by the protection itself. Pure Nix cannot
-            # observe which entries a demand forced, so the one column known demanded BY
-            # CONSTRUCTION is the target's; a non-target member's protection RE-SEATS AT THE
-            # BOUND, where the settlement walk is read-closed and refuses any cone member still
-            # moving. The price, stated: an under-declared height or a non-monotone step on a
-            # non-target member is refused only where its movement survives to the bound — the cap
-            # is INCOMPLETE exactly where its tally would have been UNSOUND.
+            # THE FORCE GATE. Two seats ride EVERY member, on the column the demand actually
+            # produced, and they refute DIFFERENT things. Two constraints hold at once and each is
+            # a defect without the other: NO UNDEMANDED FORCING — the laziness law above turned on
+            # the seats themselves, since a protection that forces an undemanded entry reintroduces
+            # at the guard the exact error class the guard exists to remove — and NO SILENT DESCENT
+            # ON A MEMBER, since a member that descends unrefused leaves the round returning the
+            # Kleene iterate of a step that is not monotone, a fixed point that need not be the
+            # least one, at EXIT 0, with nothing downstream looking for it.
+            #
+            # Pure Nix cannot OBSERVE which entries a demand forced — so nothing here observes it.
+            # The demanded set is made TRUE BY CONSTRUCTION instead. Let `D` be the least set of
+            # (member, level) entries closed under four rules: (D0) every member at level 0 — the
+            # carrier bottoms, a DECLARED value with NO STEP behind it; (D1) the target at every
+            # level, which is the demand pass; (D2) read-closure — `(m, j)` in `D` and `m`'s step
+            # at level j reading `k` at level j−1 gives `(k, j−1)`, which is Nix's own laziness;
+            # and (D3) UPWARD COLUMN CLOSURE — `(m, j)` in `D` and `j < bound` gives `(m, j+1)`.
+            # The domain is finite and the rules monotone, so the least such set exists and is
+            # reached in at most `|universe| × (bound + 1)` steps. Each member a read reaches has a
+            # FIRST DEMANDED LEVEL `f(m)` and a column `{0} ∪ [f(m) … bound]`, decidable from
+            # `f(m)` alone WITHOUT FORCING ANYTHING TO DECIDE IT. A SEAT FOR `m` IS LIVE AT
+            # TRANSITION `(j−1 → j)` IFF BOTH ENDPOINTS ARE IN `D`, so asking it forces no entry
+            # outside `D`; and `D` APPLIES THE STEP OF NO MEMBER THAT NO READ REACHES, because
+            # (D1) admits the target, (D2) only what a step reads, (D3) only further levels of
+            # members a read already reached, and (D0) admits level 0 without applying a step. The
+            # bound's cone rule below and this gate are the same principle at two seats, and they
+            # agree on that class by construction.
+            #
+            # The price, stated rather than dismissed: (D3) forces entries no reader asked for, so
+            # a partial step above a member's last read level turns an answer into an abort, and a
+            # non-monotone or over-running one there is refused on a transition the natural demand
+            # never produced. Both refusals are TRUE OF THE PROGRAM THE GATE RAN — the pair is one
+            # the round holds an order over — which is the same sentence that forbids reaching
+            # BELOW `f(m)`: there the round holds nothing and could come to hold it only by running
+            # steps the program's own demand never ran. One rule, two ends. Transitions strictly
+            # below `f(m)` therefore carry no seat, and a lie living wholly inside that prefix is
+            # answered: a stated scope, not an incompleteness to be repaired later.
             #
             #   THE HEIGHT SEAT refutes a DECLARATION. The witness is the instance's LONGEST STRICTLY
             #   ASCENDING RUN — extended by a strict ascent, left alone by a quiet level, RESET BY A
             #   DESCENT — because k consecutive strict ascents are a chain of k edges in the
             #   instance's own carrier whatever produced the inputs, where a mere tally of ascents
-            #   composes no chain. It needs no membership; its scope is the target's column, per the
-            #   law above.
+            #   composes no chain. It needs no membership. Its counter is CARRIED BY THE WALK and
+            #   is never a fold down the column: a per-level recurrence has no base case above
+            #   level 0, so it reaches every earlier entry INCLUDING entries below `f(m)`, which is
+            #   the undemanded forcing above exactly. The walk seeds the counter at 0 at the lowest
+            #   transition its seat is live at, so THE COUNTER'S REACH IS THE GATE'S REACH.
             #
-            #   THE OUTER SEAT refutes the target's STEP, and only where it can construct a pair it
-            #   has ordered: at a transition where the target itself descended, its own step is
+            #   THE OUTER SEAT refutes the MEMBER'S STEP, and only where it can construct a pair it
+            #   has ordered: at a transition where that member itself descended, its own step is
             #   re-applied to the earlier level's member map CLAMPED ENTRYWISE to the later one —
             #   entrywise, inside each entry's own thunk, so an entry the step never demands is never
             #   compared — with quotients derived against the LATER snapshot raw (the same derivation
@@ -798,52 +823,102 @@ let
                     )
                 ) (bound + 1);
 
-                # Only the target's entry carries the seats: a checked non-target entry would hand
-                # the seats a history the demand never produced (the law at the seats' comment).
-                levelsChecked = prelude.genList (
+                # THE COLUMN THE SEATS WALK IS NEITHER `levelsChecked` NOR `levelsRaw`. It is a
+                # ladder carrying no seat anywhere in its transitive dependency: the same steps
+                # over the same universe, chained on ITSELF. `levelsRaw[j + 1]` is built from
+                # `levelsChecked[j]`, so a seat riding `levelsChecked[j]` that read level `j + 1`
+                # through either ladder would be inside its own thunk and the round would abort
+                # `infinite recursion encountered` on the ordinary case — an abort `tryEval` does
+                # not contain. This ladder is extensionally identical to `levelsRaw` by induction
+                # on j (level 0 is `bottoms` in both, and `levelsChecked` differs from `levelsRaw`
+                # by a `seq` alone), so the walk asks the same question about the same column. The
+                # second materialization is the price of (D3): an upward walk must read a column
+                # seat-free at every level at or above its own seat, and one ladder cannot both be
+                # read by the steps (which is what makes laziness the gate) and be seat-free.
+                shadow = prelude.genList (
                   j:
                   if j == 0 then
                     bottoms
                   else
                     let
-                      raw = builtins.elemAt levelsRaw j;
+                      prev = builtins.elemAt shadow (j - 1);
+                      acc = mkAccessor (
+                        round
+                        // {
+                          open = true;
+                          members = prev;
+                          qsnap = prev;
+                          level = j;
+                          provisional = j < bound;
+                        }
+                      );
                     in
-                    raw
-                    // {
-                      ${targetKey} = builtins.seq (checkAt j) raw.${targetKey};
-                    }
+                    builtins.listToAttrs (
+                      map (i: {
+                        name = i.key;
+                        value = i.step acc i.nid (prev.${i.key});
+                      }) universe
+                    )
                 ) (bound + 1);
 
-                # The run counter, off the target's raw column alone — every level of which the
-                # demand pass forces by construction, so the counter's own computation forces
-                # nothing the demand did not.
-                runs = prelude.genList (
+                # EVERY member's entry carries its own seat, and the seat rides the ENTRY — so
+                # laziness IS the gate: a member's seat runs when, and only when, that member's
+                # entry at that level is read. Nothing enumerates the demanded set; the demand
+                # enumerates itself.
+                levelsChecked = prelude.genList (
                   j:
                   if j == 0 then
-                    0
+                    bottoms
                   else
-                    let
-                      inherit (index.${targetKey}.carrier) leq;
-                      a = (builtins.elemAt levelsRaw (j - 1)).${targetKey};
-                      b = (builtins.elemAt levelsRaw j).${targetKey};
-                      runsP = builtins.elemAt runs (j - 1);
-                    in
-                    if leq a b && !leq b a then
-                      runsP + 1
-                    else if !leq a b then
-                      0
-                    else
-                      runsP
+                    builtins.mapAttrs (k: v: builtins.seq (checkAt j k) v) (builtins.elemAt levelsRaw j)
                 ) (bound + 1);
 
-                checkAt = j: builtins.seq (heightCheck j) (outerCheck j);
+                # (D3), realized by the seat itself as an UPWARD WALK from the entry's own level to
+                # the bound, under the shared bounded-iteration discipline — so the walk's
+                # ITERATION is bounded and is never a self-applying recursion. At each transition
+                # it carries the previous value and the run counter and asks the two seats.
+                #
+                # `j0` is the lowest transition the seat is live at. For an entry at level 1 that
+                # is `(0 → 1)`, which (D0) supplies at NO STEP COST — level 0 is `bottoms`. Above
+                # that the walk never looks below its own entry level: seeding at `j − 1` in
+                # general would reach `(m, f(m) − 1)`, a step-computed entry outside `D`, which is
+                # the undemanded forcing one level deep. A later re-entry seeds at its own higher
+                # level and can only UNDER-count, so it adds no false refusal.
+                checkAt =
+                  j: k:
+                  let
+                    i = index.${k};
+                    inherit (i.carrier) leq;
+                    j0 = if j == 1 then 0 else j;
+                    advance =
+                      st:
+                      let
+                        jj = st.j + 1;
+                        b = (builtins.elemAt shadow jj).${k};
+                        r =
+                          if leq st.prev b && !leq b st.prev then
+                            st.runs + 1
+                          else if !leq st.prev b then
+                            0
+                          else
+                            st.runs;
+                      in
+                      builtins.seq (heightCheck jj i r) (
+                        builtins.seq (outerCheck jj i st.prev b) {
+                          j = jj;
+                          prev = b;
+                          runs = r;
+                        }
+                      );
+                  in
+                  prelude.iterateBounded forceFields advance {
+                    j = j0;
+                    prev = (builtins.elemAt shadow j0).${k};
+                    runs = 0;
+                  } (prelude.genList (x: x) (bound - j0));
 
                 heightCheck =
-                  j:
-                  let
-                    i = index.${targetKey};
-                    r = builtins.elemAt runs j;
-                  in
+                  j: i: r:
                   if r > i.carrier.height then
                     let
                       blame = blameAt j i;
@@ -867,8 +942,8 @@ let
                 blameAt =
                   j: i:
                   let
-                    prevRaw = builtins.elemAt levelsRaw (j - 1);
-                    curRaw = builtins.elemAt levelsRaw j;
+                    prevRaw = builtins.elemAt shadow (j - 1);
+                    curRaw = builtins.elemAt shadow j;
                     others = builtins.filter (k2: k2 != i.key) (builtins.attrNames index);
                     reads =
                       k2:
@@ -895,17 +970,15 @@ let
                   if attempt.success then attempt.value else [ ];
 
                 outerCheck =
-                  j:
+                  j: i: vprev: vk:
                   if j < 2 then
                     true
                   else
                     let
-                      i = index.${targetKey};
                       inherit (i.carrier) leq;
-                      vk = (builtins.elemAt levelsRaw j).${targetKey};
-                      p1 = builtins.elemAt levelsRaw (j - 1);
-                      p2 = builtins.elemAt levelsRaw (j - 2);
-                      est = builtins.tryEval (leq p1.${targetKey} vk);
+                      p1 = builtins.elemAt shadow (j - 1);
+                      p2 = builtins.elemAt shadow (j - 2);
+                      est = builtins.tryEval (leq vprev vk);
                     in
                     if !est.success || est.value then
                       true
@@ -914,10 +987,10 @@ let
                         star = builtins.mapAttrs (
                           k2: _:
                           let
-                            a = p2.${k2};
-                            b = p1.${k2};
+                            lo = p2.${k2};
+                            hi = p1.${k2};
                           in
-                          if index.${k2}.carrier.leq a b then a else b
+                          if index.${k2}.carrier.leq lo hi then lo else hi
                         ) bottoms;
                         accStar = mkAccessor (
                           round
@@ -929,7 +1002,7 @@ let
                             provisional = false;
                           }
                         );
-                        attempt = builtins.tryEval (i.step accStar i.nid (star.${targetKey}));
+                        attempt = builtins.tryEval (i.step accStar i.nid (star.${i.key}));
                       in
                       if !attempt.success then
                         true

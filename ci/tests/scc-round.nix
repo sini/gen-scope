@@ -172,18 +172,6 @@ in
       expr = results."LATEREAD-CTL";
       expected = 3;
     };
-    # ★ The re-seat's stated price, pinned as a cell rather than prose: with TRIPLE's quotient
-    # pair removed, the under-declared member (`n.m`, height 1, a genuine chain of three) is not
-    # the demanded target, so no seat can read its history — and its iteration SETTLES before the
-    # composed bound, so the re-seated protection has nothing left to refuse and the round
-    # answers. The model of record, which can observe forcing, still refuses this program at the
-    # height seat; the cap here is INCOMPLETE exactly where its tally would have been unsound.
-    # H8B/H8C next door pin that the same lie ON THE TARGET still refuses with the landed text.
-    test-triple-noq-a-non-target-height-lie-that-settles-is-answered = {
-      expr = results."TRIPLE-NOQ";
-      expected = 0;
-    };
-
     # Round 27's own control, no longer forcing the member its demand never read.
     test-control-boundquiet-without-the-oscillation-answers = {
       expr = results."BOUNDQUIET-NOOSC";

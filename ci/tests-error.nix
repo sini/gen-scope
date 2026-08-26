@@ -2020,18 +2020,40 @@ in
       };
     };
 
-    # TRIPLE reports the hand-derived column's OWN verdict, R-CLOSURE: the under-declared member
-    # (`n.m`, height 1) is not the demanded target, so the height seat — live on the target's
-    # column alone — cannot read its history, and the quotient pair's re-entry is what fires at
-    # the armed level, byte-identical to TRIPLE-HONEST's text. (A previous build's per-member
-    # seats reported R-HEIGHT here, recorded then as an adaptation; the demand-scoped seats
-    # retire it.) The price of not seeing `n.m`'s lie is pinned next door in the VALUE suite:
-    # TRIPLE-NOQ, the same program with the pair removed, is answered.
+    # TRIPLE reports the hand-derived column's OWN verdict, R-CLOSURE: the quotient pair's
+    # re-entry closes the cycle at the armed level and fires FIRST, byte-identical to
+    # TRIPLE-HONEST's text — so the under-declared member (`n.m`, height 1) is never reached, and
+    # this cell keys on the CLOSURE seat rather than on the height one.
+    # ★ THE CONTRAST THAT USED TO SIT HERE IS WITHDRAWN, AND IT IS REPLACED BY A DISTINCTION AND
+    # NOT BY AN EQUIVALENCE. It read: "TRIPLE-NOQ, the same program with the pair removed, is
+    # answered", which was the price of seats scoped to the demanded target's column. Under the
+    # force gate the seats ride EVERY member, so BOTH programs now refuse — and they refuse AT
+    # DIFFERENT SEATS: TRIPLE at the CYCLE-CLOSURE seat above, TRIPLE-NOQ at the HEIGHT seat, its
+    # cell next door in this suite. Removing the quotient pair removes the closure, and what is
+    # then left to refuse is `n.m`'s lie.
     test-triple-a-non-target-height-lie-does-not-pre-empt-the-closure = {
       expr = sccCorpus.results."TRIPLE";
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope: circular demand re-entered 'n.q': the walked path closes the cycle [\"n.q\",\"n.r\"], and quotient declaration(s) [\"n.q\",\"n.r\"] are on it. A quotient carrier cannot be driven in a shared round — its convergence is an own-value comparison over classes, which a simultaneous ascent cannot answer — so the cycle is refused rather than iterated. Declare an antisymmetric order for the instances that read each other, or keep this instance out of the other's cycle.";
+      };
+    };
+
+    # ★ THE FORCE GATE'S OWN VERDICT MOVEMENT, PINNED AS A CELL: with TRIPLE's quotient pair
+    # removed there is no closure to fire, and the under-declared member (`n.m`, height 1, a
+    # genuine chain of three) is a NON-TARGET whose iteration SETTLES before the composed bound —
+    # so the settlement walk has nothing left to find. Seats scoped to the demanded target's
+    # column ANSWERED this program, at exit 0, with the model of record refusing it; the seats now
+    # ride every member the demand reaches, over the column (D3) completes, and the height seat
+    # refutes the DECLARATION by name. ★ The expectation moved here from the VALUE suite when the
+    # gate landed: coverage is preserved with INVERTED POLARITY, so this cell reds if the
+    # mechanism ever answers a height lie again. H8B/H8C above pin the same lie ON THE TARGET, and
+    # TRIPLE-HONEST pins that the refusal moves with the LIE and not with the seating.
+    test-triple-noq-a-non-target-height-lie-that-settles-is-refused = {
+      expr = sccCorpus.results."TRIPLE-NOQ";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: circular attribute on 'n' is still ascending after 2 steps, so the declared height of 1 is exceeded — the bound is derived from the declaration, and what this refutes is the declaration rather than an iteration budget";
       };
     };
 
