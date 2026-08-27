@@ -8,6 +8,8 @@ gen-scope is a **hybrid HOAG/RAG** evaluator: Higher-Order Attribute Grammars (V
 
 gen-scope is generic. It has no knowledge of NixOS, aspects, policies, or system configuration. It provides evaluation machinery; consumers define what to compute.
 
+**gen-scope is scope-engine** — owner testimony, 2026-08-18, verbatim. `github:sini/scope-engine` and `github:sini/gen-scope` name the same repository; there is no divergent second implementation.
+
 Beside the evaluator it carries a second, independent concern: **the well-founded engine**, which computes the meaning of a rule program with negation (Van Gelder, Ross & Schlipf 1991) — including the third verdict, `UNDEFINED`, for the contested cycles a stratified semantics leaves without one. See [The well-founded engine](#the-well-founded-engine).
 
 It also carries the **staged minting entry**, which builds a scope graph rather than evaluating one: a fixed emitter list in, vertices under their own identifiers and one labelled edge per relatum out, each relatum resolved against the identities that strictly earlier passes settled. See [Staged minting](#staged-minting).
