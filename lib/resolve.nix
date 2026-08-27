@@ -389,7 +389,20 @@ let
     in
     builtins.foldl' (acc: x: if builtins.any (y: eq y x) acc then acc else acc ++ [ x ]) [ ] all;
 
-  # Parameterized attribute (Sloane 2010 §3, JastAdd).
+  # Parameterized attribute: a bare eta-expansion, NOT a per-parameter cache. Applying `f self id`
+  # yields the closure `param: f self id param`, and that closure is the whole of what the
+  # co-located `_eval`/`rootEval` cache (`lib/eval.nix`) memoizes — once per (node, attrName), same
+  # as any other attribute. Applying the closure to a `param` is an ordinary Nix function call,
+  # which Nix never memoizes, so every application recomputes the body: two demands for the SAME
+  # (node, attrName, param) run `f` twice. Measured with a `builtins.trace` in `f`'s body, fired on
+  # every application including a repeated identical one, against a control (a plain,
+  # non-parameterized attribute read twice through the same public surface) that traces once.
+  #
+  # Sloane 2010 §3 and JastAdd are where a parameterized attribute IS cached per parameter — a memo
+  # table keyed by the argument, so a repeated call with an already-seen argument is served rather
+  # than recomputed. That per-parameter cache is what this function does not implement; the
+  # citation names the design being fallen short of, not the one realized here. Closing that gap —
+  # keying the co-located cache on `param` as well as on `(node, attrName)` — is open work.
   paramAttr =
     f: self: id: param:
     f self id param;
