@@ -316,6 +316,22 @@ let
     site = "site-y";
   };
 
+  # ── THE SILENT-DROP PAIR (den-hoag-mintone-silent-drop-1wjov) ──
+  # `wellFormedEmitter` carries exactly the six fields an emitter has; `smuggledFieldEmitter` is that
+  # same record plus one `mintOne` never reads, standing for a kind-option contribution smuggled onto
+  # an emitter. `mkEmitter`'s own formals are closed the same way `mintOne`'s now are, so the surplus
+  # has to arrive by `//` after construction — going through the builder would refuse it a layer too
+  # early to exercise what this pair is for.
+  wellFormedEmitter = mkEmitter {
+    pass = 0;
+    identifier = "carrier";
+    kind = "widget";
+    content.tag = "well-formed";
+  };
+  smuggledFieldEmitter = wellFormedEmitter // {
+    kindOption = "sneaky";
+  };
+
   # ── THE TWO REFUSAL TEXTS ──
   #
   # They are different in kind and must be distinguishable, or a cell asserting one passes on the
@@ -351,6 +367,8 @@ in
     app
     collapseA
     collapseB
+    wellFormedEmitter
+    smuggledFieldEmitter
     conflictA
     conflictB
     conflictOtherA

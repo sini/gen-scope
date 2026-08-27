@@ -56,6 +56,7 @@ let
     app
     collapseA
     collapseB
+    wellFormedEmitter
     unresolvedRelatum
     conflictingContribution
     ;
@@ -469,6 +470,25 @@ in
           ])
         );
       expected = true;
+    };
+
+    # ── GREEN TWIN: THE SIX KNOWN FIELDS ARE STILL ADMITTED (den-hoag-mintone-silent-drop-1wjov) ──
+    # `wellFormedEmitter` carries exactly the fields an emitter has and nothing else; the refusal in
+    # `ci/tests-error.nix`'s `minting-refusals` suite is the same record plus one field this cell
+    # proves is not what's making it mint.
+    test-green-twin-well-formed-emitter-mints = {
+      expr =
+        let
+          r = mint (withKinds [ wellFormedEmitter ]);
+        in
+        {
+          nodes = builtins.attrNames r.nodes;
+          content = r.nodes.carrier.content;
+        };
+      expected = {
+        nodes = [ "carrier" ];
+        content.tag = "well-formed";
+      };
     };
   };
 }

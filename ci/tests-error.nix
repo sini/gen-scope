@@ -264,6 +264,7 @@ let
     conflictB
     conflictOtherA
     conflictOtherB
+    smuggledFieldEmitter
     unresolvedRelatum
     conflictingContribution
     ;
@@ -1145,6 +1146,22 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly (conflictingContribution "port" "site-a" "site-b");
+      };
+    };
+
+    # ── AN UNKNOWN EMITTER FIELD REFUSES BY NAME (den-hoag-mintone-silent-drop-1wjov) ──
+    # `smuggledFieldEmitter` is `wellFormedEmitter` (asserted admitted, `tests/mint.nix`'s green
+    # twin) plus one field neither `mintOne` nor anything upstream of it reads — standing for a
+    # kind-option contribution smuggled onto an emitter record, which is what the measured defect
+    # let through silently. `mintOne`'s second formal is now the same closed pattern `mintStrata`'s
+    # own formals already are one level up, so Nix's own mechanism refuses it and names the field —
+    # `type` is `TypeError` rather than `ThrownError` because nothing here calls `throw`; the message
+    # is the evaluator's, matched loosely rather than pinned, on the same ground the arity cell states.
+    test-an-unknown-emitter-field-refuses-by-name = {
+      expr = mint (withKinds [ smuggledFieldEmitter ]);
+      expectedError = {
+        type = "TypeError";
+        msg = ".*mintOne.*unexpected argument 'kindOption'.*";
       };
     };
   };

@@ -255,28 +255,46 @@ in
       # `frozen` holds what strictly earlier strata settled. Every relatum is looked up in it and an
       # identifier with no entry is refused by name; a same-pass relatum misses for the same reason a
       # nonexistent one does, which is what makes a cycle unwritable rather than detected.
+      #
+      # ★ THE SECOND FORMAL IS A CLOSED PATTERN, NOT A BARE NAME (den-hoag-mintone-silent-drop-1wjov).
+      # An `e:` binding lets `inherit (e) …` pick five names out of however many the caller supplied,
+      # so a sixth field — a kind-option contribution smuggled onto an emitter, say — passes through
+      # unread and unremarked. `mintStrata`'s OWN formals one level up are already closed (`{ emitters,
+      # kinds }:`, no `...`), so a stray third argument there is refused BY NAME through Nix's own
+      # mechanism. This is that same discipline at the emitter's own intake: the pattern names exactly
+      # the six fields an emitter carries — the five read here plus `pass`, which `itemsAt` already
+      # used to place this emitter in its stratum but which still rides on the record `mintOne`
+      # receives — and a caller's seventh field is refused by name before it can go anywhere silent.
       mintOne =
-        frozen: e:
+        frozen:
+        {
+          pass,
+          identifier,
+          kind,
+          relata,
+          content,
+          site,
+        }:
         let
           valueOf =
             label:
             if label == identifierKey then
-              e.identifier
+              identifier
             else
               let
-                relatum = e.relata.${label};
+                relatum = relata.${label};
               in
-              frozen.${relatum} or (throw (unresolvedRelatum relatum label e.kind e.pass));
+              frozen.${relatum} or (throw (unresolvedRelatum relatum label kind pass));
         in
         {
-          inherit (e)
+          inherit
             identifier
             kind
             relata
             content
             site
             ;
-          identity = hashIdentity e.kind ([ identifierKey ] ++ attrNames e.relata) valueOf;
+          identity = hashIdentity kind ([ identifierKey ] ++ attrNames relata) valueOf;
         };
 
       # ── THE ACCUMULATION ──
