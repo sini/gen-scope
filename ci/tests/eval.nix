@@ -71,6 +71,52 @@ let
       value = self: id: (self.node id).decls.val or 0;
     };
   };
+
+  # ── THE UNDECLARED CONTAINMENT RELATION VERSUS THE GRAPH THAT HAS NO CHILDREN ──
+  # Two different answers that used to be the same one. `chainScope` is a real containment chain
+  # (`root` → `a` → `c`); `flatScope` is three unrelated vertices whose declared `children`
+  # honestly answers `{ }`. Evaluated under a declared `children` and under none, they give the
+  # pair the cells below assert: only the UNDECLARED arm may refuse, and the flat graph — the one
+  # whose materialization the undeclared arm used to imitate — must keep answering.
+  chainScope = genScope.buildRoots {
+    parentGraph = genScope.overlays [
+      (genScope.edge "a" "root")
+      (genScope.edge "c" "a")
+    ];
+    decls = {
+      root = { };
+      a = { };
+      c = { };
+    };
+  };
+  flatScope = genScope.buildRoots {
+    parentGraph = genScope.overlays [
+      (genScope.vertex "root")
+      (genScope.vertex "a")
+      (genScope.vertex "c")
+    ];
+    decls = {
+      root = { };
+      a = { };
+      c = { };
+    };
+  };
+  declaredChildren =
+    scope: _self: id:
+    lib.filterAttrs (_: n: n.parent == id) scope.nodes;
+
+  chainDeclared = genScope.eval {
+    scope = chainScope;
+    attributes.children = declaredChildren chainScope;
+  };
+  chainUndeclared = genScope.eval {
+    scope = chainScope;
+    attributes = { };
+  };
+  flatDeclared = genScope.eval {
+    scope = flatScope;
+    attributes.children = declaredChildren flatScope;
+  };
 in
 {
   flake.tests."eval" = {
@@ -164,6 +210,46 @@ in
     test-single-root-allNodes = {
       expr = builtins.attrNames singleResult.allNodes;
       expected = [ "solo" ];
+    };
+
+    # ── A MATERIALIZATION WITH NO CONTAINMENT RELATION TO WALK REFUSES ──
+    # An evaluation declaring no `children` used to descend `{ }` from every node and return the
+    # entry points as if they were the tree — a partial answer with nothing marking it partial.
+    # The refusal is the message cell `eval-refusals.test-materialization-without-children-…`
+    # in `tests-error.nix`; asserted here is that it is a CATCHABLE throw rather than an abort.
+    test-materialization-without-a-children-attribute-refuses = {
+      expr = (builtins.tryEval (builtins.attrNames (chainUndeclared.subtreeOf "root"))).success;
+      expected = false;
+    };
+
+    # ★ THE DISCRIMINATING CONTROL, and the reason the cell above is not a blanket refusal. A
+    # graph whose nodes GENUINELY have no children answers over its roots and refuses nothing —
+    # that is the answer the undeclared arm above used to counterfeit, and the two now differ.
+    test-control-a-graph-that-genuinely-has-no-children-still-materializes = {
+      expr = {
+        all = builtins.sort builtins.lessThan (builtins.attrNames flatDeclared.allNodes);
+        subtree = builtins.attrNames (flatDeclared.subtreeOf "root");
+      };
+      expected = {
+        all = [
+          "a"
+          "c"
+          "root"
+        ];
+        subtree = [ "root" ];
+      };
+    };
+
+    # The second control: the SAME chain the refusing cell is built on, with `children` declared,
+    # descends the whole way. Without it the refusal above would be equally satisfied by a walk
+    # that had stopped working.
+    test-control-the-same-chain-with-children-declared-descends = {
+      expr = builtins.sort builtins.lessThan (builtins.attrNames (chainDeclared.subtreeOf "root"));
+      expected = [
+        "a"
+        "c"
+        "root"
+      ];
     };
 
     test-unknown-attr-throws = {

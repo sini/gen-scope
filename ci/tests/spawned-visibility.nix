@@ -12,7 +12,13 @@
 { lib, genScope, ... }:
 let
   fixture = import ./_fixtures/spawned-visibility.nix { inherit lib genScope; };
-  inherit (fixture) result debugWithParse;
+  inherit (fixture)
+    result
+    debugWithParse
+    misPointedToChildless
+    misPointedToUnresolvable
+    correctlyPointed
+    ;
   inherit (genScope)
     children
     childrenIds
@@ -31,6 +37,33 @@ in
     test-control-spawned-node-materialized = {
       expr = builtins.elem "winnow" result.allNodeIds && builtins.elem "groat" result.allNodeIds;
       expected = true;
+    };
+
+    # ── ONE USER ERROR, ONE REFUSAL SHAPE ──
+    # A mis-pointed `parseParent` used to fail two ways. A parent that RESOLVES but does not carry
+    # the child threw by name; a parent that resolves to NOTHING diverged into `stack overflow;
+    # max-call-depth exceeded`, because the fallback walk re-enters `parseParent` through the very
+    # child it is looking for. A divergence is not a refusal: it is uncatchable, so the cell below
+    # is written as a `tryEval` and it is the catch that carries the verdict — pre-fix the second
+    # arm kills the evaluation `tryEval` and all. Which message each arm carries is
+    # `spawned-visibility-refusals` in `tests-error.nix`.
+    test-both-mis-pointed-parents-refuse-catchably = {
+      expr = {
+        childless = (builtins.tryEval (misPointedToChildless.node "winnow")).success;
+        unresolvable = (builtins.tryEval (misPointedToUnresolvable.node "winnow")).success;
+      };
+      expected = {
+        childless = false;
+        unresolvable = false;
+      };
+    };
+
+    # The control on the same three-way fixture: correctly pointed, the same spawned id resolves.
+    # Without it a refusal on both arms would be equally satisfied by a `parseParent` path that
+    # had stopped resolving anything.
+    test-control-a-correctly-pointed-parent-resolves-the-spawned-node = {
+      expr = (correctlyPointed.node "winnow").id;
+      expected = "winnow";
     };
 
     # ── the spawned node appears in structural queries ──

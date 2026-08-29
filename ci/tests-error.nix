@@ -2390,7 +2390,64 @@ in
         msg = exactly "gen-scope: evalDebug requires parseParent for non-root nodes";
       };
     };
+
+    # ── THE MIS-POINTED PARENT, WHICH MESSAGE EACH ARM CARRIES ──
+    # The boolean pair — that BOTH arms refuse catchably, where one used to diverge into an
+    # uncatchable `stack overflow` — is `tests/spawned-visibility.nix`. Two throws are reachable
+    # from the mis-pointed fixtures and they name different causes a caller must act differently
+    # on, so a `tryEval` cell is equally satisfied by either and only these pin which fired.
+    test-a-parent-that-does-not-carry-the-child-is-refused-by-name = {
+      expr = spawnedVisibility.misPointedToChildless.node "winnow";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: node 'winnow' not reachable (parent: husk)";
+      };
+    };
+    test-a-parent-that-does-not-resolve-is-refused-by-name = {
+      expr = spawnedVisibility.misPointedToUnresolvable.node "winnow";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: node 'winnow' not reachable (parent: nosuch) — 'nosuch' does not resolve either: its `parseParent` chain reaches no root. A parent naming a node the scope cannot ground is the same user error as a parent that does not carry the child, and it is refused the same way.";
+      };
+    };
   };
+
+  # ── THE MATERIALIZATION WITH NO CONTAINMENT RELATION TO WALK ──
+  # An evaluation declaring no `children` has nothing to descend, and it used to descend `{ }`
+  # from every node and hand back the entry points as the tree. The catchability half and the
+  # discriminating control — a graph whose nodes GENUINELY have no children, which must keep
+  # answering — are in `tests/eval.nix`; what is pinned here is that the refusal names the
+  # undeclared attribute rather than the node's own emptiness, since those are the two readings
+  # the defect confused.
+  config.flake.testsError.eval-refusals =
+    let
+      chainScope = genScope.buildRoots {
+        parentGraph = genScope.overlays [
+          (genScope.edge "a" "root")
+          (genScope.edge "c" "a")
+        ];
+        decls = {
+          root = { };
+          a = { };
+          c = { };
+        };
+      };
+    in
+    {
+      test-materialization-without-a-children-attribute-refuses-by-name = {
+        expr = builtins.attrNames (
+          (genScope.eval {
+            scope = chainScope;
+            attributes = { };
+          }).subtreeOf
+            "root"
+        );
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: cannot descend from 'root': this evaluation declares no `children` attribute, so there is no containment relation to walk and a materialization would answer the entry points alone — a partial tree with nothing marking it partial. A node that genuinely has no children is a declared `children` answering `{ }`, which is a different answer and stays available. Declare `children`, or read the node set through `scope.nodeOrder`, which needs no descent.";
+        };
+      };
+    };
 
   # ── THE SEAL'S GUARDED TRACE LOOKUP ──
   # `trace.<id>` selection on a missing id is the interpreter's own `attribute missing` abort —

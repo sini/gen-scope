@@ -170,13 +170,19 @@ let
   # argument — visible at one site and decidable in one place — rather than settled at the
   # consolidation that surfaced it.
   #
-  # ★ IT IS NOW SETTLED, AND BOTH ARMS ARE KEPT AS PRINCIPLED. They answer different questions and
-  # the right answers differ. An ENUMERATION must be TOTAL over a heterogeneous node set: a walk
-  # that refused at the first node lacking the attribute could not report the rest, and "no
-  # children" is a perfectly ordinary thing for a node to be. A DEMAND is a question about ONE id
-  # and its answer is either the record or a refusal — reading `{ }` there turns "this attribute
-  # set declares no `children`" into "that node has none", which is a wrong answer wearing a right
-  # shape. The split is intentional, and the formal is what says so.
+  # ★ IT IS NOW SETTLED, AND BOTH ARMS REFUSE — the formal chooses the DIAGNOSTIC, not whether
+  # there is one. A DEMAND is a question about ONE id and its answer is either the record or a
+  # refusal: reading `{ }` there turns "this attribute set declares no `children`" into "that node
+  # has none", which is a wrong answer wearing a right shape. ★ AND THE ENUMERATION ARM READ `{ }`
+  # FOR EXACTLY THE SAME REASON, which is the defect this test cannot see its way out of: the
+  # condition is on the ATTRIBUTE SET, one value for the whole evaluation, so it is never the
+  # heterogeneous "this node has no children" it reads like — that case is the declared attribute
+  # answering `{ }`, and it is untouched. Undeclared, every descent from every node answered `{ }`,
+  # and a walk that descends nothing reports a plausible PARTIAL tree: measured on a `root → a → c`
+  # chain, `subtreeOf "root"` ⇒ `[ "root" ]` against the declared arm's `[ "a" "c" "root" ]`, with
+  # no error. So the enumeration arm refuses too, by name and at the descent, and the two answers
+  # a caller must be able to tell apart — a scope with no containment relation declared, and a
+  # scope whose nodes genuinely have no children — are a refusal and a walk that returns the roots.
   #
   # ★ STRICTNESS, DECIDED AND STATED, because the consolidation left it open. This binding returns
   # the whole child-record attrset with KEYS EAGER and VALUES LAZY, and the open question was
@@ -194,7 +200,10 @@ let
     ev: id:
     let
       children =
-        if requireChildrenAttribute || attributes ? "children" then ev.get id "children" else { };
+        if requireChildrenAttribute || attributes ? ${selectionChannel} then
+          ev.get id selectionChannel
+        else
+          throw "gen-scope: cannot descend from '${id}': this evaluation declares no `${selectionChannel}` attribute, so there is no containment relation to walk and a materialization would answer the entry points alone — a partial tree with nothing marking it partial. A node that genuinely has no children is a declared `${selectionChannel}` answering `{ }`, which is a different answer and stays available. Declare `${selectionChannel}`, or read the node set through `scope.nodeOrder`, which needs no descent.";
       derived = if attributes ? ${spawnChannel} then ev.get id spawnChannel else { };
     in
     children // derived;
@@ -1122,6 +1131,29 @@ let
               id: _: builtins.mapAttrs (attrName: fn: evalAttr id attrName fn) runAttributes
             ) roots;
 
+            # ── THE PARENT CHAIN, GROUNDED BEFORE IT IS DESCENDED ──
+            # `parseParent` names an id; nothing obliges that id to resolve. Handed straight to
+            # `childRecordsStrict`, an unresolvable one falls through to `genericResolve`, whose
+            # walk re-enters `resolveNode` through the very child being looked up and diverges
+            # into `stack overflow; max-call-depth exceeded` — an abort `tryEval` cannot catch,
+            # naming neither the node nor the parent. The SIBLING failure on the same user error —
+            # a parent that resolves but does not carry the child — has always been a clean named
+            # throw, so one arm of one error class was diagnostic and the other was divergent.
+            # This grounds the chain first: walk `parseParent` up to a root, and refuse by name
+            # when it runs out or turns back on itself. Cost is O(depth) over ids, forcing no
+            # record, against the child-record read it guards.
+            parentGrounds =
+              seen: pid:
+              if roots ? ${pid} then
+                true
+              else if builtins.elem pid seen then
+                false
+              else
+                let
+                  up = parseParent pid;
+                in
+                if up == null then false else parentGrounds ([ pid ] ++ seen) up;
+
             # Resolve a node by ID.
             # Roots: direct lookup. Non-roots: via parseParent or generic walk.
             resolveNode =
@@ -1134,6 +1166,8 @@ let
                 in
                 if parentId == null then
                   genericResolve id
+                else if !(parentGrounds [ id ] parentId) then
+                  throw "gen-scope: node '${id}' not reachable (parent: ${parentId}) — '${parentId}' does not resolve either: its `parseParent` chain reaches no root. A parent naming a node the scope cannot ground is the same user error as a parent that does not carry the child, and it is refused the same way."
                 else
                   let
                     all = childRecordsStrict self parentId;

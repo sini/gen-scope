@@ -96,4 +96,25 @@ in
     scope = roots;
     inherit attributes;
   };
+
+  # ── THE MIS-POINTED PARENT: BOTH ARMS AND THE CONTROL ──
+  # `parseParent` names an id and nothing obliges that id to resolve. The two shapes of that ONE
+  # user error are read on a SPAWNED id, the only kind whose resolution consults the formal at all
+  # — a registered node answers from the root evaluation before it is reached. `husk` resolves and
+  # does not carry `winnow`; `nosuch` resolves to nothing. Three evaluations varying exactly the
+  # one formal, so what separates them is the pointing and not the graph.
+  misPointedToChildless = genScope.eval {
+    scope = roots;
+    inherit attributes;
+    parseParent = id: if id == "winnow" then "husk" else nodes.${id}.parent or null;
+  };
+  misPointedToUnresolvable = genScope.eval {
+    scope = roots;
+    inherit attributes;
+    parseParent = id: if id == "winnow" then "nosuch" else nodes.${id}.parent or null;
+  };
+  correctlyPointed = genScope.eval {
+    scope = roots;
+    inherit attributes parseParent;
+  };
 }
