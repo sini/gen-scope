@@ -70,16 +70,16 @@ system ∩ gates    = [] → enable = false
 
 ## Features exercised
 
-| Feature | Paper | What it tests |
-|---|---|---|
-| Custom edge labels (M) | van Antwerpen 2018 §2.1 | Group membership as labeled edges |
-| `followEdge` | van Antwerpen 2018 §2.1 | Traverse membership chains for transitive resolution |
-| `paramAttr` | Sloane 2010 §3 | Per-user resolution on a per-host basis |
-| `shadow` | Neron 2015 §5 | Merging effective gate lists |
-| `collect` with scope filter | -- | Partition groups by scope (kanidm/unix/system) |
-| `nodesByType` | -- | Query all users, hosts, environments, groups |
-| Parent edges | Neron 2015 §2.3 | Host-environment-root hierarchy |
-| `ancestors` / `childrenIds` | -- | Host ancestry, environment children |
+| Feature                     | Paper                   | What it tests                                        |
+| --------------------------- | ----------------------- | ---------------------------------------------------- |
+| Custom edge labels (M)      | van Antwerpen 2018 §2.1 | Group membership as labeled edges                    |
+| `followEdge`                | van Antwerpen 2018 §2.1 | Traverse membership chains for transitive resolution |
+| `paramAttr`                 | Sloane 2010 §3          | Per-user resolution on a per-host basis              |
+| `shadow`                    | Neron 2015 §5           | Merging effective gate lists                         |
+| `collect` with scope filter | --                      | Partition groups by scope (kanidm/unix/system)       |
+| `nodesByType`               | --                      | Query all users, hosts, environments, groups         |
+| Parent edges                | Neron 2015 §2.3         | Host-environment-root hierarchy                      |
+| `ancestors` / `childrenIds` | --                      | Host ancestry, environment children                  |
 
 ## Tests
 

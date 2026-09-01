@@ -19,15 +19,15 @@ Parent edges encode directory/namespace nesting (deeper overrides shallower). Im
 
 ## Features exercised
 
-| Feature | Paper | What it tests |
-|---|---|---|
-| `shadow` | Neron 2015 §5 Def. 1 | Deeper config values override shallower ones |
-| `query` (`dataFilter`) | Neron 2015 §2.4 | Resolve a key up the parent + import chain |
-| `queryAll` (`dataFilter`) | Neron 2015 §2.3 | Override detection: find keys set at multiple levels |
-| `paramAttr` | Sloane 2010 §3 | Parameterized config key lookup |
-| `childrenIds` | -- | Enumerate environment override files under a dir |
-| `ancestors` | -- | Trace the full config inheritance chain |
-| `nodesByType` | -- | Find all environment override files |
+| Feature                   | Paper                | What it tests                                        |
+| ------------------------- | -------------------- | ---------------------------------------------------- |
+| `shadow`                  | Neron 2015 §5 Def. 1 | Deeper config values override shallower ones         |
+| `query` (`dataFilter`)    | Neron 2015 §2.4      | Resolve a key up the parent + import chain           |
+| `queryAll` (`dataFilter`) | Neron 2015 §2.3      | Override detection: find keys set at multiple levels |
+| `paramAttr`               | Sloane 2010 §3       | Parameterized config key lookup                      |
+| `childrenIds`             | --                   | Enumerate environment override files under a dir     |
+| `ancestors`               | --                   | Trace the full config inheritance chain              |
+| `nodesByType`             | --                   | Find all environment override files                  |
 
 ## Tests
 

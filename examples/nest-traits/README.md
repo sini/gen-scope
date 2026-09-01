@@ -43,12 +43,12 @@ result = nest.evalNest {
 
 Each library handles one concern:
 
-| Layer | Library | Role |
-|---|---|---|
-| **Type definitions** | gen-schema | Trait sidecars (`needs`, `neededBy`, `synth`, `class`), node instance registry, ref validation, refinement contracts |
-| **Rule content** | gen-aspects | Class-separated `deferredModule` output via `aspectsType`, `is` selector injected via `aspectModules` |
-| **Graph evaluation** | gen-scope | DOM hierarchy as parent edges, structural queries (`childrenIds`, `ancestors`, `siblings`), `buildNodes` for graph construction |
-| **Graph queries** | gen-graph | Monotonic query combinators over scope graphs: `select`, `reachableFrom`, `dependents`, `cycles`, `leaves` |
+| Layer                | Library     | Role                                                                                                                            |
+| -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Type definitions** | gen-schema  | Trait sidecars (`needs`, `neededBy`, `synth`, `class`), node instance registry, ref validation, refinement contracts            |
+| **Rule content**     | gen-aspects | Class-separated `deferredModule` output via `aspectsType`, `is` selector injected via `aspectModules`                           |
+| **Graph evaluation** | gen-scope   | DOM hierarchy as parent edges, structural queries (`childrenIds`, `ancestors`, `siblings`), `buildNodes` for graph construction |
+| **Graph queries**    | gen-graph   | Monotonic query combinators over scope graphs: `select`, `reachableFrom`, `dependents`, `cycles`, `leaves`                      |
 
 Template-local code provides the CSS selector engine and the 5-phase evaluation pipeline.
 
@@ -80,22 +80,22 @@ Each node with an entity trait calls its class function (`classFn select modules
 
 Full port of nest's CSS selector matching. Supports:
 
-| Selector | Syntax | Meaning |
-|---|---|---|
-| Trait | `hostTrait` | Node's `is` list contains this trait |
-| Star | `*` | Matches any node |
-| ID | `#web-1` | Node name matches |
-| Class | `.nixos` | Entity trait exposes this output class |
-| Attr | `[env=prod]` | Node attribute matches value |
-| Attr exists | `[system]` | Node has this attribute |
-| AND | `[sel1, sel2]` | List = all must match |
-| OR | `sel1,sel2` | CSS comma = any can match |
-| Not | `:not(sel)` | Node does not match |
-| Has | `:has(sel)` | Direct child matches |
-| Within | `:within(sel)` | Some ancestor matches |
-| When | `:when(fn)` | Arbitrary predicate |
-| Child | `parent > child` | Direct parent matches left, node matches right |
-| Descendant | `ancestor + desc` | Some ancestor matches left, node matches right |
+| Selector    | Syntax            | Meaning                                        |
+| ----------- | ----------------- | ---------------------------------------------- |
+| Trait       | `hostTrait`       | Node's `is` list contains this trait           |
+| Star        | `*`               | Matches any node                               |
+| ID          | `#web-1`          | Node name matches                              |
+| Class       | `.nixos`          | Entity trait exposes this output class         |
+| Attr        | `[env=prod]`      | Node attribute matches value                   |
+| Attr exists | `[system]`        | Node has this attribute                        |
+| AND         | `[sel1, sel2]`    | List = all must match                          |
+| OR          | `sel1,sel2`       | CSS comma = any can match                      |
+| Not         | `:not(sel)`       | Node does not match                            |
+| Has         | `:has(sel)`       | Direct child matches                           |
+| Within      | `:within(sel)`    | Some ancestor matches                          |
+| When        | `:when(fn)`       | Arbitrary predicate                            |
+| Child       | `parent > child`  | Direct parent matches left, node matches right |
+| Descendant  | `ancestor + desc` | Some ancestor matches left, node matches right |
 
 Selectors can be trait references, programmatic constructors, or CSS strings — all three can be mixed freely.
 
@@ -146,13 +146,13 @@ igloo = { is = [ traits.host ]; };          # direct ref
 igloo = { is = [ "host" ]; };               # string ref (resolved from traits registry)
 ```
 
-| Key | Type | Purpose |
-|---|---|---|
-| `name` | string | Identity for dedup and selector matching |
-| `class` | `{ className = select: modules: value; }` | Output builder — defines what class this entity produces |
-| `needs` | `[traits]` | Forward dependency chain (BFS expanded) |
-| `neededBy` | `[selectors]` | Reverse injection — each entry matched independently (OR) |
-| `synth` | `[fns]` | Synthesis functions — derive attrs, inject virtual children |
+| Key        | Type                                      | Purpose                                                     |
+| ---------- | ----------------------------------------- | ----------------------------------------------------------- |
+| `name`     | string                                    | Identity for dedup and selector matching                    |
+| `class`    | `{ className = select: modules: value; }` | Output builder — defines what class this entity produces    |
+| `needs`    | `[traits]`                                | Forward dependency chain (BFS expanded)                     |
+| `neededBy` | `[selectors]`                             | Reverse injection — each entry matched independently (OR)   |
+| `synth`    | `[fns]`                                   | Synthesis functions — derive attrs, inject virtual children |
 
 ## Defining rules
 
@@ -183,18 +183,18 @@ Class-keyed values are collected as lists (not deep-merged) to preserve NixOS mo
 
 94 tests across 10 suites:
 
-| Suite | Tests | What it covers |
-|---|---|---|
-| `smoke` | 2 | Library loads, exports present |
-| `css` | 12 | CSS string parser: all token types, combinators, compound selectors |
-| `dom` | 9 | DOM walk, namespace inheritance, overrides, nesting, gen-scope graph |
-| `selectors` | 17 | All 12 selector handlers, CSS integration, `callWithArgs` |
-| `traits` | 8 | Needs BFS, diamond dedup, circular safety, neededBy OR dispatch, needs-as-function |
-| `genScope-tests` | 10 | Full pipeline: basic output, byClass, rule matching, needs/neededBy in pipeline, list collection, `:has` selector, child bubbling, rule synth |
-| `demo` | 9 | Fleet scenario: lb + web nodes + users, cross-node select, sudo via `:has(admin)`, neededBy monitoring |
-| `edge-cases` | 5 | Empty DOM, marker-only traits, CSS selectors in rules, deep nesting, multiple same-level nodes |
-| `setup-tests` | 13 | traitKind, mkRulesType, evalNestModules, schema integration, refinement contracts, mkFieldValidator |
-| `graph-queries` | 9 | gen-graph accessor queries: `fromRegistry` adapter, node selection, leaves/cycles, materialized parent edges, import-graph reachability + dependents |
+| Suite            | Tests | What it covers                                                                                                                                       |
+| ---------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `smoke`          | 2     | Library loads, exports present                                                                                                                       |
+| `css`            | 12    | CSS string parser: all token types, combinators, compound selectors                                                                                  |
+| `dom`            | 9     | DOM walk, namespace inheritance, overrides, nesting, gen-scope graph                                                                                 |
+| `selectors`      | 17    | All 12 selector handlers, CSS integration, `callWithArgs`                                                                                            |
+| `traits`         | 8     | Needs BFS, diamond dedup, circular safety, neededBy OR dispatch, needs-as-function                                                                   |
+| `genScope-tests` | 10    | Full pipeline: basic output, byClass, rule matching, needs/neededBy in pipeline, list collection, `:has` selector, child bubbling, rule synth        |
+| `demo`           | 9     | Fleet scenario: lb + web nodes + users, cross-node select, sudo via `:has(admin)`, neededBy monitoring                                               |
+| `edge-cases`     | 5     | Empty DOM, marker-only traits, CSS selectors in rules, deep nesting, multiple same-level nodes                                                       |
+| `setup-tests`    | 13    | traitKind, mkRulesType, evalNestModules, schema integration, refinement contracts, mkFieldValidator                                                  |
+| `graph-queries`  | 9     | gen-graph accessor queries: `fromRegistry` adapter, node selection, leaves/cycles, materialized parent edges, import-graph reachability + dependents |
 
 ```bash
 nix run github:nix-community/nix-unit -- --flake .#tests

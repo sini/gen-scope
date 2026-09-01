@@ -6,16 +6,16 @@ This is the SQL counterpart of the [nest-traits](../nest-traits/) CSS selector d
 
 ## Libraries
 
-| Library | Role in this demo |
-|---|---|
-| [gen-algebra](https://github.com/sini/gen-algebra) | Identity hashing, validators, ref types for schema internals |
-| [gen-schema](https://github.com/sini/gen-schema) | 21 kinds with parent topology, FK refs, refinement contracts, row-polymorphic validators |
-| [gen-scope](https://github.com/sini/gen-scope) | `buildNodes` for kind/instance graph construction; `circular` Kleene-ascent convergence loop for rule dispatch |
-| [gen-graph](https://github.com/sini/gen-graph) | Reachability, cycle detection, migration ordering, impact analysis, ACL transitive walks; `phaseOrder` for dispatch group ordering |
-| [gen-select](https://github.com/sini/gen-select) | WHERE clause compilation: SQL AST nodes become compositional selectors (`and`, `when`, `star`) |
+| Library                                              | Role in this demo                                                                                                                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [gen-algebra](https://github.com/sini/gen-algebra)   | Identity hashing, validators, ref types for schema internals                                                                                                             |
+| [gen-schema](https://github.com/sini/gen-schema)     | 21 kinds with parent topology, FK refs, refinement contracts, row-polymorphic validators                                                                                 |
+| [gen-scope](https://github.com/sini/gen-scope)       | `buildNodes` for kind/instance graph construction; `circular` Kleene-ascent convergence loop for rule dispatch                                                           |
+| [gen-graph](https://github.com/sini/gen-graph)       | Reachability, cycle detection, migration ordering, impact analysis, ACL transitive walks; `phaseOrder` for dispatch group ordering                                       |
+| [gen-select](https://github.com/sini/gen-select)     | WHERE clause compilation: SQL AST nodes become compositional selectors (`and`, `when`, `star`)                                                                           |
 | [gen-dispatch](https://github.com/sini/gen-dispatch) | Rule dispatch STEP (rule evaluation only): `mkRule` with selector conditions, grouped actions; a pure `dispatch` the convergence loop iterates by threading domain state |
-| [gen-bind](https://github.com/sini/gen-bind) | NixOS module wrapping with contracts, provenance, and signature introspection |
-| nixpkgs `lib` | `evalModules` for schema evaluation, general utilities |
+| [gen-bind](https://github.com/sini/gen-bind)         | NixOS module wrapping with contracts, provenance, and signature introspection                                                                                            |
+| nixpkgs `lib`                                        | `evalModules` for schema evaluation, general utilities                                                                                                                   |
 
 ## Architecture
 
@@ -55,29 +55,29 @@ gen-schema: evalModules validates refs, refinements, row validators
 
 21 gen-schema kinds model a multi-datacenter infrastructure:
 
-| Kind | Parent | Key refs | Notes |
-|---|---|---|---|
-| `datacenter` | -- | -- | Root kind |
-| `environment` | -- | -- | Refined: dev/staging/prod |
-| `network` | datacenter | datacenter | CIDR refinement |
-| `subnet` | network | network | CIDR + IPv4 gateway |
-| `vlan` | subnet | subnet | VLAN ID refinement (1-4094) |
-| `server` | -- | datacenter, environment, subnet | Self-ref (`replaces`), tags, RAM validator |
-| `interface` | server | server, vlan | MAC + IPv4 refinement |
-| `service` | -- | server, environment | Protocol refinement |
-| `port` | service | service | TCP port refinement (1-65535) |
-| `service-dependency` | -- | upstream service, downstream service | No-self-dependency validator |
-| `domain` | -- | environment | |
-| `dns-record` | domain | domain, server?, loadbalancer? | At-least-one-target validator |
-| `loadbalancer` | -- | datacenter, environment | Self-ref (`failover`), LB algorithm refinement |
-| `backend` | loadbalancer | loadbalancer, service | |
-| `firewall-rule` | -- | src-subnet, dst-subnet, src-server?, dst-server? | Dual refs to same kind |
-| `certificate` | -- | server?, loadbalancer? | At-least-one-target validator |
-| `schedule` | -- | service, server | |
-| `ldap-group` | -- | -- | Root kind |
-| `ldap-role` | -- | ldap-group | Permissions list |
-| `user` | -- | ldap-role | Self-ref (`manager`), `setOf` servers |
-| `access-policy` | -- | ldap-role | Scope: direct/transitive |
+| Kind                 | Parent       | Key refs                                         | Notes                                          |
+| -------------------- | ------------ | ------------------------------------------------ | ---------------------------------------------- |
+| `datacenter`         | --           | --                                               | Root kind                                      |
+| `environment`        | --           | --                                               | Refined: dev/staging/prod                      |
+| `network`            | datacenter   | datacenter                                       | CIDR refinement                                |
+| `subnet`             | network      | network                                          | CIDR + IPv4 gateway                            |
+| `vlan`               | subnet       | subnet                                           | VLAN ID refinement (1-4094)                    |
+| `server`             | --           | datacenter, environment, subnet                  | Self-ref (`replaces`), tags, RAM validator     |
+| `interface`          | server       | server, vlan                                     | MAC + IPv4 refinement                          |
+| `service`            | --           | server, environment                              | Protocol refinement                            |
+| `port`               | service      | service                                          | TCP port refinement (1-65535)                  |
+| `service-dependency` | --           | upstream service, downstream service             | No-self-dependency validator                   |
+| `domain`             | --           | environment                                      |                                                |
+| `dns-record`         | domain       | domain, server?, loadbalancer?                   | At-least-one-target validator                  |
+| `loadbalancer`       | --           | datacenter, environment                          | Self-ref (`failover`), LB algorithm refinement |
+| `backend`            | loadbalancer | loadbalancer, service                            |                                                |
+| `firewall-rule`      | --           | src-subnet, dst-subnet, src-server?, dst-server? | Dual refs to same kind                         |
+| `certificate`        | --           | server?, loadbalancer?                           | At-least-one-target validator                  |
+| `schedule`           | --           | service, server                                  |                                                |
+| `ldap-group`         | --           | --                                               | Root kind                                      |
+| `ldap-role`          | --           | ldap-group                                       | Permissions list                               |
+| `user`               | --           | ldap-role                                        | Self-ref (`manager`), `setOf` servers          |
+| `access-policy`      | --           | ldap-role                                        | Scope: direct/transitive                       |
 
 Refinement contracts validate: CIDR, IPv4, MAC, VLAN ID (1-4094), TCP port (1-65535), env tier, service protocol, DNS record type, LB algorithm, firewall action, cert issuer.
 
@@ -119,10 +119,10 @@ sql.query "SELECT hostname, cores FROM servers WHERE cores > 4 AND ram_gb >= 16"
 
 Rules use gen-dispatch's `mkRule` with gen-select selectors as conditions. Group ordering comes from `gen-graph.phaseOrder` (consumed as `groupOrder`); under multi-group dispatch every rule declares its `group`. Two action groups:
 
-| Group | Actions | Purpose |
-|---|---|---|
+| Group        | Actions  | Purpose                                          |
+| ------------ | -------- | ------------------------------------------------ |
 | `structural` | `enrich` | Feed data back into context (the loop converges) |
-| `config` | `nixos` | Collect NixOS module fragments |
+| `config`     | `nixos`  | Collect NixOS module fragments                   |
 
 ```nix
 # Web servers get nginx
@@ -248,25 +248,25 @@ genGraph.reachableFrom kindNodes "server"
 
 17 suites, 167 tests:
 
-| Suite | Tests | Covers |
-|---|---|---|
-| `smoke` | 2 | Fleet loads, basic structure |
-| `schema` | 12 | Kind count, parent topology, ref fields |
-| `fleet-eval` | 23 | Ref resolution, self-refs, setOf, nullable refs |
-| `refinement` | 7 | CIDR, env tier, VLAN ID, MAC, TCP port validation |
-| `graph` | 9 | Kind/instance graphs, cycles, reachability, dependents |
-| `sql-parser` | 15 | Tokenizer, SELECT/FROM/JOIN/WHERE, aliases, IN/IS NULL |
-| `sql-engine` | 11 | Simple/filtered select, JOINs, ORDER BY, LIMIT |
-| `ddl` | 10 | Tables, migration order, junction tables, indexes, views |
-| `acl` | 8 | Direct/transitive scope, effective access |
-| `reachability` | 4 | Firewall intersection, self-subnet, deny rules |
-| `bind` | 5 | gen-bind wrapping, signatures, contracts |
-| `nixos` | 21 | Config generation, user provisioning, config-path queries |
-| `config-queries` | 17 | SQL against rendered NixOS configs |
-| `rules` | 11 | gen-dispatch dispatch, SQL WHERE conditions, base merge |
-| `convergence` | 4 | Enrichment feedback, multi-pass loop convergence |
-| `integration` | 5 | Full pipeline, cross-model queries |
-| `bridge` | 3 | Cross-library: select-->graph, select-->dispatch, schema-->graph |
+| Suite            | Tests | Covers                                                           |
+| ---------------- | ----- | ---------------------------------------------------------------- |
+| `smoke`          | 2     | Fleet loads, basic structure                                     |
+| `schema`         | 12    | Kind count, parent topology, ref fields                          |
+| `fleet-eval`     | 23    | Ref resolution, self-refs, setOf, nullable refs                  |
+| `refinement`     | 7     | CIDR, env tier, VLAN ID, MAC, TCP port validation                |
+| `graph`          | 9     | Kind/instance graphs, cycles, reachability, dependents           |
+| `sql-parser`     | 15    | Tokenizer, SELECT/FROM/JOIN/WHERE, aliases, IN/IS NULL           |
+| `sql-engine`     | 11    | Simple/filtered select, JOINs, ORDER BY, LIMIT                   |
+| `ddl`            | 10    | Tables, migration order, junction tables, indexes, views         |
+| `acl`            | 8     | Direct/transitive scope, effective access                        |
+| `reachability`   | 4     | Firewall intersection, self-subnet, deny rules                   |
+| `bind`           | 5     | gen-bind wrapping, signatures, contracts                         |
+| `nixos`          | 21    | Config generation, user provisioning, config-path queries        |
+| `config-queries` | 17    | SQL against rendered NixOS configs                               |
+| `rules`          | 11    | gen-dispatch dispatch, SQL WHERE conditions, base merge          |
+| `convergence`    | 4     | Enrichment feedback, multi-pass loop convergence                 |
+| `integration`    | 5     | Full pipeline, cross-model queries                               |
+| `bridge`         | 3     | Cross-library: select-->graph, select-->dispatch, schema-->graph |
 
 ## Running
 

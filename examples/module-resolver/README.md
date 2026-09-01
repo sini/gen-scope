@@ -26,16 +26,16 @@ module Cycle2 { import Cycle1 }
 
 ## Features exercised
 
-| Feature | Paper | What it tests |
-|---|---|---|
-| `query` with specificity | Neron 2015 Fig. 2 | D < I < P ordering: local shadows import shadows parent |
-| `transitiveImports` | Neron 2015 §2.5 | App sees Math's `pi` through String's import of Math |
-| Seen-imports | Neron 2015 §2.4, rule X | Cycle1 and Cycle2 mutually import without diverging |
-| `ambiguous` | van Antwerpen 2018 | Detect when multiple declarations are reachable |
-| `shadow` | Neron 2015 §5 Def. 1 | visibleDecls composes local, import, and parent with shadowing |
-| `queryAll` | Neron 2015 §2.3 | All reachable declarations in cyclic import scenario |
-| `paramAttr` | Sloane 2010 §3 | Parameterized name lookup |
-| Structural queries | -- | ancestors, childrenIds, descendants, nodesByType |
+| Feature                  | Paper                   | What it tests                                                  |
+| ------------------------ | ----------------------- | -------------------------------------------------------------- |
+| `query` with specificity | Neron 2015 Fig. 2       | D < I < P ordering: local shadows import shadows parent        |
+| `transitiveImports`      | Neron 2015 §2.5         | App sees Math's `pi` through String's import of Math           |
+| Seen-imports             | Neron 2015 §2.4, rule X | Cycle1 and Cycle2 mutually import without diverging            |
+| `ambiguous`              | van Antwerpen 2018      | Detect when multiple declarations are reachable                |
+| `shadow`                 | Neron 2015 §5 Def. 1    | visibleDecls composes local, import, and parent with shadowing |
+| `queryAll`               | Neron 2015 §2.3         | All reachable declarations in cyclic import scenario           |
+| `paramAttr`              | Sloane 2010 §3          | Parameterized name lookup                                      |
+| Structural queries       | --                      | ancestors, childrenIds, descendants, nodesByType               |
 
 ## Tests
 

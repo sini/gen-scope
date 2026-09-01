@@ -11,26 +11,26 @@ inline `# ->` comment states the expected result.
 
 The single-file flake exposes one output attribute per concept:
 
-| Output | Concept |
-| --- | --- |
-| `graphPrimitives` | Core algebra: `empty`, `vertex`, `overlay`, `connect` |
-| `graphDerived` | Derived constructors: `star`, `path`, `circuit`, `clique`, `tree`, `forest`, `edges`, `overlays` |
-| `graphTransformations` | `gmap`, `transpose`, `induce`, `removeVertex`, `removeEdge` |
-| `scopeGraphBasic` | `buildNodes` + `eval`: parents, decls, imports, types |
-| `structuralQueries` | ancestors, descendants, siblings, children |
-| `nameResolution` | lexical/import resolution, shadowing, deep inheritance |
-| `ambiguityDetection` | multiple reaching declarations |
-| `visibilityPolicies` | transitive vs non-transitive import visibility |
-| `seenImports` | seen-set cycle guarding during resolution |
-| `demandDrivenEval` | lazy, memoized attribute demand |
-| `hoagSynthesis` | dynamic node synthesis (higher-order AG) |
-| `circularAttributes` | fixpoint `circular` attributes (Sloane 2010 §2.2) |
-| `importCollection` | import-scoped collection (Neron 2015) |
-| `structuralSubtyping` | `subtypeOf` record subtyping |
-| `customEdgeLabels` | custom edge labels: `followEdge`, `collectByLabel` |
-| `scopedRelations` | multiple relation namespaces on one scope |
-| `evalDebugDemo` | structured cycle tracing via `evalDebug` |
-| `globalCollection` | `collect` / `collectByType` global queries |
+| Output                 | Concept                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `graphPrimitives`      | Core algebra: `empty`, `vertex`, `overlay`, `connect`                                            |
+| `graphDerived`         | Derived constructors: `star`, `path`, `circuit`, `clique`, `tree`, `forest`, `edges`, `overlays` |
+| `graphTransformations` | `gmap`, `transpose`, `induce`, `removeVertex`, `removeEdge`                                      |
+| `scopeGraphBasic`      | `buildNodes` + `eval`: parents, decls, imports, types                                            |
+| `structuralQueries`    | ancestors, descendants, siblings, children                                                       |
+| `nameResolution`       | lexical/import resolution, shadowing, deep inheritance                                           |
+| `ambiguityDetection`   | multiple reaching declarations                                                                   |
+| `visibilityPolicies`   | transitive vs non-transitive import visibility                                                   |
+| `seenImports`          | seen-set cycle guarding during resolution                                                        |
+| `demandDrivenEval`     | lazy, memoized attribute demand                                                                  |
+| `hoagSynthesis`        | dynamic node synthesis (higher-order AG)                                                         |
+| `circularAttributes`   | fixpoint `circular` attributes (Sloane 2010 §2.2)                                                |
+| `importCollection`     | import-scoped collection (Neron 2015)                                                            |
+| `structuralSubtyping`  | `subtypeOf` record subtyping                                                                     |
+| `customEdgeLabels`     | custom edge labels: `followEdge`, `collectByLabel`                                               |
+| `scopedRelations`      | multiple relation namespaces on one scope                                                        |
+| `evalDebugDemo`        | structured cycle tracing via `evalDebug`                                                         |
+| `globalCollection`     | `collect` / `collectByType` global queries                                                       |
 
 ## Run
 

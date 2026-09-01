@@ -18,16 +18,16 @@ workspace
 
 ## Features exercised
 
-| Feature | Paper | What it tests |
-|---|---|---|
-| `collectImports` | Neron 2015 §2.4 | Transitive API collection across dependency chain |
-| HOAG synthesis | Vogt 1989 | Synthesize resolved manifest node with computed deps |
-| Custom edge labels (D) | van Antwerpen 2018 §2.1 | devDependency separation from runtime imports |
-| `collect` (global) | -- | Version conflict detection across all nodes |
-| `evalDebug` | -- | Cycle-safe evaluation with structured traces |
-| Synthesized attributes | Knuth 1968 | depDepth, depCount, allDeps roll up bottom-up |
-| `siblings` | -- | Detect that lib-json@1.5 and lib-json@2.0 are siblings |
-| `nodesByType` | -- | Query all libs, find synthesized manifest |
+| Feature                | Paper                   | What it tests                                          |
+| ---------------------- | ----------------------- | ------------------------------------------------------ |
+| `collectImports`       | Neron 2015 §2.4         | Transitive API collection across dependency chain      |
+| HOAG synthesis         | Vogt 1989               | Synthesize resolved manifest node with computed deps   |
+| Custom edge labels (D) | van Antwerpen 2018 §2.1 | devDependency separation from runtime imports          |
+| `collect` (global)     | --                      | Version conflict detection across all nodes            |
+| `evalDebug`            | --                      | Cycle-safe evaluation with structured traces           |
+| Synthesized attributes | Knuth 1968              | depDepth, depCount, allDeps roll up bottom-up          |
+| `siblings`             | --                      | Detect that lib-json@1.5 and lib-json@2.0 are siblings |
+| `nodesByType`          | --                      | Query all libs, find synthesized manifest              |
 
 ## Tests
 
