@@ -288,14 +288,6 @@ let
   spawnedVisibility = import ./tests/_fixtures/spawned-visibility.nix { inherit lib genScope; };
 in
 {
-  # Same type as `flake.tests`, because it is the same kind of thing read by the same runner —
-  # only the assertion the cells carry differs.
-  options.flake.testsError = lib.mkOption {
-    type = lib.types.lazyAttrsOf (lib.types.lazyAttrsOf lib.types.raw);
-    default = { };
-    description = "Test suites whose cells assert an ERROR: { suite.test = { expr; expectedError; }; }. Read by `nix-unit --flake ./ci#testsError`; deliberately outside `flake.tests`, which the batch asserter quantifies over.";
-  };
-
   config.flake.testsError.cascade-refusals = {
     # ── THE FIVE ARMS OF THE CLAIM CHAIN, EACH BY ITS OWN TEXT ──
     test-value-that-is-not-a-claim-names-the-constructor = {
