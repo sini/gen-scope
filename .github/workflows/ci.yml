@@ -16,4 +16,10 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: DeterminateSystems/magic-nix-cache-action@main
       - run: nix flake check
+      # `nix flake check` covers the `tests` output ONLY — the batch asserter behind
+      # `checks.default` quantifies over `flake.tests` and nothing else. The
+      # error-assertion cells live on `testsError` (`ci/tests-error.nix`), so without this
+      # step they never run here. nix-unit comes from the devshell, which is the flake's
+      # own LOCKED one rather than a floating ref.
+      - run: nix develop --command nix-unit --flake .#testsError
       - run: nix fmt -- --ci
