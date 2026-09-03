@@ -347,7 +347,7 @@ in
     # [ a b c d ]. What the cell still shows is the property that matters here — the ANSWER is
     # unchanged under the move, because every node of this fixture is a root with no children, so
     # nothing the query walks depends on the pair whose order flipped.
-    test-queryReverse-flat-fixture-orders-coincide = {
+    test-queryReverse-flat-fixture-orders-diverge = {
       expr = {
         walk = revResult.allNodeIds;
         keys = builtins.attrNames revResult.allNodes;
