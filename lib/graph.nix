@@ -38,7 +38,16 @@ let
   };
 
   # Derived constructors.
-  overlays = gs: builtins.foldl' overlay empty gs;
+  # Monoidal overlay is associative and its carrier is the free monoid on lists, so folding it over
+  # `gs` and concatenating the segments in one pass are the SAME VALUE — including sequence, which
+  # this library's declared vertex order makes observable. The fold form re-copies its accumulator
+  # per element and is quadratic in the segments of ONE call; this one is linear in them.
+  # Constructors that RECURSE through `overlays` (`tree`, and `forest` through it) carry their own
+  # cost at depth, which this does not address.
+  overlays = gs: {
+    vertices = builtins.concatMap (g: g.vertices) gs;
+    edges = builtins.concatMap (g: g.edges) gs;
+  };
   vertices = vs: overlays (map vertex vs);
   edge = from: to: connect (vertex from) (vertex to);
   edges = es: overlays (map (e: edge e.from e.to) es);
