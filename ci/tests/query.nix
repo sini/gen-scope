@@ -341,7 +341,7 @@ in
       ];
     };
 
-    # ★ RE-PINNED, and the name is kept so the change is legible in the history: this fixture's
+    # ★ RE-PINNED AND RENAMED, so the change is legible in the history: this fixture's
     # walk and key order NO LONGER COINCIDE. `revRoots` is built by the constructor, whose vertex
     # order is now the declared one, and its declaration is [ b a c d ] where its key order is
     # [ a b c d ]. What the cell still shows is the property that matters here — the ANSWER is
