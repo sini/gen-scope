@@ -252,13 +252,15 @@ let
   # deduplicates at its own call site and says so there.
   #
   # Where the tree settles no order, the tie-break is `allNodeIds`' and is declared with it:
-  # root and sibling ties break on `attrNames`, i.e. BYTEWISE CODEPOINT order, and a
-  # `derived-children` node interleaves with its `children` siblings under the same rule.
-  # That tie-break is a residue, not a law of attrsets — the algebraic graph layer carries a
-  # declaration-ordered vertex list and `lib/build-nodes.nix` collapses it through
-  # `listToAttrs`/`attrNames` before `eval` is handed `roots`. On a FLAT graph (every node a
-  # root, no children) the walk therefore coincides with codepoint order; on a nested one it
-  # does not, and subtree contiguity is what the reader sees.
+  # SIBLING ties break on `attrNames`, i.e. BYTEWISE CODEPOINT order, and a `derived-children`
+  # node interleaves with its `children` siblings under the same rule. That tie-break is a
+  # residue, not a law of attrsets — `childRecordsOf` merges the two child halves into ONE
+  # attrset and the walk descends its `attrNames`. ROOTS are not tie-broken at all: `eval`
+  # enters the walk at `scope.nodeOrder`, the declared vertex order `buildRoots` returns beside
+  # the node set, so the top level answers in DECLARATION order. On a FLAT graph (every node a
+  # root, no children) the walk is therefore the declared order and NOT the codepoint key order
+  # `attrNames self.allNodes` gives; on a nested one the sibling residue shows inside each
+  # subtree, and subtree contiguity is what the reader sees.
   queryReverse =
     {
       dataFilter,

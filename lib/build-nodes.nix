@@ -8,9 +8,10 @@
 # The algebraic graph layer carries vertices as a LIST (`lib/graph.nix`, where `overlay` and
 # `connect` concatenate), and an attrset is a SET: collapsing that list through `listToAttrs` and
 # back out through `attrNames` computes a declared order and then discards it, leaving bytewise
-# codepoint order as the residue. The order is not absent from the substrate; it was destroyed here.
-# `nodeOrder` is that order, kept. It is a list of strings — plain data, so it crosses a library
-# boundary as a value rather than as a re-handed build.
+# codepoint order as the residue. The order is not absent from the substrate; it is destroyed by
+# THAT COLLAPSE, which is the shape this constructor does not have. `nodeOrder` is that order,
+# kept. It is a list of strings — plain data, so it crosses a library boundary as a value rather
+# than as a re-handed build.
 #
 # The order cannot live INSIDE the node attrset: a reserved top-level key would be enumerated as a
 # node by every consumer that reads `attrNames`, and a Nix attrset has no other channel.

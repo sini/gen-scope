@@ -1275,17 +1275,20 @@ let
             #
             # Two tie-breaks, declared because a declared order is the whole point:
             #
-            # 1. Root and sibling ties break on `attrNames`, which is BYTEWISE CODEPOINT order,
-            #    not dictionary order — `attrNames { z; A; a; _b; "1"; }` is
+            # 1. SIBLING ties break on `attrNames`, which is BYTEWISE CODEPOINT order, not
+            #    dictionary order — `attrNames { z; A; a; _b; "1"; }` is
             #    `[ "1" "A" "_b" "a" "z" ]`, uppercase before underscore before lowercase. This
-            #    is NOT because an attrset "carries no order". The algebraic graph layer carries
-            #    a declaration-ordered vertex LIST (`lib/graph.nix`, where `overlay` and
-            #    `connect` concatenate), and `lib/build-nodes.nix` collapses that list through
-            #    `listToAttrs` and back out through `attrNames` — the same construction this
-            #    walk exists to stop doing — so `eval` receives `roots` already set-shaped and
-            #    the declared order is gone before anything here runs. The codepoint tie-break
-            #    is that collapse's residue. Recovering the declared order is a change to the
-            #    constructor, not to this walk.
+            #    is NOT because an attrset "carries no order": `childRecordsOf` merges the
+            #    `children` and `derived-children` halves into ONE attrset and `_walkFrom`
+            #    descends that attrset's `attrNames`, so the codepoint rule is THAT merge's
+            #    residue. ROOTS are not tie-broken at all — this walk enters at
+            #    `checked.nodeOrder`, the declaration-ordered vertex list `buildRoots` returns
+            #    beside the node set (`lib/graph.nix` carries vertices as a LIST, where
+            #    `overlay` and `connect` concatenate, and `lib/build-nodes.nix` keeps that order
+            #    rather than leaving it to be `attrNames`' residue), so the top level is in
+            #    DECLARATION order and a flat scope answers exactly as it was written.
+            #    Recovering a declared SIBLING order would take a list-shaped child channel — a
+            #    change to the `children` attribute's shape, not to this walk.
             #
             # 2. A `derived-children` node INTERLEAVES with its `children` siblings rather than
             #    following them: `_walkFrom` descends what `childRecordsOf` returns, and that is the
