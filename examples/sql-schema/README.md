@@ -272,7 +272,8 @@ genGraph.reachableFrom kindNodes "server"
 
 ```bash
 # Run all tests
-nix eval .#tests
+# --apply forces every cell: without it a failed test renders as «error: …» and the command still exits 0
+nix eval .#tests --apply 'x: builtins.deepSeq x x'
 
 # Interactive REPL
 nix repl .

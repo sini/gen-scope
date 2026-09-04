@@ -34,7 +34,9 @@ Parent edges encode directory/namespace nesting (deeper overrides shallower). Im
 20 tests covering: deep-overrides-shallow resolution, import-based includes (api gets shared CACHE_TTL), full config merging across levels, override detection (which keys are overridden), config source tracing (local/import/inherited), structural queries (environments, ancestors), and typed queries.
 
 ```bash
-nix eval .#tests
+# --apply forces every cell: without it a failed test renders as «error: …» and the command still exits 0
+# it does not check the values — these cells state no expectations
+nix eval .#tests --apply 'x: builtins.deepSeq x x'
 ```
 
 ## References

@@ -37,7 +37,9 @@ global                    dark-mode=false, new-editor=false, ai-assist=false, ma
 27 tests covering: flag resolution at all hierarchy levels, user opt-out override, flag dependencies (ai-assist requires new-editor), effective flag merging, override counting, HOAG rollout synthesis, circular convergence, typed queries, and structural ancestor verification.
 
 ```bash
-nix eval .#tests
+# --apply forces every cell: without it a failed test renders as «error: …» and the command still exits 0
+# it does not check the values — these cells state no expectations
+nix eval .#tests --apply 'x: builtins.deepSeq x x'
 ```
 
 ## References

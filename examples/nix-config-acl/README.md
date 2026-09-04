@@ -99,7 +99,9 @@ system ∩ gates    = [] → enable = false
 - Host ancestry and environment children
 
 ```bash
-nix eval .#tests
+# --apply forces every cell: without it a failed test renders as «error: …» and the command still exits 0
+# it does not check the values — these cells state no expectations
+nix eval .#tests --apply 'x: builtins.deepSeq x x'
 ```
 
 ## References

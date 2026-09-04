@@ -36,7 +36,9 @@ distance(p3, origin)  -- OK: Point3D <: Point2D
 23 tests covering: structural subtyping (positive/negative), record field extension via R edges, class inheritance via E edges, scoped type/value namespaces, HOAG generic instantiation, typed queries, and ambiguity detection.
 
 ```bash
-nix eval .#tests
+# --apply forces every cell: without it a failed test renders as «error: …» and the command still exits 0
+# it does not check the values — these cells state no expectations
+nix eval .#tests --apply 'x: builtins.deepSeq x x'
 ```
 
 ## References

@@ -35,7 +35,9 @@ Role hierarchy:           Users:                Resources:
 27 tests covering: role hierarchy resolution (viewer/editor/admin/auditor permission chains), user effective permissions (multi-role union), permission checks (positive/negative), deny overrides (blocked actions on specific resources), resource hierarchy (inherited sensitivity), structural queries, and typed/labelled collection.
 
 ```bash
-nix eval .#tests
+# --apply forces every cell: without it a failed test renders as «error: …» and the command still exits 0
+# it does not check the values — these cells state no expectations
+nix eval .#tests --apply 'x: builtins.deepSeq x x'
 ```
 
 ## References
