@@ -36,7 +36,9 @@ let
         ;
     };
   prelude = import "${fetch "gen-prelude"}/lib";
-  graph = import "${fetch "gen-graph"}/lib" { inherit prelude; };
+  # Through gen-graph's own standalone entry, never its bare `./lib`: the root shim's rule, so a
+  # formal gained downstream is defaulted downstream instead of re-tracked here by hand.
+  graph = import "${fetch "gen-graph"}" { inherit prelude; };
   inherit (import ../../lib/require-scope.nix { inherit prelude; }) requireScope;
   evalLib = import ../../lib/eval.nix { inherit prelude requireScope graph; };
   inherit (import ../../lib/build-nodes.nix { inherit prelude; }) buildRoots;

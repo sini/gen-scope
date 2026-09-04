@@ -22,7 +22,11 @@
 }:
 let
   prelude = import "${genPreludeSrc}/lib";
-  graph = import "${genGraphSrc}/lib" { inherit prelude; };
+  # Through gen-graph's own standalone entry, never its bare `./lib`: the root shim's rule, so a
+  # formal gained downstream is defaulted downstream instead of re-tracked here by hand. Supplying
+  # `prelude` means the entry's own fetching default is never forced, which is what keeps this
+  # readable inside the build sandbox.
+  graph = import "${genGraphSrc}" { inherit prelude; };
   inherit (import "${libSrc}/require-scope.nix" { inherit prelude; }) requireScope;
   evalLib = import "${libSrc}/eval.nix" { inherit prelude requireScope graph; };
   inherit (import "${libSrc}/build-nodes.nix" { inherit prelude; }) buildRoots;

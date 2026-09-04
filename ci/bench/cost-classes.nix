@@ -77,16 +77,25 @@ let
         ;
     };
   prelude = import "${fetch "gen-prelude"}/lib";
-  graph = import "${fetch "gen-graph"}/lib" { inherit prelude; };
-  # The identity authority the library injects into its minting module. Built on the prelude this
-  # file derives rather than on the one inside gen-schema's own lock, which is the same simplification
-  # the root shim states and is inert here: the authority's closure is `builtins`-only.
-  schema = import "${fetch "gen-schema"}/lib" {
-    inherit prelude;
-    merge = import "${fetch "gen-merge"}/lib" { inherit prelude; };
-    algebra = import "${fetch "gen-algebra"}/lib";
+  # ★ EACH DEPENDENCY THROUGH ITS OWN STANDALONE ENTRY, NEVER ITS BARE `./lib` — the root shim's
+  # rule and this file is bound by it. Reaching past the entry obliges the bench to name that
+  # library's whole formal list by hand, which is a SECOND SIGNATURE nothing compares against the
+  # first: it is how this file came to omit the `identity` that `./lib` gained. Through the entry
+  # `merge` and `algebra` are defaulted by gen-schema from its own lock and are not named here.
+  graph = import "${fetch "gen-graph"}" { inherit prelude; };
+  schema = import "${fetch "gen-schema"}" { inherit prelude; };
+  # The one minting authority: a dependency-free leaf, so its lib is a bare value and this takes no
+  # argument. Derived from THIS file's lock, and passed to `./lib` and NOT to `schema`, exactly as
+  # the root shim binds it.
+  identity = import "${fetch "gen-identity"}/lib";
+  s = import ../../lib {
+    inherit
+      prelude
+      graph
+      schema
+      identity
+      ;
   };
-  s = import ../../lib { inherit prelude graph schema; };
 
   ix = m: builtins.genList (i: i) m;
   # Fixed-width names so an id's sort position does not drift with the size of the sweep.
