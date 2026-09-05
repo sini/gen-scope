@@ -273,7 +273,7 @@ let
   # Shared with `tests/circular-nta.nix`, which holds the same grammar's convergence cells. Both
   # seeded variants are defined there, so the grammar a refusal is earned on and the grammar the
   # clean path converges on are one value rather than two that agree while someone keeps them so.
-  circularNta = import ./tests/_fixtures/circular-nta.nix { inherit genScope; };
+  circularNta = import ./tests/_fixtures/circular-nta.nix { inherit genScope genGraph; };
 
   # The shared-round corpus: the tracked model of record's forty fixtures, ported. The refusing
   # fixtures are asserted here — WHICH refusal fires is a claim about a message — and the
@@ -2474,7 +2474,10 @@ in
           };
         };
         parseParent = _: null;
-        declaredDependencies = _: [ ];
+        # The empty relation, contracted. It needs no node references and therefore no membership
+        # authority, which is why this one is built inline rather than through
+        # `tests/_fixtures/declared.nix`.
+        declaredDependencies = genGraph.mkDeclaredEdges { };
       };
     in
     {
@@ -2483,6 +2486,83 @@ in
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope: no trace for node 'ghost' — node not reachable from roots";
+        };
+      };
+    };
+
+  # ── THE DECLARED RELATION'S INPUT TYPE, AND THE TWO ENTRIES THAT STATE IT ──
+  # `gen-graph` ships the CONSTRUCTOR, the shared TYPE and the discriminator, and deliberately no
+  # refusal helper: a refusal minted there would name `gen-graph` for a defect at this library's
+  # door. So each entry states its OWN, naming itself — and a discriminator no consumer calls is a
+  # guard nobody calls, which is what these cells hold.
+  #
+  # BOTH DETAIL ARMS ARE EXERCISED, one per entry, because they are not interchangeable. A bare
+  # relation is a `lambda` and the type names it usefully; a hand-assembled attrset carrying an
+  # `index` and a `dependencies` has the right SHAPE — `builtins.typeOf` says `set` and tells the
+  # reader nothing — so that arm names the CONSTRUCTOR that was missed instead. The second arm is
+  # the one that matters: the predicate is NOMINAL on purpose, and this value is precisely the
+  # bypass a structural predicate would admit.
+  #
+  # THE SUBJECT HERE IS THE MESSAGE. That the refusals FIRE, that the third state survives them, and
+  # that a contracted relation is served are in `tests/declared-relation-contract.nix`, whose
+  # controls are what separate "this entry refused" from "this entry refuses everything".
+  config.flake.testsError.declared-relation-contract-refusals =
+    let
+      contractScope = genScope.buildRoots {
+        parentGraph = genScope.vertex "solo";
+        decls.solo.v = 1;
+        types = { };
+      };
+      attributes = {
+        children = _self: _id: { };
+        self-v = self: id: (self.node id).decls.v;
+      };
+      # A hand-assembled value with the constructor's own field names and no tag: the bypass the
+      # nominal predicate exists to refuse.
+      forged = {
+        index = { };
+        dependencies = _: [ ];
+      };
+    in
+    {
+      # `foldEquations`, on a BARE relation — the shape every caller wrote before the contract
+      # existed, and the one a consumer reaches for by habit.
+      test-foldEquations-refuses-an-uncontracted-relation-by-name = {
+        expr = genScope.foldEquations {
+          scope = contractScope;
+          parseParent = _: null;
+          schedule.equations = {
+            children = {
+              name = "children";
+              kind = "nta";
+              readsAttrs = [ ];
+              stratum = "structural";
+              compute = _self: _id: { };
+            };
+          };
+          declaredDependencies = _: [ ];
+        };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.foldEquations: `declaredDependencies` must be the relation `gen-graph.mkDeclaredEdges` returns; received a lambda. Build it with `gen-graph.mkDeclaredEdges` and pass the result: the relation is contracted where it is constructed, so a value this entry cannot tell apart from a contracted one is one it must refuse.";
+        };
+      };
+
+      # `eval`, on the FORGED attrset. The delegate names ITSELF rather than borrowing the fold's
+      # name: an evaluator reached directly is a different door, and a message naming the wrong one
+      # sends a reader to a call site they did not make.
+      test-eval-refuses-a-forged-relation-by-name = {
+        expr =
+          (genScope.eval {
+            scope = contractScope;
+            inherit attributes;
+            declaredDependencies = forged;
+          }).get
+            "solo"
+            "self-v";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.eval: `declaredDependencies` must be the relation `gen-graph.mkDeclaredEdges` returns; received an attrset that `mkDeclaredEdges` did not build. Build it with `gen-graph.mkDeclaredEdges` and pass the result: the relation is contracted where it is constructed, so a value this entry cannot tell apart from a contracted one is one it must refuse.";
         };
       };
     };

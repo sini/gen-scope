@@ -24,6 +24,7 @@
   prelude,
   eval,
   requireScope,
+  requireDeclaredDependencies,
 }:
 {
   foldEquations =
@@ -36,15 +37,27 @@
       # this node depends on nothing — awarded to the caller who said nothing at all. The
       # neighbouring decision fields are required for the same reason; absence is a decision, so
       # the caller makes it and says so.
+      #
+      # AND IT IS THE VALUE `gen-graph.mkDeclaredEdges` RETURNS, not a bare relation. A contract
+      # enforced inside the fold that reads the relation is bypassed by any caller who
+      # hand-assembles the context, and callers do exactly that — so what the contract is carried by
+      # is a TYPE, minted where the relation is constructed and admitted here by name.
       declaredDependencies,
       settings ? { },
     }:
     let
       equations = schedule.equations;
       attributes = prelude.mapAttrs (_: eq: eq.compute) equations;
-      # The guard is forced here rather than left to `eval`, so the entry this caller named is the
-      # entry the message names.
+      # The guards are forced here rather than left to `eval`, so the entry this caller named is the
+      # entry the message names. Both are forced at the tail below; `checkedDeclared` needs the
+      # forcing because nothing else on the entry's own path demands it — the accessor's union and
+      # the evaluator's seam binding are both consumed lazily, so a caller handing an uncontracted
+      # relation would otherwise learn of it at a first attribute read, under the delegate's name.
       checked = requireScope "foldEquations" scope;
+      checkedDeclared = requireDeclaredDependencies "foldEquations" declaredDependencies;
+      # The relation as a function of a node — `mkDeclaredEdges`' own accessor, taken once, so this
+      # entry and the evaluator it delegates to read the relation through one definition.
+      declaredRelation = checkedDeclared.dependencies;
       # The plane re-exports the node map under its established name. That is OUTPUT data, not an
       # entry formal, so the input-type ruling does not reach it — and a consumer that hands this
       # half back to an evaluator is refused by name rather than served silently.
@@ -64,7 +77,11 @@
       # says so by receiving no relation at all.
       ev = eval {
         scope = checked;
-        inherit attributes parseParent declaredDependencies;
+        inherit attributes parseParent;
+        # The VALIDATED value, not the formal — `inherit declaredDependencies` would hand the
+        # delegate the very thing this entry's guard exists to reject, the guard having run and
+        # passed its input on anyway. `scope = checked` two lines up is the same move.
+        declaredDependencies = checkedDeclared;
       }; # demand fixpoint (delegate)
 
       nodeIds = prelude.attrNames ev.allNodes; # includes NTA-spawned children
@@ -109,7 +126,7 @@
         # structural partition and, through the projection's membership authority, the evaluated
         # node set. Both are already forced by `nodeIds` above for any caller that reads the trace.
         # The projection forces no resolutional attribute.
-        dependencies = id: prelude.unique (ev.structuralEdges id ++ declaredDependencies id);
+        dependencies = id: prelude.unique (ev.structuralEdges id ++ declaredRelation id);
         parent = id: parseParent id;
         nodeData = id: (ev.node id).decls or { };
         # ── THE GUARDED TRACE LOOKUP ──
@@ -146,26 +163,36 @@
     # `if bad then throw else {…}`, so a caller handing an invalid grammar is refused at this entry
     # rather than lazily on a first attribute read. Binding the equations off the schedule does NOT
     # subsume this — that binding is consumed lazily, through `attributes`, which nothing forces
-    # until an attribute is demanded.
-    builtins.seq schedule {
-      inherit
-        accessor
-        declaredDependencies
-        equations
-        parseParent
-        roots
-        schedule
-        settings
-        trace
-        # The evaluator's attribute set, sealed alongside the equations it projects: what a
-        # re-evaluation needs is the attribute functions, and deriving them inside the plane would
-        # hand it a vocabulary belonging to the authoring surface.
-        attributes
-        ;
-      eval = ev;
-      # The validated record, NOT the formal. `inherit scope` would seal the raw argument and hand
-      # a consumer back the very thing `requireScope` exists to reject — the guard would have run
-      # and published its input anyway. `checked` is the value that passed it.
-      scope = checked;
-    };
+    # until an attribute is demanded. The declared relation's guard is forced beside it for the same
+    # reason and to WHNF only: the constructor already deep-forced the relation, so a second deep
+    # force here would re-pay a cost the contract charges once.
+    builtins.seq checkedDeclared (
+      builtins.seq schedule {
+        inherit
+          accessor
+          equations
+          parseParent
+          roots
+          schedule
+          settings
+          trace
+          # The evaluator's attribute set, sealed alongside the equations it projects: what a
+          # re-evaluation needs is the attribute functions, and deriving them inside the plane would
+          # hand it a vocabulary belonging to the authoring surface.
+          attributes
+          ;
+        eval = ev;
+        # The validated record, NOT the formal. `inherit scope` would seal the raw argument and hand
+        # a consumer back the very thing `requireScope` exists to reject — the guard would have run
+        # and published its input anyway. `checked` is the value that passed it.
+        scope = checked;
+        # ★ AND THE DECLARED RELATION IS SEALED AS THE CONTRACTED VALUE, not as the projected
+        # function, for the redirection reason `roots` gives above. This entry now REFUSES a bare
+        # relation; a seal publishing one would hand a consumer a value the entry it must call back
+        # into cannot accept — refused by name with nowhere to be sent. Sealed as the minted value it
+        # round-trips: what a gate reads is `declaredDependencies.dependencies <id>`, and what a
+        # re-evaluation passes back is the field itself.
+        declaredDependencies = checkedDeclared;
+      }
+    );
 }

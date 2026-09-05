@@ -41,7 +41,7 @@
 # carried inside one instance over a product carrier — which is what the bounded-height-lattice
 # condition quantifies over in the first place, the condition being about the value domain and not
 # about how many attributes the domain is spread across.
-{ genScope }:
+{ genScope, genGraph }:
 let
   inherit (genScope)
     circular
@@ -222,18 +222,34 @@ let
   memberIds = builtins.attrNames members;
   endpointOf = m: "${m}-ep";
 
+  # ── THE RELATION AS A CONTRACTED VALUE, AND WHY THIS FIXTURE MINTS ITS OWN REFERENCES ──
+  # The entry admits only what `gen-graph.mkDeclaredEdges` minted, and the shared
+  # `_fixtures/declared.nix` helper cannot build this one: it validates every endpoint against the
+  # REGISTRATION set, and these endpoints are SPAWNED — the members and their own endpoints do not
+  # exist when the registration set is fixed, which is what spawning means. `mkSpawnedNodeRef` is
+  # their route by construction, and using it here is the fixture stating which channel each
+  # endpoint arrived through rather than routing around a check.
+  #
+  # EVERY TARGET here is spawned and none is registered, so this fixture takes one route and says
+  # so. The attrset form's KEYS are canonical names rather than references — `c` is the registered
+  # source, and a source is not an endpoint a constructor can check.
+  spawnedRef = genGraph.mkSpawnedNodeRef;
+
   ctx = foldEquations {
     inherit scope;
     schedule = { inherit equations; };
     parseParent = id: scope.nodes.${id}.parent or null;
-    declaredDependencies =
-      id:
-      if id == "c" then
-        memberIds ++ map endpointOf memberIds
-      else if builtins.elem id memberIds then
-        [ (endpointOf id) ]
-      else
-        [ ];
+    declaredDependencies = genGraph.mkDeclaredEdges (
+      {
+        c = map spawnedRef (memberIds ++ map endpointOf memberIds);
+      }
+      // builtins.listToAttrs (
+        map (m: {
+          name = m;
+          value = [ (spawnedRef (endpointOf m)) ];
+        }) memberIds
+      )
+    );
   };
 in
 {

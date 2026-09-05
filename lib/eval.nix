@@ -15,6 +15,7 @@
 {
   prelude,
   requireScope,
+  requireDeclaredDependencies,
   graph,
 }:
 let
@@ -437,22 +438,43 @@ let
       prior ? null,
       decision ? interface.coldDecision,
       provenance ? [ ],
-      # THE CONTRACTED DECLARED RELATION, and its absence is a THIRD state rather than the empty
-      # relation. `null` says NO DECLARATION WAS SUPPLIED — this evaluation was not constructed
-      # under the codomain contract — and the seam guard below is unarmed for it. A supplied
-      # relation, INCLUDING `_: [ ]`, arms the guard, and the empty one then means what it says:
-      # this node declares nothing, so every cross-node acquisition it makes is refused.
+      # THE CONTRACTED DECLARED RELATION — the value `gen-graph.mkDeclaredEdges` returns, and
+      # nothing else. Its absence is a THIRD state rather than the empty relation: `null` says NO
+      # DECLARATION WAS SUPPLIED — this evaluation was not constructed under the codomain contract —
+      # and the seam guard below is unarmed for it. A supplied relation, INCLUDING the empty one,
+      # arms the guard, and the empty one then means what it says: this node declares nothing, so
+      # every cross-node acquisition it makes is refused.
       #
       # The distinction is the sequencing input's own: a guard reading absence AS the empty
       # relation refuses every query entry point, which acquires node records with no reader whose
       # declaration could be consulted. Absence is a decision (`lib/interface.nix`), and the entry
       # at which the caller makes it is `foldEquations`, whose formal of this name is REQUIRED and
       # total. This one is the delegate's, and what it carries is whether that entry was used.
+      #
+      # ★ WHICH IS WHY `null` IS NOT PUT TO THE GUARD. The third state is this entry's own and is a
+      # sequencing fact, not a candidate relation; a guard asked to adjudicate it would have to
+      # admit `null` and would then admit it at `foldEquations` too, where the formal is required
+      # and absence is exactly what may not be expressed. Everything that is NOT the third state is
+      # a relation this entry accepts or refuses by name.
       declaredDependencies ? null,
     }:
     let
       checked = requireScope "eval" scope;
       roots = checked.nodes;
+
+      # The relation as a function of a node, which is what every site below reads. The projection
+      # is `mkDeclaredEdges`' own accessor rather than a second read of its index: the constructor
+      # publishes the relation, and a consumer re-deriving it from the index would be a second
+      # definition of the same lookup, free to disagree about a missing key.
+      #
+      # THE GUARD IS FORCED BY THIS BINDING, because `bindReader`'s unarmed test forces it at every
+      # body application — the entry a caller named is the entry the message names, and an
+      # evaluator reached directly says `eval` rather than borrowing the fold's name.
+      declaredRelation =
+        if declaredDependencies == null then
+          null
+        else
+          (requireDeclaredDependencies "eval" declaredDependencies).dependencies;
 
       # WHAT THE CALLER DECLARED versus WHAT RUNS, and the two are different sets because the spawn
       # channel is the registry's rather than the caller's. Everything below reads `runAttributes`:
@@ -602,7 +624,7 @@ let
             # any guard could sit. ADR-0030's dynamic read recorder is the live control on that
             # residual — a disagreement between what a body read and what its node declared is a
             # finding in the recorder's own terms.
-            readerSelf = bindReader declaredDependencies self;
+            readerSelf = bindReader declaredRelation self;
 
             # The ONE site at which a member of `runAttributes` is applied, and the total
             # classification over declaration shapes: a function is an ordinary attribute, a
@@ -612,7 +634,7 @@ let
             applyAttr =
               nodeId: attrName: fn:
               if isCircularDecl fn then
-                circularDemand nodeId attrName (fn // { step = bindStepReader declaredDependencies fn.step; })
+                circularDemand nodeId attrName (fn // { step = bindStepReader declaredRelation fn.step; })
               else if builtins.isAttrs fn then
                 throw "gen-scope: attribute '${attrName}' on '${nodeId}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
               else
@@ -772,7 +794,7 @@ let
                     # along, so the step is bound to its own instance's node here exactly as the
                     # ordinary application site binds it. A guard live on one path and not the
                     # other would be a claim about half the seam.
-                    step = bindStepReader declaredDependencies runAttributes.${an}.step;
+                    step = bindStepReader declaredRelation runAttributes.${an}.step;
                   }) eligibleNames
                 ) self.allNodeIds;
               in

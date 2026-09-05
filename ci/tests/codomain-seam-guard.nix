@@ -15,7 +15,7 @@
 # `builtins.tryEval` catches a throw and discards its text, so a guard that only threw would be a
 # guard whose message no cell could assert. The validator returns the reason and the seam raises it;
 # the wired cells below assert the FACT of the refusal, and the validator cell asserts its CONTENT.
-{ genScope, ... }:
+{ genScope, genGraph, ... }:
 let
   inherit (genScope)
     buildRoots
@@ -41,6 +41,19 @@ let
   };
 
   peerOf = id: if id == "a" then "b" else "a";
+
+  # The relation the entries accept, built through `gen-graph.mkDeclaredEdges`. `peerRelation` is
+  # `id: [ (peerOf id) ]` written as the index that constructor normalizes to, and it carries `root`
+  # for a reason a set of two would miss: a shared round ranges over EVERY eligible instance, so
+  # `root`'s own step acquires `a`'s record and a declaration omitting it refuses the round for a
+  # node the cells never name.
+  contracted = import ./_fixtures/declared.nix { inherit genGraph scope; };
+  peerRelation = contracted {
+    root = [ "a" ];
+    a = [ "b" ];
+    b = [ "a" ];
+  };
+  emptyRelation = contracted { };
 
   attributes = {
     children =
@@ -78,8 +91,8 @@ let
 
   # The empty relation is a DECLARATION — this node depends on nothing — so it arms the guard and
   # every cross-node acquisition under it is refused.
-  emptyCtx = foldWith (_: [ ]);
-  declaredCtx = foldWith (id: [ (peerOf id) ]);
+  emptyCtx = foldWith emptyRelation;
+  declaredCtx = foldWith peerRelation;
 
   # No relation at all: the evaluator was not reached through the contracted entry, so the guard is
   # unarmed. This is the seeded defect measured passing, and it is also the guardless-entry case —
@@ -137,22 +150,22 @@ let
   # quotient = false: three eligible instances, so the demand opens a SHARED ROUND.
   sharedRoundCtx = circularFold {
     quotient = false;
-    declaredDependencies = _: [ ];
+    declaredDependencies = emptyRelation;
   };
   sharedRoundDeclaredCtx = circularFold {
     quotient = false;
-    declaredDependencies = id: [ (peerOf id) ];
+    declaredDependencies = peerRelation;
   };
   # quotient = true: a quotient carrier cannot be a simultaneous member, so the demand takes the
   # per-instance NESTED ASCENT instead, which reads its step off the declaration the demand arrived
   # with rather than off the round's universe index.
   nestedAscentCtx = circularFold {
     quotient = true;
-    declaredDependencies = _: [ ];
+    declaredDependencies = emptyRelation;
   };
   nestedAscentDeclaredCtx = circularFold {
     quotient = true;
-    declaredDependencies = id: [ (peerOf id) ];
+    declaredDependencies = peerRelation;
   };
 in
 {

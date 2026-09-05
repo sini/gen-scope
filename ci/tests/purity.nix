@@ -211,6 +211,7 @@ in
       "lib/mint.nix"
       "lib/program.nix"
       "lib/queries.nix"
+      "lib/require-declared-dependencies.nix"
       "lib/require-scope.nix"
       "lib/resolve.nix"
       "lib/stratify.nix"

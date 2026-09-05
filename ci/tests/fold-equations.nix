@@ -7,6 +7,7 @@
 {
   lib,
   genScope,
+  genGraph,
   genPreludeLib,
   ...
 }:
@@ -40,6 +41,14 @@ let
       child = "host";
       orphan = "host";
     };
+  };
+
+  # The entry admits only what `gen-graph.mkDeclaredEdges` minted, so every fold below hands it the
+  # contracted value. The relations are unchanged, written as the index the constructor normalizes
+  # to rather than as the function that computed it.
+  contracted = import ./_fixtures/declared.nix {
+    inherit genGraph;
+    scope = roots;
   };
 
   # An Equation is `{ name; kind; compute; readsAttrs; stratum }` at the authoring surface; the fold
@@ -77,7 +86,7 @@ let
     scope = roots;
     inherit schedule;
     parseParent = id: roots.nodes.${id}.parent or null;
-    declaredDependencies = _: [ ];
+    declaredDependencies = contracted { };
   };
 
   # The same fold over a NON-EMPTY relation, which is what makes the trace cells below
@@ -87,7 +96,7 @@ let
     scope = roots;
     inherit schedule;
     parseParent = id: roots.nodes.${id}.parent or null;
-    declaredDependencies = id: if id == "child" then [ "parent" ] else [ ];
+    declaredDependencies = contracted { child = [ "parent" ]; };
   };
 
   # ── (g) THE COLLISION SET ──
@@ -98,6 +107,9 @@ let
       prelude = genPreludeLib;
       inherit (genScope) eval;
       inherit (import ../../lib/require-scope.nix { prelude = genPreludeLib; }) requireScope;
+      inherit (import ../../lib/require-declared-dependencies.nix { graph = genGraph; })
+        requireDeclaredDependencies
+        ;
     }
   );
   incumbentNames = builtins.filter (n: !(builtins.elem n foldNames)) (builtins.attrNames genScope);
@@ -229,7 +241,11 @@ in
           scope = roots;
           inherit schedule;
           parseParent = id: roots.nodes.${id}.parent or null;
-          declaredDependencies = id: if id == "child" then [ "parent" ] else [ "child" ];
+          declaredDependencies = contracted {
+            child = [ "parent" ];
+            parent = [ "child" ];
+            orphan = [ "child" ];
+          };
         }).eval.get
           "child"
           "self-v";
@@ -242,7 +258,7 @@ in
         (builtins.tryEval (foldEquations {
           scope = roots;
           parseParent = _: null;
-          declaredDependencies = _: [ ];
+          declaredDependencies = contracted { };
           schedule = throw "the gate refused this grammar";
         })).success;
       expected = false;
@@ -255,7 +271,7 @@ in
           scope = roots;
           inherit schedule;
           parseParent = _: null;
-          declaredDependencies = _: [ ];
+          declaredDependencies = contracted { };
         })).success;
       expected = true;
     };

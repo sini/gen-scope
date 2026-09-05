@@ -11,9 +11,14 @@
 # convergence alone would be equally satisfied by a spawn that produced nothing at all. The cells
 # that pin the materialized subtree and the cell that ties the lattice's index set to it are what
 # make the convergence cell a statement about a grown node set.
-{ lib, genScope, ... }:
+{
+  lib,
+  genScope,
+  genGraph,
+  ...
+}:
 let
-  fixture = import ./_fixtures/circular-nta.nix { inherit genScope; };
+  fixture = import ./_fixtures/circular-nta.nix { inherit genScope genGraph; };
   inherit (fixture)
     kinds
     ev

@@ -8,6 +8,11 @@
 # normalized at the single site that builds it, and that it points the way a staleness cone needs it
 # to point.
 #
+# THE GATE'S FIELD IS READ AT `declaredDependencies.dependencies <id>` because it is sealed as the
+# CONTRACTED VALUE `gen-graph.mkDeclaredEdges` returns rather than as a bare function — which is what
+# lets a consumer hand the field straight back to the entry it must call. The relation these cells
+# assert is the same relation; only the door to it is named.
+#
 # ── WHY THE FIXTURE PUTS A NODE IN BOTH HALVES, AND WHY THAT IS THE LOAD-BEARING CHOICE ──
 # A fixture carrying only a STRUCTURAL-ONLY edge cannot see the normalization defect at all: with no
 # node in both relations the union has no duplicate, so the raw union and the deduped one coincide
@@ -22,6 +27,7 @@
 # and its clean-reuses / dirty-refuses control pair, belong to the consumer's own suite.
 {
   genScope,
+  genGraph,
   genPreludeLib,
   lib,
   ...
@@ -93,15 +99,26 @@ let
       parseParent = id: roots.nodes.${id}.parent or null;
     };
 
+  # The entry admits only what `gen-graph.mkDeclaredEdges` minted, so the three arms below hand it
+  # the contracted value rather than a bare function. The relation each arm declares is unchanged.
+  contracted = import ./_fixtures/declared.nix {
+    inherit genGraph;
+    scope = roots;
+  };
+
   # ── THE THREE ARMS, one per member of the identity ──
   # (a) STRUCTURAL-ONLY: `host` reaches `kid` and declares nothing.
-  structuralOnly = fold (_: [ ]);
+  structuralOnly = fold (contracted { });
   # (b) DECLARED ∩ STRUCTURAL: `host` declares the very child it already reaches. The ordinary case,
   # and the only one in which the union can produce a duplicate.
-  overlapping = fold (id: if id == "host" then [ "kid" ] else [ ]);
+  overlapping = fold (contracted {
+    host = [ "kid" ];
+  });
   # (c) ORDER: the two halves contribute different members, so the union carries both and its
   # first-occurrence order is observable.
-  ordered = fold (id: if id == "host" then [ "alpha" ] else [ ]);
+  ordered = fold (contracted {
+    host = [ "alpha" ];
+  });
 
   nodes = structuralOnly.accessor.nodes;
 
@@ -145,7 +162,7 @@ in
     # and a change that leaked the union back into the formal would collapse them.
     test-the-gate-field-and-the-plane-field-are-not-the-same-relation = {
       expr = {
-        gate = structuralOnly.declaredDependencies "host";
+        gate = structuralOnly.declaredDependencies.dependencies "host";
         plane = structuralOnly.accessor.dependencies "host";
       };
       expected = {
@@ -158,7 +175,7 @@ in
     # where one is owed rather than a blanket inequality that would hold under any wiring.
     test-control-the-two-fields-agree-where-there-is-no-structural-edge = {
       expr = {
-        gate = overlapping.declaredDependencies "kid";
+        gate = overlapping.declaredDependencies.dependencies "kid";
         plane = overlapping.accessor.dependencies "kid";
       };
       expected = {
@@ -169,7 +186,7 @@ in
     # The formal is sealed under its own name and is untouched by the union: what the caller handed
     # in is what a gate reads back out, for the overlapping node too.
     test-the-sealed-formal-is-the-callers-own-relation = {
-      expr = overlapping.declaredDependencies "host";
+      expr = overlapping.declaredDependencies.dependencies "host";
       expected = [ "kid" ];
     };
 
@@ -182,7 +199,7 @@ in
     # edge entirely. Same fixture, same run, so the cell above is a measurement of the union and not
     # of a graph that happened to declare its own topology.
     test-seed-the-declared-relation-alone-drops-the-structural-edge = {
-      expr = structuralOnly.declaredDependencies "host";
+      expr = structuralOnly.declaredDependencies.dependencies "host";
       expected = [ ];
     };
     # And it reaches the TRACE, which is the surface a reuse layer actually records.

@@ -24,12 +24,25 @@ let
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
   inherit (import ./require-scope.nix { inherit prelude; }) requireScope;
+  # The declared relation's input type. It takes `graph` because the DISCRIMINATOR is `gen-graph`'s
+  # — the tag only that library's constructors write — while the refusal is this library's, naming
+  # this library's entry point for a defect at this library's door.
+  inherit (import ./require-declared-dependencies.nix { inherit graph; })
+    requireDeclaredDependencies
+    ;
   # `graph` reaches the evaluator for ONE construct: the endpoint projection that reads a node's
   # structural attribute RECORD as an edge relation. That construct is edge vocabulary and lives in
   # the graph library beside its other endpoint extractors, so what arrives here is the CONSTRUCTOR;
   # what this side supplies to it are the two facts only an evaluated substrate holds — the
   # child-bearing predicate and the evaluated node set.
-  eval = import ./eval.nix { inherit prelude requireScope graph; };
+  eval = import ./eval.nix {
+    inherit
+      prelude
+      requireScope
+      requireDeclaredDependencies
+      graph
+      ;
+  };
   program = import ./program.nix { inherit prelude; };
   leastModel = import ./least-model.nix { inherit prelude; };
   wellFounded = import ./well-founded.nix { inherit prelude; };
@@ -61,7 +74,7 @@ let
   foldEquations = import ./fold-equations.nix {
     inherit prelude;
     inherit (eval) eval;
-    inherit requireScope;
+    inherit requireScope requireDeclaredDependencies;
   };
   # The surface is folded rather than chained with `//`, so a name contributed by two modules is a
   # throw naming both instead of a silent last-wins shadowing.

@@ -28,7 +28,20 @@ let
   # readable inside the build sandbox.
   graph = import "${genGraphSrc}" { inherit prelude; };
   inherit (import "${libSrc}/require-scope.nix" { inherit prelude; }) requireScope;
-  evalLib = import "${libSrc}/eval.nix" { inherit prelude requireScope graph; };
+  # The declared relation's input type. The evaluator takes it as a formal like `requireScope`, so
+  # this wiring binds it the same way; none of the arms below supplies a relation, so every one of
+  # them runs under the evaluator's third state and the guard is never reached.
+  inherit (import "${libSrc}/require-declared-dependencies.nix" { inherit graph; })
+    requireDeclaredDependencies
+    ;
+  evalLib = import "${libSrc}/eval.nix" {
+    inherit
+      prelude
+      requireScope
+      requireDeclaredDependencies
+      graph
+      ;
+  };
   inherit (import "${libSrc}/build-nodes.nix" { inherit prelude; }) buildRoots;
   ag = import "${libSrc}/graph.nix";
   # The declaration constructor, inlined rather than imported: `resolve.nix` is not needed for
