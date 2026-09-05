@@ -98,6 +98,79 @@ let
     else
       null;
 
+  # THE `self.node` SEAM'S REFUSAL, AS A VALUE — the reason an acquisition is not permitted, or
+  # null. It RETURNS its message and the seam raises it, because `builtins.tryEval` catches a throw
+  # and discards its text: a guard that only throws is a guard whose message no cell can assert,
+  # and every oracle over this contract turns on the message rather than on the fact of a refusal.
+  #
+  # A SELF-ACQUISITION IS PERMITTED BY CONSTRUCTION, not by a declaration: `reader == target`
+  # crosses no edge, so there is no edge for the contract to govern. That is the guard's clean
+  # path, and it is what the inherited-attribute idiom rests on (a parent's value being a function
+  # of its own record is Knuth's semantic rule, not a dependency anyone declares).
+  #
+  # The message names the READER, the TARGET and the DECLARED RELATION as it stands, and it names
+  # the repair — declaring the edge — rather than inviting the check to be relaxed.
+  seamAcquisitionDefect =
+    {
+      reader,
+      target,
+      declared,
+    }:
+    if reader == target then
+      null
+    else if builtins.elem target declared then
+      null
+    else
+      "gen-scope: node '${reader}' acquired the record of node '${target}' through `self.node`, and '${target}' is not in the dependency relation '${reader}' declared: ${builtins.toJSON declared}. A body may not read across an edge its node did not declare — the relation a grammar gate runs over is contracted at every firing, so an undeclared acquisition would make the declaration false while the evaluation still answered. Declare '${target}' among '${reader}'s dependencies; a traversal that ranges over the graph declares the range it ranges over.";
+
+  # ── THE READER BINDING, AND THE SEAM GUARD IT MAKES EXPRESSIBLE ──
+  # The accessor a BODY is handed, as against the one the substrate walks with. They differ in
+  # exactly one name — `node` — and the difference is the READER: `self.node` takes a target and no
+  # source, so the seam cannot name the node whose body is acquiring unless the accessor itself
+  # carries it. Every site that APPLIES a body has that identity in hand, and binding it there is
+  # what makes this a firing check at an existing seam rather than a new seam.
+  #
+  # `declared == null` is the unarmed case and returns the accessor unchanged, so an evaluation
+  # outside the codomain contract pays nothing and refuses nothing.
+  #
+  # The substrate's own acquisitions — the materialization walk, `get`'s internals, the composed
+  # child-record read — stay on the raw accessor and are unguarded. That is the honest reading
+  # rather than an omission: a query entry point acquires a node record with no body behind it, so
+  # there is no reader whose declaration could be consulted, and a guard treating that absence as
+  # the empty declaration would refuse every entry point.
+  #
+  # COST: one attrset extension per body application when armed, and the O(d) membership test of
+  # the coverage condition per cross-node acquisition, d the reader's out-degree in the declared
+  # relation. Always on, per the cost ruling: there is no setting that disables it.
+  bindReader =
+    declared: acc: readerId:
+    if declared == null then
+      acc
+    else
+      acc
+      // {
+        node =
+          targetId:
+          let
+            defect = seamAcquisitionDefect {
+              reader = readerId;
+              target = targetId;
+              declared = declared readerId;
+            };
+          in
+          if defect == null then acc.node targetId else throw defect;
+      };
+
+  # A CIRCULAR attribute's step is a body too, and it does not reach the substrate through the
+  # ordinary application site: the ascent applies it against the round-indexed accessor it built for
+  # the level. The reader is the instance's own node, which every one of those sites passes as the
+  # step's second argument — so the binding is the same one, threaded through the declaration rather
+  # than through the caller. Without this the guard would hold on one demand path and not the other,
+  # and a claim about the seam would be a claim about half of it.
+  bindStepReader =
+    declared: step: acc: id: prev:
+    step (bindReader declared acc id) id prev;
+
   # Universe eligibility (the membership-eligibility clause): a WELL-FORMED four-term carrier AND
   # quotient = false. Read without throwing — an instance that cannot be a member is simply not
   # admitted, and its own refusal fires at its own first demand.
@@ -364,6 +437,18 @@ let
       prior ? null,
       decision ? interface.coldDecision,
       provenance ? [ ],
+      # THE CONTRACTED DECLARED RELATION, and its absence is a THIRD state rather than the empty
+      # relation. `null` says NO DECLARATION WAS SUPPLIED — this evaluation was not constructed
+      # under the codomain contract — and the seam guard below is unarmed for it. A supplied
+      # relation, INCLUDING `_: [ ]`, arms the guard, and the empty one then means what it says:
+      # this node declares nothing, so every cross-node acquisition it makes is refused.
+      #
+      # The distinction is the sequencing input's own: a guard reading absence AS the empty
+      # relation refuses every query entry point, which acquires node records with no reader whose
+      # declaration could be consulted. Absence is a decision (`lib/interface.nix`), and the entry
+      # at which the caller makes it is `foldEquations`, whose formal of this name is REQUIRED and
+      # total. This one is the delegate's, and what it carries is whether that entry was used.
+      declaredDependencies ? null,
     }:
     let
       checked = requireScope "eval" scope;
@@ -502,6 +587,23 @@ let
               else
                 applyAttr nodeId attrName fn;
 
+            # ── THE `self.node` SEAM GUARD, AT THE ORDINARY APPLICATION SITE ──
+            # A body may not ACQUIRE a node record across an edge its node did not declare. This is
+            # the same firing check the coverage condition specifies for the read seam, at the seam
+            # beside it: `node` is a separate entry point from `get`, and the traversal helpers —
+            # `siblings`, `ancestors`, the Neron collection walks, the reverse query — reach their
+            # targets through this one, so a guard here makes their dependence DECLARED rather than
+            # approximated by publishing the structural relation's inverse, which is ⊤ over a
+            # connected graph.
+            #
+            # WHAT IT DOES NOT REACH, stated rather than implied away: the guard sees the
+            # ACQUISITION, never every field read off the record it returns; and a body that closes
+            # over the node map lexically crosses no seam at all, so no entry point exists at which
+            # any guard could sit. ADR-0030's dynamic read recorder is the live control on that
+            # residual — a disagreement between what a body read and what its node declared is a
+            # finding in the recorder's own terms.
+            readerSelf = bindReader declaredDependencies self;
+
             # The ONE site at which a member of `runAttributes` is applied, and the total
             # classification over declaration shapes: a function is an ordinary attribute, a
             # kind-tagged record is a circular declaration, and anything else is refused by name —
@@ -510,11 +612,11 @@ let
             applyAttr =
               nodeId: attrName: fn:
               if isCircularDecl fn then
-                circularDemand nodeId attrName fn
+                circularDemand nodeId attrName (fn // { step = bindStepReader declaredDependencies fn.step; })
               else if builtins.isAttrs fn then
                 throw "gen-scope: attribute '${attrName}' on '${nodeId}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
               else
-                fn self nodeId;
+                fn (readerSelf nodeId) nodeId;
 
             # ── THE DEMAND RULE (three cases), THE ADMISSION, AND THE SHARED ROUND ──
             #
@@ -665,7 +767,12 @@ let
                   map (an: {
                     key = instanceKey nid an;
                     inherit nid an;
-                    inherit (runAttributes.${an}) carrier step;
+                    inherit (runAttributes.${an}) carrier;
+                    # The universe's entries are the OTHER demand path a body reaches the substrate
+                    # along, so the step is bound to its own instance's node here exactly as the
+                    # ordinary application site binds it. A guard live on one path and not the
+                    # other would be a claim about half the seam.
+                    step = bindStepReader declaredDependencies runAttributes.${an}.step;
                   }) eligibleNames
                 ) self.allNodeIds;
               in
@@ -1661,5 +1768,9 @@ in
     eval
     evalDebug
     evalWarm
+    # The seam guard's reason, published so a cell can assert the MESSAGE rather than the fact of a
+    # refusal. `tryEval` catches the throw and discards its text, so the validator is the only
+    # CI-testable form of a guard whose message names the reader, the target and the relation.
+    seamAcquisitionDefect
     ;
 }

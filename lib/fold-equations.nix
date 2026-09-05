@@ -56,9 +56,15 @@
       # half left that consumer refused by name with nowhere to be sent, so the seal published a
       # surface the interface's own consumer could not be written against.
       roots = checked.nodes;
+      # The declared relation travels DOWN into the evaluator as well as into the seal. The contract
+      # is a FIRING check and the firings happen inside the demand fixpoint, so a relation held here
+      # and not there would be a declaration nothing consults — the dead declared surface ADR-0008
+      # retires. This entry's formal is required and total, so every fold reached through it arms
+      # the `self.node` seam guard; an evaluator reached directly is not under this contract and
+      # says so by receiving no relation at all.
       ev = eval {
         scope = checked;
-        inherit attributes parseParent;
+        inherit attributes parseParent declaredDependencies;
       }; # demand fixpoint (delegate)
 
       nodeIds = prelude.attrNames ev.allNodes; # includes NTA-spawned children

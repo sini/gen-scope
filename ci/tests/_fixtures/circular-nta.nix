@@ -91,25 +91,27 @@ let
   # channel, which is what makes the index set of the lattice a grown set rather than a listed one.
   # The `needs` relation the members carry is a 3-CYCLE, so no evaluation order settles them and the
   # least fixed point is the only value they have.
+  members = {
+    "c-a" = {
+      tag = "a";
+      needs = [ "c-b" ];
+    };
+    "c-b" = {
+      tag = "b";
+      needs = [ "c-c" ];
+    };
+    "c-c" = {
+      tag = "c";
+      needs = [ "c-a" ];
+    };
+  };
+
   scope = buildRoots {
     inherit kinds;
     parentGraph = genScope.vertex "c";
     importGraph = genScope.empty;
     decls.c = {
-      members = {
-        "c-a" = {
-          tag = "a";
-          needs = [ "c-b" ];
-        };
-        "c-b" = {
-          tag = "b";
-          needs = [ "c-c" ];
-        };
-        "c-c" = {
-          tag = "c";
-          needs = [ "c-a" ];
-        };
-      };
+      inherit members;
     };
     types.c = "cluster";
   };
@@ -207,11 +209,31 @@ let
     stratum = if name == "closure" then "resolution" else "structural";
   }) (attributesWith carrier step);
 
+  # ── THE DECLARED RELATION FOR THE COLD FOLD ──
+  # The step ACQUIRES node records across edges: from the cluster it reads every member's `needs`
+  # and every endpoint's `tag`, and from a member it reads its own endpoint's. Those acquisitions
+  # cross the `self.node` seam, so the fold's contracted relation has to carry them or the guard
+  # refuses the read by name — which is the contract doing its job, a spawned node being no less an
+  # edge endpoint for having been grown rather than listed.
+  #
+  # The member names come from the SAME binding the scope's decls are built from, so the declaration
+  # and the graph it declares over cannot drift; the endpoint names follow the spawn builder's own
+  # key, which is the only place that suffix is written.
+  memberIds = builtins.attrNames members;
+  endpointOf = m: "${m}-ep";
+
   ctx = foldEquations {
     inherit scope;
     schedule = { inherit equations; };
     parseParent = id: scope.nodes.${id}.parent or null;
-    declaredDependencies = _: [ ];
+    declaredDependencies =
+      id:
+      if id == "c" then
+        memberIds ++ map endpointOf memberIds
+      else if builtins.elem id memberIds then
+        [ (endpointOf id) ]
+      else
+        [ ];
   };
 in
 {

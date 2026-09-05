@@ -2042,7 +2042,7 @@ in
     # surface and re-derives whenever that surface grows.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 85;
+      expected = 86;
     };
     # Four: the registration and run doors, and nothing else. The consumer accessors that used to
     # sit beside them reconstructed a list the run already computed, and the run publishes it now —
