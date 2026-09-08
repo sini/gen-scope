@@ -55,6 +55,14 @@ let
     inherit prelude;
     inherit (leastModel) forceFields;
   };
+  # The bounded-ascent driver, a peer of the stratification one and wired the same way: it takes the
+  # round-loop forcing rather than defining a second copy of it. The engine does not see it and does
+  # not import it — it sits BESIDE the engine exactly as `stratify` does, and reaches its consumer as
+  # a member of the library value that consumer is already handed.
+  ascent = import ./ascent.nix {
+    inherit prelude;
+    inherit (leastModel) forceFields;
+  };
   # The minting instance of that driver. The authority arrives here as a function and the driver as
   # the module next door, which is what keeps the minting module free of both a library import and a
   # second stratification loop.
@@ -95,6 +103,7 @@ mergeSurface {
     acceptance
     engine
     stratify
+    ascent
     mint
     folds
     cascade

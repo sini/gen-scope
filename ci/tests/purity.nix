@@ -196,6 +196,7 @@ in
     expr = map (s: s.name) sources;
     expected = [
       "lib/acceptance.nix"
+      "lib/ascent.nix"
       "lib/build-nodes.nix"
       "lib/callable.nix"
       "lib/cascade.nix"
@@ -233,6 +234,7 @@ in
     expr = liveReads;
     expected = [
       "lib/acceptance.nix"
+      "lib/ascent.nix"
       "lib/build-nodes.nix"
       "lib/cascade.nix"
       "lib/default.nix"
