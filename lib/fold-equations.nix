@@ -137,6 +137,43 @@
         # same way: every operation returns a value or a NAMED refusal (ADR-0025 item 1). Present
         # ids answer the sealed `trace` entry unchanged — one derivation site — and
         # `trace.<id> or default` remains the caller-side opt-out (ordinary selection).
+        #
+        # **`gen-resolve`'s `why` RETIRED INTO THIS SEAL, and it is a retirement rather than a
+        # residue.** The retired export was `why :: ResolveCtx -> { id; attr } -> [Dep]`, the
+        # concatMap product of two reads that are BOTH this seal's own fields —
+        # `trace.<id>.deps` and `equations.<attr>.readsAttrs`. It consulted nothing gen-resolve
+        # owned; it was already a query over this engine's trace, and no successor export is
+        # owed here. Owner-ratified 2026-08-25.
+        #
+        # **THE OR-GUARD IS PART OF THE OBLIGATION, NOT A STYLE CHOICE.** The ratification's
+        # standing term is that any wording carries the guard IN the expression. Measured, two
+        # arms one run: `tryEval` on an unguarded `trace.<ghost>.deps` exits 1 with `attribute
+        # 'ghost' missing` raised THROUGH `tryEval` — the abort is not contained; the same read
+        # as `(trace.<ghost> or { deps = [ ]; }).deps` answers `{ success = true; value = [ ];
+        # }`. An expression written without the guard moves a live uncatchable abort into
+        # whatever consumes it.
+        #
+        # **THE SURVIVING SPELLINGS ARE TWO, AND THEY ANSWER DIFFERENT QUESTIONS.**
+        # `accessor.trace <id>` refuses a missing id BY NAME and catchably — the right form when
+        # a missing id is an error. The caller-side `trace.<id> or default` answers the default
+        # — the form `why` needed, because an id the fold never saw answers the EMPTY RELATION
+        # rather than aborting. Both are pinned as cells; neither supersedes the other. ★ Note
+        # the tension with this repository's standing wiring-record rule, which calls the
+        # defaulting read one of two wrong reflexive reads because it erases *never-recorded*
+        # from *recorded-empty*: for `why` that erasure was DELIBERATE and correct, because the
+        # empty relation is the right answer for both.
+        #
+        # **`readsAttrs` IS THE CALLER'S FIELD, NOT THIS SEAL'S.** It appears in no `lib/` file
+        # here; it arrives on the equations a caller supplies. Its guard is owed by whoever
+        # writes the expression, on the same terms as the trace guard.
+        #
+        # **THEORY, because the ratification rests on it.** `why(id, attr)` is the edge set of
+        # `connect (vertices (deps id)) (vertices (reads attr))` — this substrate's own Mokhov
+        # algebra, verified equivalent on 9 cells over 3 fixtures at two revisions,
+        # byte-identical including pair order. It is a product in the algebra the engine already
+        # publishes, not an ad-hoc loop.
+        #
+        # ANCHOR: R10.1-RIDER-WHY-ORGUARD
         trace =
           id: trace.${id} or (throw "gen-scope: no trace for node '${id}' — node not reachable from roots");
       };

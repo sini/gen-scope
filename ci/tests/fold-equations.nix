@@ -233,6 +233,41 @@ in
       expr = edgedCtx.trace.ghost or "absent";
       expected = "absent";
     };
+
+    # ── R§10.1, RIDER 2 — THE RETIREMENT RECORD SURVIVES ──
+    # `lib/fold-equations.nix` carries, beside the `trace` binding on `accessor`, the record of
+    # what gen-resolve's retired `why` decided about the or-guard and what `readsAttrs` still
+    # only declares — R§10.1 (a retirement names what it carries forward or it is a deletion).
+    # This cell pins that the record SURVIVES, never that it is true; the guard's own behaviour
+    # is the existing cells above and in `ci/tests-error.nix`, cited there and not rewritten here
+    # (`den-hoag-p3y9`). The obligation's red arm — the unguarded read — escapes `tryEval`, so no
+    # cell can exercise it without ending the suite rather than failing a case; that disposition
+    # is stated in the record itself and was RUN as an evaluation (§1 of the spec), not pinned
+    # here.
+    #
+    # ★ THE LIVE CONTROL IS THE SECOND ARM OF THIS SAME EXPR, not a second cell — a one-armed
+    # `present = true` would still pass against a `match` that has stopped discriminating.
+    # `absentControl` is a probe DERIVED from the file's own content (its sha256), not a literal
+    # typed here: a hardcoded random string, once committed, is itself a published token that a
+    # later sweep can quote back as a false live control (measured, `den-hoag-n3or2`). A content
+    # hash is reproducible, changes automatically if the file changes, and cannot occur as a
+    # literal substring of the text it was hashed from.
+    test-r10-1-rider-why-orguard-record-survives =
+      let
+        src = builtins.readFile ../../lib/fold-equations.nix;
+        absentToken = builtins.hashString "sha256" src;
+      in
+      {
+        expr = {
+          present = builtins.match ".*ANCHOR: R10\\.1-RIDER-WHY-ORGUARD.*" src != null;
+          absentControl = builtins.match ".*${absentToken}.*" src != null;
+        };
+        expected = {
+          present = true;
+          absentControl = false;
+        };
+      };
+
     # The declared dependencies are the topology consumers' oracle and nothing on the cold path
     # walks them, so a CYCLIC declaration resolves exactly as an acyclic one does.
     test-cyclic-declared-dependencies-leave-the-cold-path-alone = {
