@@ -51,6 +51,7 @@ let
     fixtureAdmitted
     fixtureSwapped
     fixtureCrossPass
+    fixtureCrossPassAgreeing
     db
     web
     app
@@ -389,12 +390,14 @@ in
     # ★ WHAT IS FORECLOSED IS REFUSAL AT MINTING, AND ONLY THAT. Two emitters never yield two nodes
     # and minting never fails on this input (ADR-0016), which is what the cell below reads. Refusal
     # at content MERGE is NOT foreclosed, and the case where a later pass DISAGREES on a key an
-    # earlier pass already settled is not ruled at all — the ADR routes it to the substrate's
-    # general content rule and leaves that premise open. The library refuses there, and marks the
-    # refusal a PROPOSAL pending that rule. No cell in this suite or in `minting-refusals` exercises
-    # the case, in either direction, so whichever way it is ruled the suite is untouched. Read as a
-    # flat "a later pass never refuses", the paragraph above would settle by comment a question the
-    # law has deliberately left open.
+    # earlier pass already settled is RULED (den-hoag-bp6u, 2026-08-14): replacement is refused by
+    # name, through the same message the same-pass disagreement branch already writes, on the
+    # ground that the staged standard model only grows and a replacement is a retraction. Adding a
+    # key or agreeing on one is revision rather than replacement and merges, which is what the cell
+    # below and `test-a-later-pass-agreeing-and-adding-merges-onto-one-node` further down each read
+    # a different instance of. The refuse arm cannot sit in this suite — a throwing `expr` crashes
+    # the batch asserter — and lives in `minting-refusals` as
+    # `test-a-cross-pass-settled-key-disagreement-refuses-by-name`.
     test-a-later-pass-contributes-content-without-a-second-node = {
       expr =
         let
@@ -409,6 +412,28 @@ in
         content = {
           host = "h";
           port = 80;
+        };
+      };
+    };
+    # A second instance of the same merge arm: a key the later pass REPEATS with the SAME value the
+    # earlier pass already settled (agreement), beside a key only the later pass declares
+    # (addition). Neither is the replacement den-hoag-bp6u refuses, so both merge onto the one node
+    # `csvc` already names — the positive control paired with the refuse cell in
+    # `minting-refusals`.
+    test-a-later-pass-agreeing-and-adding-merges-onto-one-node = {
+      expr =
+        let
+          r = mint fixtureCrossPassAgreeing;
+        in
+        {
+          nodes = builtins.attrNames r.nodes;
+          content = r.nodes.csvc.content;
+        };
+      expected = {
+        nodes = [ "csvc" ];
+        content = {
+          shared = "x";
+          extra = "y";
         };
       };
     };

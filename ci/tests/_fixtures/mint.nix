@@ -278,6 +278,46 @@ let
     })
   ];
 
+  # A second cross-pass pair, complementing the one above: this one has a key the LATER pass
+  # repeats with the SAME value the earlier pass already settled (agreement, not replacement) next
+  # to a key only the later pass declares (addition). Both merge onto the one node, which is the
+  # merge arm den-hoag-bp6u rules distinctly from the refuse arm below.
+  crossPassAgreeingEarly = mkEmitter {
+    pass = 0;
+    identifier = "csvc";
+    content.shared = "x";
+    site = "site-cpa-a";
+  };
+  crossPassAgreeingLate = mkEmitter {
+    pass = 2;
+    identifier = "csvc";
+    content = {
+      shared = "x";
+      extra = "y";
+    };
+    site = "site-cpa-b";
+  };
+  fixtureCrossPassAgreeing = withKinds [
+    crossPassAgreeingEarly
+    crossPassAgreeingLate
+  ];
+
+  # A cross-pass pair where the LATER pass DISAGREES on a key the earlier pass already settled —
+  # the replacement den-hoag-bp6u refuses by name. Same mechanism as `conflictA`/`conflictB` above;
+  # only the two emitters' passes differ, which is what makes this cross-pass rather than same-pass.
+  crossPassConflictA = mkEmitter {
+    pass = 0;
+    identifier = "cconf";
+    content.port = 80;
+    site = "site-cpc-a";
+  };
+  crossPassConflictB = mkEmitter {
+    pass = 2;
+    identifier = "cconf";
+    content.port = 8080;
+    site = "site-cpc-b";
+  };
+
   # Two emitters, one pass, one identity. Within a pass there is no order, so the only outcomes an
   # unordered fold may have are agreement and refusal — which is what buys confluence without
   # inventing a within-pass position (ADR-0022).
@@ -362,6 +402,9 @@ in
     fixtureAdmitted
     fixtureSwapped
     fixtureCrossPass
+    fixtureCrossPassAgreeing
+    crossPassConflictA
+    crossPassConflictB
     db
     web
     app

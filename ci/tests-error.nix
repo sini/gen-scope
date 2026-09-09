@@ -264,6 +264,8 @@ let
     conflictB
     conflictOtherA
     conflictOtherB
+    crossPassConflictA
+    crossPassConflictB
     smuggledFieldEmitter
     unresolvedRelatum
     conflictingContribution
@@ -1113,6 +1115,21 @@ in
       expectedError = {
         type = "ThrownError";
         msg = exactly (conflictingContribution "host" "site-x" "site-y");
+      };
+    };
+
+    # ── CROSS-PASS, A SETTLED KEY DISAGREEING REFUSES BY NAME (den-hoag-bp6u) ──
+    # Same merge-time mechanism as the cell above; only the two emitters' passes differ (0 and 2
+    # rather than both 1), which is what makes the replacement cross-pass rather than same-pass.
+    # `tests/mint.nix`'s cross-pass comment marks this RULED and reads the merge arm this refuses.
+    test-a-cross-pass-settled-key-disagreement-refuses-by-name = {
+      expr = mintUnderStubIdentity (withKinds [
+        crossPassConflictA
+        crossPassConflictB
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (conflictingContribution "port" "site-cpc-a" "site-cpc-b");
       };
     };
 
