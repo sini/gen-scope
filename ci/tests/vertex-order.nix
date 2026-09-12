@@ -3,7 +3,13 @@
 # Every fixture here declares its vertices REVERSE-ALPHABETICALLY, so the declared order and the
 # codepoint order differ on every arm. A fixture whose declaration happens to agree with codepoint
 # cannot fail, and the one place that agreement is the POINT carries its own control below.
-{ lib, genScope, ... }:
+{
+  lib,
+  genScope,
+  genPreludeLib,
+  genGraph,
+  ...
+}:
 let
   # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
   # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
@@ -90,6 +96,119 @@ let
       lib.splitString "\n" (builtins.readFile (libDir + "/${n}"))
     )
   ) libFiles;
+
+  # ── O10's fixture: two roots synthesizing the SAME id through one shared spawn ──
+  # `attributes."derived-children"` cannot be hand-written — `effectiveAttributes` refuses it
+  # unconditionally (`hoag.nix`'s `test-a-hand-written-spawn-attribute-is-refused`) — so the
+  # ambiguity is built the only legal way: a kind's `spawns` producing the same id `shared` no
+  # matter which of its two instances fires it, with `decls.origin` recording which one did.
+  # `shared` is registered nowhere in `scope.nodes`, so resolving it falls through to
+  # `genericResolve` — the site §2.5 excludes from the constructor's declared-order guarantee.
+  # Declared reverse-alphabetically ("z" before "a"), like every fixture in this file.
+  o10Kinds = genScope.mkKinds [
+    (genScope.mkKind { name = "leaf"; })
+    (genScope.mkKind {
+      name = "root";
+      below = [ "leaf" ];
+      spawns.leaf = _handle: id: {
+        shared = {
+          id = "shared";
+          decls = {
+            origin = id;
+          };
+        };
+      };
+    })
+  ];
+  o10Roots = genScope.buildRoots {
+    parentGraph = genScope.vertices [
+      "z"
+      "a"
+    ];
+    importGraph = genScope.empty;
+    kinds = o10Kinds;
+    decls = {
+      z = { };
+      a = { };
+    };
+    types = {
+      z = "root";
+      a = "root";
+    };
+  };
+  o10Attrs = {
+    children = _self: _id: { };
+  };
+  o10Build =
+    evalFn: extra:
+    evalFn (
+      {
+        scope = o10Roots;
+        attributes = o10Attrs;
+      }
+      // extra
+    );
+
+  # A genuinely patched COPY of `eval.nix`, built the way the round-1 gate built its
+  # (`reports/den-hoag-u1sf-gate-v1.md`, C-5): the source is read, its four sibling imports are
+  # made absolute so the copy resolves outside `lib/`, an optional `rootOrder` formal is threaded
+  # through, and it is consumed at EXACTLY ONE site — genericResolve's fold over `attrNames roots`
+  # — never at `allNodesWhere`, which §2.5 excludes on different (and, per the gate, overstated)
+  # grounds and which this fixture must not seed.
+  #
+  # Occurrence counts use `replaceStrings`-length-diffing rather than `builtins.split`: `split`'s
+  # pattern is a POSIX ERE, and both anchors below contain regex metacharacters (`?`, `(`, `)`), so
+  # a split-based count would silently count something other than the literal text.
+  o10CountOccurrences =
+    needle: haystack:
+    (
+      builtins.stringLength haystack
+      - builtins.stringLength (builtins.replaceStrings [ needle ] [ "" ] haystack)
+    )
+    / builtins.stringLength needle;
+  o10EvalSrc = builtins.readFile (libDir + "/eval.nix");
+  o10Abs = name: builtins.toString (libDir + "/${name}");
+  o10WithAbsoluteImports =
+    builtins.replaceStrings
+      [
+        "import ./structural.nix"
+        "import ./interface.nix"
+        "import ./callable.nix"
+        "import ./least-model.nix"
+      ]
+      [
+        "import ${o10Abs "structural.nix"}"
+        "import ${o10Abs "interface.nix"}"
+        "import ${o10Abs "callable.nix"}"
+        "import ${o10Abs "least-model.nix"}"
+      ]
+      o10EvalSrc;
+  o10FormalAnchor = "declaredDependencies ? null,\n    }:";
+  o10ThreadedFormal =
+    builtins.replaceStrings
+      [ o10FormalAnchor ]
+      [ "declaredDependencies ? null,\n      rootOrder ? null,\n    }:" ]
+      o10WithAbsoluteImports;
+  o10FoldSite = "found = prelude.foldl' (acc: rootId: if acc != null then acc else walkChildren rootId) null (\n                  builtins.attrNames roots\n                );";
+  o10FoldSiteThreaded = "found = prelude.foldl' (acc: rootId: if acc != null then acc else walkChildren rootId) null (\n                  if rootOrder != null then rootOrder else builtins.attrNames roots\n                );";
+  o10AnchorCounts = {
+    formalAnchor = o10CountOccurrences o10FormalAnchor o10WithAbsoluteImports;
+    foldAnchor = o10CountOccurrences o10FoldSite o10EvalSrc;
+  };
+  o10PatchedText = builtins.replaceStrings [ o10FoldSite ] [ o10FoldSiteThreaded ] o10ThreadedFormal;
+  o10PatchedFile = builtins.toFile "eval-o10-patched.nix" o10PatchedText;
+  o10RequireScope =
+    (import (libDir + "/require-scope.nix") { prelude = genPreludeLib; }).requireScope;
+  o10RequireDeclaredDependencies =
+    (import (libDir + "/require-declared-dependencies.nix") { graph = genGraph; })
+    .requireDeclaredDependencies;
+  o10PatchedEval =
+    (import o10PatchedFile {
+      prelude = genPreludeLib;
+      requireScope = o10RequireScope;
+      requireDeclaredDependencies = o10RequireDeclaredDependencies;
+      graph = genGraph;
+    }).eval;
 in
 {
   flake.tests.vertex-order = {
@@ -259,6 +378,104 @@ in
         "t1"
         "t2"
       ];
+    };
+
+    # ── O10 — a node id producible by TWO roots' derived-children resolves to the SAME node ──
+    # §2.5 excludes `genericResolve`'s fold over `attrNames roots` from the declared-order
+    # guarantee: the id it picks between two ambiguous producers is an ANSWER, not an ORDER, so
+    # `first-match wins` is not itself a claim about vertex order and needs no seeding at
+    # `nodeOrder`. What follows measures that exclusion on a genuinely patched evaluator, not a
+    # simulation of one.
+
+    # The provenance check: both source-text patches must land at exactly one site each. A patch
+    # that silently missed its anchor (0 occurrences) or hit an unintended second one (>1) would
+    # make every cell below pass or fail for the wrong reason.
+    test-O10-the-two-source-patches-anchor-to-exactly-one-site-each = {
+      expr = o10AnchorCounts;
+      expected = {
+        formalAnchor = 1;
+        foldAnchor = 1;
+      };
+    };
+
+    # CONTROL: the patch alone, at its default (unthreaded) `rootOrder`, changes nothing — its
+    # answer for the ambiguous id and its full materialization both match the real, unpatched
+    # `genScope.eval` exactly. Without this arm, a moved answer under threading (below) would be
+    # equally consistent with an edit that broke something else.
+    test-O10-patch-is-inert-at-default = {
+      expr = {
+        node = (o10Build o10PatchedEval { }).node "shared";
+        allNodeIds = (o10Build o10PatchedEval { }).allNodeIds;
+      };
+      expected = {
+        node = (o10Build genScope.eval { }).node "shared";
+        allNodeIds = (o10Build genScope.eval { }).allNodeIds;
+      };
+    };
+
+    # The default answer is governed by CODEPOINT order of `attrNames roots` ("a" before "z"), not
+    # by the fixture's declared (reverse-alphabetical) order, which puts "z" first. Field-projected
+    # rather than a whole-record comparison: `.node` also carries the `_eval` memoization cache
+    # (`eval.nix`'s co-located `_eval`), which is not this exclusion's concern.
+    test-O10-default-selects-the-codepoint-first-root = {
+      expr =
+        let
+          n = (o10Build o10PatchedEval { }).node "shared";
+        in
+        {
+          inherit (n) id type parent;
+          origin = n.decls.origin;
+        };
+      expected = {
+        id = "shared";
+        type = "leaf";
+        parent = "a";
+        origin = "a";
+      };
+    };
+
+    # SEEDED DEFECT: threading `rootOrder` into genericResolve's fold — the one thing §2.5 says
+    # must not happen — moves the selected root from "a" to "z". This is what makes the exclusion
+    # falsifiable: an implementation that let a caller-supplied order override the fold would fail
+    # this cell where the real library, unthreaded, does not.
+    test-O10-seeded-threading-moves-the-selected-root = {
+      expr =
+        let
+          n =
+            (o10Build o10PatchedEval {
+              rootOrder = [
+                "z"
+                "a"
+              ];
+            }).node
+              "shared";
+        in
+        {
+          inherit (n) id type parent;
+          origin = n.decls.origin;
+        };
+      expected = {
+        id = "shared";
+        type = "leaf";
+        parent = "z";
+        origin = "z";
+      };
+    };
+
+    # AND THE MATERIALIZATION WALK DOES NOT MOVE under the same seed: `allNodeIds` is byte-identical
+    # between the default and threaded arms, which is what makes genericResolve's pick an ANSWER
+    # rather than an ORDER — the property `:270` (`allNodesWhere`) rides as a consequence rather
+    # than carrying independently, per the round-1 gate's C-5 finding. `:270` itself is not seeded
+    # here: its own enumeration is inert to this threading, and seeding it would test nothing.
+    test-O10-allNodeIds-is-unmoved-by-the-same-seed = {
+      expr =
+        (o10Build o10PatchedEval {
+          rootOrder = [
+            "z"
+            "a"
+          ];
+        }).allNodeIds;
+      expected = (o10Build o10PatchedEval { }).allNodeIds;
     };
 
     # ── O11 — queryReverse's ANSWER ORDER, the contract this remedy changes ──
