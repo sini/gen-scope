@@ -62,6 +62,17 @@ let
         filter = node: node.id != "b";
       };
 
+      # A SUPPLIED `combine`, which nothing in the suite reached before. The default is the sentinel
+      # `null` — the ordered-list discipline taken in one pass — so this is the arm that says the
+      # fold is still there for a caller who asks for it. `bracket` is non-associative on purpose:
+      # it pins the LEFT association `combine (combine [ ] t0) t1`, which is what `foldl'` gives and
+      # what a right fold would not.
+      bracketed-child-tags = collectionAttr {
+        traverse = "children";
+        extract = self: id: (self.node id).decls.tags or [ ];
+        combine = a: b: [ "<" ] ++ a ++ b ++ [ ">" ];
+      };
+
       # collectImports convenience
       import-tags-simple = collectImports (self: id: (self.node id).decls.tags or [ ]);
     };
@@ -80,6 +91,21 @@ in
       expected = [
         "a-tag"
         "b-tag"
+      ];
+    };
+
+    # The supplied-`combine` arm, and the association is the assertion. `foldl'` over `[ ]` gives
+    # `combine (combine [ ] a-tag) b-tag`; the value was derived by running it, not read off the
+    # source. Nothing in the suite reached this arm before the default became the `null` sentinel.
+    test-traverse-children-supplied-combine-folds-left = {
+      expr = result.get "root" "bracketed-child-tags";
+      expected = [
+        "<"
+        "<"
+        "a-tag"
+        ">"
+        "b-tag"
+        ">"
       ];
     };
 

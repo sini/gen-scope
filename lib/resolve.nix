@@ -331,32 +331,68 @@ let
       } self node.parent;
 
   # Inherited accumulator: walks parent chain collecting ALL values.
+  #
+  # ★ THE CHAIN IS WALKED BY `genericClosure`, WHICH IS ALSO THE CYCLE GUARD. The prior form
+  # recursed a level at a time carrying a `_visited` attrset it rebuilt with `//` at every level, so
+  # the walk re-copied its own guard once per ancestor — Theta(depth^2) on the update axis, beside
+  # the Theta(depth^2) the `++` accumulator cost on the list axis. `genericClosure` dedups by `key`
+  # internally in ONE pass, which is the same termination guarantee for neither cost, and it makes
+  # the guard a property of the primitive rather than a set this module hand-carries.
+  # `ci/bench/resolve-inherit-all.sh` holds both axes against a live control.
+  #
+  # ★ `combine ? null` STATES THE ORDERED-LIST DISCIPLINE AS A VALUE, and the reason is that Nix
+  # compares no two functions: a default spelled `a: b: a ++ b` is indistinguishable at runtime from
+  # a caller passing that same expression, so the concatenation could never be recognised and taken
+  # in one pass. `null` is what makes it recognisable. The VALUE is unchanged for every caller that
+  # supplied nothing — a right fold of `++` over the segments and `concatLists` of them are the same
+  # list, order included — and a caller who DOES supply a `combine` gets the identical right fold
+  # the recursion gave, now over a chain that cost linear to walk.
   inheritAll =
     {
       extract,
-      combine ? a: b: a ++ b,
+      combine ? null,
       _visited ? { },
     }:
     self: id:
     let
-      node = self.node id;
-      local = extract node;
-      localResults = if local != null then (if builtins.isList local then local else [ local ]) else [ ];
+      contribOf =
+        i:
+        let
+          local = extract (self.node i);
+        in
+        if local != null then (if builtins.isList local then local else [ local ]) else [ ];
+      chain = builtins.genericClosure {
+        startSet = [ { key = id; } ];
+        operator =
+          it:
+          let
+            p = (self.node it.key).parent;
+          in
+          if p == null || _visited ? ${it.key} then [ ] else [ { key = p; } ];
+      };
+      lastKey = (builtins.elemAt chain (builtins.length chain - 1)).key;
+      lastParent = (self.node lastKey).parent;
+      # A walk that stopped because its next step was ALREADY ON THE CHAIN is a cycle, and the prior
+      # form ended by returning that node's own contribution a SECOND time before stopping — the
+      # `_visited` arm returns `localResults` rather than nothing. `genericClosure` drops the repeat
+      # as a duplicate key, so it is put back here: the guard's shape changed, the value it produces
+      # did not. The three ways the walk can end are distinguished by this test alone — a null
+      # parent and a parent already in the CALLER's `_visited` both end without a repeat.
+      keys =
+        map (it: it.key) chain
+        ++ prelude.optional (lastParent != null && !(_visited ? ${lastKey})) lastParent;
+      segments = map contribOf keys;
+      n = builtins.length segments;
     in
-    if _visited ? ${id} then
-      localResults
-    else if node.parent == null then
-      localResults
+    if combine == null then
+      builtins.concatLists segments
     else
-      let
-        parentResults = inheritAll {
-          inherit extract combine;
-          _visited = _visited // {
-            ${id} = true;
-          };
-        } self node.parent;
-      in
-      combine localResults parentResults;
+      # The caller's `combine` folded RIGHT down the chain, which is the association the recursion
+      # had: `combine local (combine parent (combine grandparent …))`. Nix publishes no right fold,
+      # so it is `foldl'` over the indices in reverse with the accumulator on the right.
+      builtins.foldl' (acc: i: combine (builtins.elemAt segments i) acc) (builtins.elemAt segments (
+        n - 1
+      )) (builtins.genList (i: n - 2 - i) (n - 1));
 
   # Inherited SET accumulator: the set-discipline sibling of `inheritAll`. A node's
   # value = its own contribution ∪ every ancestor's, walking UP the P-edge parent chain,
@@ -488,11 +524,19 @@ let
   # Traversal uses COMPUTED attributes, not structural fields; the child direction reads the
   # accessor's composed child-record read (`self._childRecords`), so a traversal gathers over
   # spawned children exactly as the query surface enumerates them.
+  #
+  # ★ `combine ? null` STATES THE ORDERED-LIST DISCIPLINE AS A VALUE, for the reason given at
+  # `inheritAll`: Nix compares no two functions, so a default spelled `a: b: a ++ b` is
+  # indistinguishable from a caller passing that expression and the concatenation can never be
+  # recognised. The default arm folded `++` over the per-target segments and re-copied the
+  # accumulated list once per TARGET — a node's children, imports, ancestors or labelled edge set,
+  # so the quantity grows with the graph rather than with anything an author writes down. A caller
+  # supplying a `combine` still gets the left fold, unchanged and at the caller's own cost.
   collectionAttr =
     {
       traverse,
       extract,
-      combine ? a: b: a ++ b,
+      combine ? null,
       filter ? _: true,
     }:
     self: id:
@@ -568,7 +612,7 @@ let
           [ r ]
       ) filtered;
     in
-    builtins.foldl' combine [ ] perTarget;
+    if combine == null then builtins.concatLists perTarget else builtins.foldl' combine [ ] perTarget;
 
   # Import-scoped collection: demand-driven (Neron §2.4, rule I).
   collectImports =

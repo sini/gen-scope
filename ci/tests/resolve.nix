@@ -236,6 +236,74 @@ in
         ];
       };
 
+    # ── THE TWO ARMS OF `inheritAll` THAT NOTHING PINNED ──
+    # The parent walk was a level-at-a-time recursion carrying a `_visited` attrset rebuilt with
+    # `//`; it is one `genericClosure` now, whose key dedup IS the cycle guard. Both cells below
+    # cover behaviour the 895 did not reach, and both values were derived by running the PRIOR
+    # implementation and the replacement side by side rather than by reading either one.
+
+    # A CYCLE ENDS BY REPEATING ITS ENTRY, ONCE. The `_visited` arm returned the revisited node's
+    # own contribution before stopping — it answers `localResults`, not `[ ]` — so `a` contributes
+    # at both ends. `genericClosure` drops a duplicate key outright, so the repeat is reconstructed
+    # from the last node's parent; this cell is what says the reconstruction is the prior value and
+    # not one step short or one step long.
+    test-inheritAll-cycle-repeats-its-entry-once = {
+      expr = readAttr {
+        parentGraph = genScope.overlays [
+          (genScope.edge "a" "b")
+          (genScope.edge "b" "a")
+        ];
+        decls = {
+          a.supp = [ "A" ];
+          b.supp = [ "B" ];
+        };
+        attrName = "all-supp";
+        attr = inheritAll { extract = node: node.decls.supp or null; };
+        id = "a";
+      };
+      expected = [
+        "A"
+        "B"
+        "A"
+      ];
+    };
+
+    # A SUPPLIED `combine` FOLDS RIGHT — `combine local (combine parent (combine grandparent …))` —
+    # and the association is the assertion, not the membership. The recursion got it from its own
+    # shape; the replacement walks the chain first and has to fold back over it, and Nix publishes
+    # no right fold. `bracket` is deliberately NON-ASSOCIATIVE so a left fold over the same three
+    # segments yields `[ "<" "<" "L" "M" ">" "R" ">" ]` and fails here. This cell also guards the
+    # `combine ? null` sentinel from the other side: if the supplied arm stopped being reached, the
+    # brackets would vanish entirely.
+    test-inheritAll-supplied-combine-folds-right = {
+      expr = readAttr {
+        parentGraph = genScope.overlays [
+          (genScope.edge "leaf" "mid")
+          (genScope.edge "mid" "root")
+        ];
+        decls = {
+          leaf.supp = [ "L" ];
+          mid.supp = [ "M" ];
+          root.supp = [ "R" ];
+        };
+        attrName = "all-supp";
+        attr = inheritAll {
+          extract = node: node.decls.supp or null;
+          combine = a: b: [ "<" ] ++ a ++ b ++ [ ">" ];
+        };
+        id = "leaf";
+      };
+      expected = [
+        "<"
+        "L"
+        "<"
+        "M"
+        "R"
+        ">"
+        ">"
+      ];
+    };
+
     # inheritSet: set-discipline sibling of inheritAll — self ∪ ancestors, deduped.
 
     # Leaf sees every ancestor's contribution, unioned nearest-first with duplicates

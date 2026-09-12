@@ -461,10 +461,14 @@ Walks parent chain until `resolve node` returns non-null. Cycle-safe via `_visit
 #### `inheritAll`
 
 ```nix
-inheritAll { extract; combine ? a: b: a ++ b; } self id
+inheritAll { extract; combine ? null; } self id
 ```
 
 Accumulates values along entire parent chain (ordered-list discipline — keeps duplicates, order-dependent).
+
+`combine ? null` is that ordered-list discipline stated as a value rather than as a function. Nix compares no two functions, so a default spelled `a: b: a ++ b` could never be told apart from a caller passing that same expression, and the concatenation could never be recognised and taken in one pass; `null` is what makes it recognisable. The result is unchanged — a right fold of `++` over the chain's segments and their concatenation are the same list, order included. A supplied `combine` is folded RIGHT, `combine local (combine parent …)`, which is the association the walk has always had and which `test-inheritAll-supplied-combine-folds-right` pins.
+
+The parent walk is one `builtins.genericClosure`, whose key dedup **is** the cycle guard; a cycle ends by repeating its entry once (`test-inheritAll-cycle-repeats-its-entry-once`). It carried a `_visited` attrset rebuilt with `//` at every level before, which cost Θ(depth²) on the update axis beside the Θ(depth²) the `++` accumulator cost on the list axis. Both are linear now — `ci/bench/resolve-folds.sh`.
 
 #### `inheritSet`
 
@@ -498,7 +502,7 @@ What the declaration buys:
 #### `collectionAttr`
 
 ```nix
-collectionAttr { traverse; extract; combine ? a: b: a ++ b; filter ? _: true; } self id
+collectionAttr { traverse; extract; combine ? null; filter ? _: true; } self id
 ```
 
 Traverse modes: `"imports"`, `"children"`, `"siblings"`, `"ancestors"`, `"neron"`, `"label:<name>"`, or custom function.
@@ -509,7 +513,7 @@ Traverse modes: `"imports"`, `"children"`, `"siblings"`, `"ancestors"`, `"neron"
 
 Properties: cycle-safe via seen-set tracking, diamond-safe deduplication (each scope visited at most once), recursive parent resolution. Traversal order: self, then unseen imports, then parent — mirroring the Neron (2015) resolution calculus but collecting rather than shadowing.
 
-The neron traversal order (self → imports → parent, imports in declaration order) is a public, stable contract: collection determinism for ordered-list channels rests on this pin plus a left fold, so changing the traversal order is a breaking change.
+The neron traversal order (self → imports → parent, imports in declaration order) is a public, stable contract: collection determinism for ordered-list channels rests on this pin plus a left fold, so changing the traversal order is a breaking change. `combine ? null` is that left fold of `++` stated as a value — the same list, concatenated in one pass instead of re-copied per target — for the reason given at [`inheritAll`](#inheritall). A supplied `combine` is still folded left, which `test-traverse-children-supplied-combine-folds-left` pins.
 
 ```nix
 # Collect all config fragments from local scope, imports, and ancestors
@@ -518,7 +522,7 @@ config-modules = engine.collectionAttr {
   extract = self: id:
     let n = self.node id; in
     n.decls.modules or null;
-  combine = a: b: a ++ b;
+  # `combine` left out: the default IS the ordered-list concatenation.
 };
 ```
 
