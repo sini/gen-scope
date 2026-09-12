@@ -388,8 +388,38 @@ let
     self: id:
     let
       all = inheritAll { inherit extract _visited; } self id;
+      # One index list, shared by every element's look-back. A per-element prefix would be the
+      # Theta(n^2) allocation this replaces, so the prefix is expressed as the `j < i` guard below.
+      idx = prelude.genList (i: i) (builtins.length all);
     in
-    builtins.foldl' (acc: x: if builtins.any (y: eq y x) acc then acc else acc ++ [ x ]) [ ] all;
+    # First-occurrence dedup, INDEX-BASED, the shape `buildRoots`' `nodeOrder` ships: one pass
+    # emitting each element no earlier element is equivalent to. The fold form it replaces re-copied
+    # the kept list at every element (`acc ++ [ x ]`) and allocated Theta(n^2) to emit Theta(n);
+    # this one allocates its output and one index list. `ci/bench/resolve-inherit-set.sh` holds it
+    # to 1.05 per doubling and holds the prior fold, kept there as an arm, to exceeding the same
+    # budget in the same run.
+    #
+    # ★ ONLY HALF OF `nodeOrder`'s REMEDY CARRIES OVER, and the half that does not is the reason
+    # this is still quadratic in COMPARISONS. That constructor dedups vertex ids — STRINGS under
+    # `==` — so it can record first positions in a `listToAttrs` and read them back in O(1). Here
+    # the elements are arbitrary values and `eq` is a CALLER-SUPPLIED predicate, so there is no key
+    # to index by and the scan is pairwise. That is the specified semantics rather than a residue:
+    # the pairwise cost is `eq`'s, the way n(n-1)/2 edges are a clique's. Indexing it would mean
+    # taking a key function in this signature, which is a different surface than the one documented.
+    #
+    # ★ SCANNING EVERY EARLIER ELEMENT AND SCANNING ONLY THE KEPT ONES SELECT THE SAME FIRSTS,
+    # BECAUSE `eq` IS AN EQUIVALENCE. This is the set discipline stated above — an idempotent,
+    # order-independent semilattice merge (Van Wyk 2010) — so equivalence is what `eq` already has
+    # to be for the result to mean anything, and under transitivity a dropped element's class is
+    # represented by the kept element it was dropped for. A caller passing a NON-transitive relation
+    # would see this and the fold disagree, and would already have had no set.
+    prelude.concatMap (
+      i:
+      let
+        x = builtins.elemAt all i;
+      in
+      prelude.optional (!(builtins.any (j: j < i && eq (builtins.elemAt all j) x) idx)) x
+    ) idx;
 
   # Parameterized attribute: a bare eta-expansion, NOT a per-parameter cache. Applying `f self id`
   # yields the closure `param: f self id param`, and that closure is the whole of what the

@@ -231,6 +231,55 @@
       ];
     };
 
+    # `clique` had NO denotation cell at all, which was measured rather than noticed: the
+    # constructor was rewritten from `foldl' connect empty` to an indexed cross product to take its
+    # cost from cubic to its output, and a seeded direction swap in the new body left the suite at
+    # 893/893. The cost oracle is `ci/bench/graph-clique.sh` and it caught that swap through its
+    # cross-arm digest — but it is a manual instrument, so the VALUE is pinned here.
+    #
+    # The whole record is asserted, not just `vertices`: the edge SEQUENCE is what the fold produced
+    # and what the index pass reproduces — grouped by target ascending, then by source — and a
+    # rewrite that kept the edge SET while reordering it is the failure this shape catches and an
+    # `hasEdge` conjunction would not.
+    test-clique = {
+      expr = genScope.clique [
+        "a"
+        "b"
+        "c"
+      ];
+      expected = {
+        vertices = [
+          "a"
+          "b"
+          "c"
+        ];
+        edges = [
+          {
+            from = "a";
+            to = "b";
+          }
+          {
+            from = "a";
+            to = "c";
+          }
+          {
+            from = "b";
+            to = "c";
+          }
+        ];
+      };
+    };
+
+    # The base case the index pass has to get right on its own: `genList` over an empty vertex list
+    # yields no indices at all, where the fold reached `empty` by never stepping.
+    test-clique-empty = {
+      expr = genScope.clique [ ];
+      expected = {
+        vertices = [ ];
+        edges = [ ];
+      };
+    };
+
     test-hasVertex-true = {
       expr = genScope.hasVertex "a" (genScope.edge "a" "b");
       expected = true;

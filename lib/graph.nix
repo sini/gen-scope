@@ -70,7 +70,34 @@ let
   # Mokhov 2017 §5.1 defines star as center→leaves. Inverted here: leaves→center.
   # Convention: parent edges point from child to parent.
   star = center: leaves: connect (vertices leaves) (vertex center);
-  clique = vs: builtins.foldl' connect empty (map vertex vs);
+  # `connect` is associative, so folding it over the singleton vertices and emitting the cross
+  # product in one indexed pass are the SAME VALUE — vertex sequence and edge sequence included.
+  # The fold form re-copied the edge list it had built so far at every one of the n steps and paid
+  # Theta(n^3) to emit Theta(n^2); this one allocates its output and nothing else.
+  #
+  # ★ THE QUADRATIC IS THE OUTPUT AND IS NOT THE DEFECT. A clique on n vertices HAS n(n-1)/2 edges,
+  # so 2.00 is the floor here, unlike `overlays` above where linear is. The accumulator was the
+  # whole of the excess. `ci/bench/graph-clique.sh` holds this arm to 2.05 per doubling and holds
+  # the prior fold, kept there as a third arm, to EXCEEDING the same budget in the same run.
+  #
+  # The index form is also what carries the duplicate tolerance stated at the top of this file: it
+  # reads positions rather than values, so a `vs` carrying the same id twice yields the same edge
+  # multiset the fold did rather than a silently deduplicated one.
+  clique =
+    vs:
+    let
+      n = builtins.length vs;
+    in
+    {
+      vertices = vs;
+      edges = builtins.concatMap (
+        j:
+        builtins.genList (i: {
+          from = builtins.elemAt vs i;
+          to = builtins.elemAt vs j;
+        }) j
+      ) (builtins.genList (j: j) n);
+    };
   # Construct graph from recursive tree structure (Mokhov 2017 §5.1).
   # Input: { root: string, children: [tree] } where tree = { root, children }.
   tree =
