@@ -19,19 +19,21 @@
 # `test-traverse-children-supplied-combine-folds-left` — because the repair moved the default to a
 # `null` sentinel and replaced `inheritAll`'s fold and its cycle guard outright.
 #
-#   arm "collect"        — `collectionAttr` over n children with NO `combine` supplied, which is the
-#                          shape `ci/tests/collection-attr.nix` and every in-repo caller writes.
-#   arm "collect-defect" — THE PRIOR DEFAULT, reached through the PUBLIC SURFACE by supplying
-#                          `combine = a: b: a ++ b` explicitly. It is not a local re-implementation:
-#                          it is the same entry point taking the same fold it always took, so this
-#                          arm doubles as the proof that a caller-supplied `combine` still folds.
-#   arm "inherit"        — `inheritAll` up a chain of depth n with NO `combine` supplied.
-#   arm "inherit-defect" — THE PRIOR IMPLEMENTATION, written out locally: the level-at-a-time
-#                          recursion carrying a `_visited` attrset rebuilt with `//`. This one HAS
-#                          to be local, because the repair replaced the guard as well as the
-#                          accumulator — supplying a `combine` to the shipped constructor exercises
-#                          the new linear chain walk and would understate the prior cost on the
-#                          update axis.
+#   arm "collectionAttr"        — `collectionAttr` over n children with NO `combine` supplied,
+#                                 which is the shape `ci/tests/collection-attr.nix` and every
+#                                 in-repo caller writes.
+#   arm "collectionAttr-defect" — THE PRIOR DEFAULT, reached through the PUBLIC SURFACE by
+#                                 supplying `combine = a: b: a ++ b` explicitly. It is not a local
+#                                 re-implementation: it is the same entry point taking the same
+#                                 fold it always took, so this arm doubles as the proof that a
+#                                 caller-supplied `combine` still folds.
+#   arm "inheritAll"            — `inheritAll` up a chain of depth n with NO `combine` supplied.
+#   arm "inheritAll-defect"     — THE PRIOR IMPLEMENTATION, written out locally: the
+#                                 level-at-a-time recursion carrying a `_visited` attrset rebuilt
+#                                 with `//`. This one HAS to be local, because the repair replaced
+#                                 the guard as well as the accumulator — supplying a `combine` to
+#                                 the shipped constructor exercises the new linear chain walk and
+#                                 would understate the prior cost on the update axis.
 #
 # ★ EVERY ARM'S DIGEST IS COMPARED TO ITS FAMILY'S SHIPPED ARM at every size, ends included. The
 # defect arms are the prior semantics, so that comparison is the equivalence proof for both
@@ -42,11 +44,16 @@
 # guard, which `collectionAttr` never had. A one-axis version of this bench certifies half of the
 # `inheritAll` repair.
 #
+# ★ EVERY ARM IS NAMED FOR THE CONSTRUCTOR IT REACHES, and that is load-bearing rather than
+# tidy: `ci/tests/bench-denotation.nix` derives this bench's denotation coverage from the arm
+# names in the dispatch below and refuses a header citing cells for a constructor this bench has
+# no arm for. A cell glob copied from a sibling bench is caught there instead of read as true.
+#
 # ★ USE `nix-instantiate --arg`, NEVER `nix eval --file`. `nix eval --file f.nix --arg n 7` SILENTLY
 # DROPS the argument and exits 0 with a lambda, and `NIX_SHOW_STATS` still writes a full table for
 # the unapplied expression. The stats file cannot tell you the size you asked for was ignored.
 {
-  arm ? "collect",
+  arm ? "collectionAttr",
   n ? 500,
 }:
 let
@@ -178,20 +185,20 @@ let
       "gathered";
 
   out =
-    if arm == "collect" then
+    if arm == "collectionAttr" then
       run wideScope (resolveLib.collectionAttr {
         traverse = "children";
         extract = extractAt;
       }) "root"
-    else if arm == "collect-defect" then
+    else if arm == "collectionAttr-defect" then
       run wideScope (resolveLib.collectionAttr {
         traverse = "children";
         extract = extractAt;
         combine = a: b: a ++ b;
       }) "root"
-    else if arm == "inherit" then
+    else if arm == "inheritAll" then
       run deepScope (resolveLib.inheritAll { inherit extract; }) "n0"
-    else if arm == "inherit-defect" then
+    else if arm == "inheritAll-defect" then
       run deepScope (inheritAllPrior { inherit extract; }) "n0"
     else
       throw "resolve-folds: unknown arm '${arm}'";
