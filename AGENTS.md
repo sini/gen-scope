@@ -1,5 +1,7 @@
 # gen-scope — agent capability sheet
 
+> **Library class: reference-grade.** Deletion requires a domain argument — wrong abstraction, subsumption by another construct, or theory-unsoundness; a usage count is inadmissible as a deletion ground (P7, 2026-08-17).
+
 ## Scope
 
 Demand-driven higher-order attribute-grammar evaluator over algebraic scope graphs: you supply root node descriptors (`{ id, type, parent, decls }`) and attribute definitions (`self: id: value`), and `eval` returns an accessor record (`node` / `get` / four materializers) whose attributes compute lazily and memoize on an `_eval` cache co-located on each node.
