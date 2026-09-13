@@ -1,5 +1,7 @@
-# Purity invariant (gen-prelude design §5): gen-scope depends only on gen-prelude and
-# must import NO `nixpkgs.lib`. This pins "pure" as a checked property, not an
+# Purity invariant (gen-prelude design §5): the gen-scope library source carries no `nixpkgs.lib`
+# tether token, over the domain stated under Scope below. What this library's inputs are is
+# `flake.nix`'s to declare — this suite reads that file only as source text to scan, enumerates
+# no inputs, and asserts nothing about their purity. This pins "pure" as a checked property, not an
 # aspiration — a stray `lib.foo` / `lib.types` / `evalModules` / nixpkgs input creeping
 # back into the library source fails CI.
 #
