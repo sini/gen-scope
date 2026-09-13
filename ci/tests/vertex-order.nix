@@ -151,10 +151,24 @@ let
 
   # A genuinely patched COPY of `eval.nix`, built the way the round-1 gate built its
   # (`reports/den-hoag-u1sf-gate-v1.md`, C-5): the source is read, its four sibling imports are
-  # made absolute so the copy resolves outside `lib/`, an optional `rootOrder` formal is threaded
-  # through, and it is consumed at EXACTLY ONE site — genericResolve's fold over `attrNames roots`
-  # — never at `allNodesWhere`, which §2.5 excludes on different (and, per the gate, overstated)
-  # grounds and which this fixture must not seed.
+  # pointed at a store copy of `lib/` so the patched file resolves outside `lib/`, an optional
+  # `rootOrder` formal is threaded through, and it is consumed at EXACTLY ONE site —
+  # genericResolve's fold over `attrNames roots` — never at `allNodesWhere`, which §2.5 excludes
+  # on different (and, per the gate, overstated) grounds and which this fixture must not seed.
+  #
+  # ★ THE SIBLING IMPORTS CARRY STRING CONTEXT. Interpolating the path (`"${libDir}"`) copies
+  # `lib/` into the store and names the copy WITH context, so the `toFile` below records the copy
+  # as a reference and pure evaluation may read it. `builtins.toString libDir` names the flake
+  # source's own `lib/` WITHOUT context: `toFile` then warns that its file "references the store
+  # path … without a proper context", and under an evaluator that keeps the flake source as a lazy
+  # tree that path is never materialised, so importing the patched file dies `access to absolute
+  # path … is forbidden in pure evaluation mode` — a death only the hosted check sees, since a Nix
+  # that has already copied the source to the store reads the bare path anyway. The WHOLE directory
+  # is copied rather than the four files, because two of them import siblings of their own
+  # (`structural.nix` → `traversal-names.nix`, `interface.nix` → `structural.nix`) that resolve
+  # only beside them. A derivation writing the patched file beside real siblings would need no
+  # rewrite, but `flake.tests` is system-agnostic — there is no `pkgs` in this module to build one
+  # — so the rewrite stays and targets the context-carrying copy.
   #
   # Occurrence counts use `replaceStrings`-length-diffing rather than `builtins.split`: `split`'s
   # pattern is a POSIX ERE, and both anchors below contain regex metacharacters (`?`, `(`, `)`), so
@@ -167,7 +181,7 @@ let
     )
     / builtins.stringLength needle;
   o10EvalSrc = builtins.readFile (libDir + "/eval.nix");
-  o10Abs = name: builtins.toString (libDir + "/${name}");
+  o10Abs = name: "${libDir}/${name}";
   o10WithAbsoluteImports =
     builtins.replaceStrings
       [
