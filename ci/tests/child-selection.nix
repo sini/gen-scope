@@ -25,10 +25,10 @@ let
 
   # ── THE CONFIG-CASCADE SHAPE, REPRODUCED ──
   # Measured at `examples/config-cascade/graph.nix`: a directory tree whose containment is
-  # SAME-KIND — `apps` is a `dir` and so are `api` and `web` below it. The example flake itself
-  # cannot be exercised end to end (its `children` filters the whole `buildRoots` record rather
-  # than that record's `nodes`, a staleness that predates this channel), so the shape is
-  # reproduced here, where it runs on every gate.
+  # SAME-KIND — `apps` is a `dir` and so are `api` and `web` below it. The example flake is
+  # exercised end to end by `examples.test-config-cascade-tests-force-under-deepSeq`
+  # (`ci/tests/examples.nix`); the shape is reproduced here so this channel's claim rests on a
+  # fixture it owns rather than on an example whose tests may move.
   dirScope = genScope.buildRoots {
     kinds = flatKinds [
       "root"
