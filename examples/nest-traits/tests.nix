@@ -183,7 +183,7 @@
                 };
               };
             };
-            graph = buildDomGraph nodes;
+            graph = (buildDomGraph nodes).nodes;
           in
           graph ? "igloo" && graph ? "igloo.users.tux" && graph."igloo.users.tux".parent == "igloo";
         expected = true;
@@ -200,7 +200,7 @@
                 };
               };
             };
-            graph = buildDomGraph nodes;
+            graph = (buildDomGraph nodes).nodes;
             childIds = builtins.attrNames (lib.filterAttrs (_: n: n.parent == "igloo") graph);
           in
           childIds;
@@ -1652,7 +1652,7 @@
           };
         };
       };
-      nodes = buildDomGraph domNodes;
+      nodes = (buildDomGraph domNodes).nodes;
 
       # gen-graph's current API is accessor-based: queries take a graph descriptor
       # { nodes, edges, nodeData, parent } rather than a scope-engine node map.
@@ -1683,7 +1683,7 @@
           (genScope.edge "lb" "web-2")
         ];
       };
-      importGraph = mkImportGraph importNodes;
+      importGraph = mkImportGraph importNodes.nodes;
     in
     {
       test-node-count = {
@@ -1743,7 +1743,7 @@
               };
             };
             nestedGraph = genGraph.fromRegistry {
-              registry = buildDomGraph nestedNodes;
+              registry = (buildDomGraph nestedNodes).nodes;
               edges = importEdgesOf;
               parent = parentOf;
             };

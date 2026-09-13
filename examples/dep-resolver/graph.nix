@@ -139,10 +139,10 @@ let
   # manifest is GROWN by `spawns.manifest` on the `workspace` kind, where its descent is settled
   # at registration.
   mkAttributes =
-    rootNodes: userAttrs:
+    roots: userAttrs:
     let
       baseAttrs = {
-        children = _self: id: lib.filterAttrs (_: n: n.parent == id) rootNodes;
+        children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
         imports = _self: id: (_self.node id).decls.__edges.I or [ ];
         "edges-D" = _self: id: (_self.node id).decls.__edges.D or [ ];
       };

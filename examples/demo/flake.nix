@@ -662,12 +662,29 @@
                 headcount = 8;
               };
             };
-            kinds = genScope.mkKinds (
-              map (name: genScope.mkKind { inherit name; }) [
-                "department"
-                "audit"
-              ]
-            );
+            # ── THE KIND VOCABULARY, AND THE ONE EXPANSION IN IT ──
+            # A department over the budget threshold expands into an AUDIT. Growth is the spawn
+            # channel's: the expansion is declared on the `department` kind, whose `below` set
+            # licenses it, and the substrate stamps the audit's kind and parent from the
+            # declaration rather than from anything the builder writes.
+            kinds = genScope.mkKinds [
+              (genScope.mkKind { name = "audit"; })
+              (genScope.mkKind {
+                name = "department";
+                below = [ "audit" ];
+                spawns.audit =
+                  self: id:
+                  lib.optionalAttrs (((self.node id).decls.budget or 0) > 150000) {
+                    "audit:${id}" = {
+                      id = "audit:${id}";
+                      decls = {
+                        reviewer = "finance";
+                        threshold = 150000;
+                      };
+                    };
+                  };
+              })
+            ];
             types = {
               "dept:eng" = "department";
               "dept:sales" = "department";
@@ -678,26 +695,9 @@
           result = genScope.eval {
             scope = nodes;
             attributes = {
-              children =
-                _self: id:
-                let
-                  staticChildren = lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-                  # Synthesize audit nodes for departments over budget threshold
-                  audit =
-                    lib.optionalAttrs (lib.hasPrefix "dept:" id && (nodes.nodes.${id}.decls.budget or 0) > 150000)
-                      {
-                        "audit:${id}" = {
-                          id = "audit:${id}";
-                          type = "audit";
-                          parent = id;
-                          decls = {
-                            reviewer = "finance";
-                            threshold = 150000;
-                          };
-                        };
-                      };
-                in
-                staticChildren // audit;
+              # `children` SELECTS among the nodes the scope carries; the audit nodes are GROWN by
+              # `spawns.audit` on the `department` kind above.
+              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
               imports = _self: _id: [ ];
             };
           };

@@ -111,12 +111,14 @@ let
     };
   };
 
-  # Build attributes with children that include synthesized rollout nodes
+  # `children` SELECTS among the nodes the scope carries — nothing here makes a node. The
+  # rollout is GROWN by `spawns.rollout` on the `org` kind, where its descent is settled at
+  # registration.
   mkAttributes =
-    rootNodes: userAttrs:
+    roots: userAttrs:
     let
       baseAttrs = {
-        children = _self: id: lib.filterAttrs (_: n: n.parent == id) rootNodes;
+        children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
         imports = _self: _id: [ ];
       };
     in

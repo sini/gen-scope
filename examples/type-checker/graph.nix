@@ -145,12 +145,14 @@ let
     };
   };
 
-  # Build attributes with children that include synthesized Pair node
+  # `children` SELECTS among the nodes the scope carries — nothing here makes a node. The
+  # Pair record is GROWN by `spawns.record` on the `root` kind, where its descent is settled
+  # at registration.
   mkAttributes =
-    rootNodes: userAttrs:
+    roots: userAttrs:
     let
       baseAttrs = {
-        children = _self: id: lib.filterAttrs (_: n: n.parent == id) rootNodes;
+        children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
         imports = _self: _id: [ ];
         "edges-R" = _self: id: (_self.node id).decls.__edges.R or [ ];
         "edges-E" = _self: id: (_self.node id).decls.__edges.E or [ ];

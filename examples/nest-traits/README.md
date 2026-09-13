@@ -47,7 +47,7 @@ Each library handles one concern:
 | -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | **Type definitions** | gen-schema  | Trait sidecars (`needs`, `neededBy`, `synth`, `class`), node instance registry, ref validation, refinement contracts            |
 | **Rule content**     | gen-aspects | Class-separated `deferredModule` output via `aspectsType`, `is` selector injected via `aspectModules`                           |
-| **Graph evaluation** | gen-scope   | DOM hierarchy as parent edges, structural queries (`childrenIds`, `ancestors`, `siblings`), `buildNodes` for graph construction |
+| **Graph evaluation** | gen-scope   | DOM hierarchy as parent edges, structural queries (`childrenIds`, `ancestors`, `siblings`), `buildRoots` for graph construction |
 | **Graph queries**    | gen-graph   | Monotonic query combinators over scope graphs: `select`, `reachableFrom`, `dependents`, `cycles`, `leaves`                      |
 
 Template-local code provides the CSS selector engine and the 5-phase evaluation pipeline.
@@ -208,7 +208,7 @@ Key differences from nest:
 
 - **`synth` is a list** (nest uses a single function) — enables multi-module composition
 - **`neededBy` entries are OR-dispatched** — each selector is independent, `++` merge across modules composes correctly
-- **Structural queries use gen-scope** — `buildDomGraph` creates a pre-indexed node map, `mkCtxFromGraph` uses `childrenIds`/`ancestors`/`siblings` for O(1) lookups
+- **Structural queries use gen-scope** — `buildDomGraph` builds the scope record, whose `nodes` is a pre-indexed node map, `mkCtxFromGraph` uses `childrenIds`/`ancestors`/`siblings` for O(1) lookups
 - **gen-schema integration** — `setup.nix` provides `mkTraitSchema` and `evalNestModules` for module-system-based trait/rule definitions with sidecar extraction and validation
 - **gen-aspects integration** — `mkRulesType` creates an `aspectsType` with class-separated `deferredModule` output and `is` injected via `aspectModules`
 

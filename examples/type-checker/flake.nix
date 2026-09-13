@@ -14,7 +14,7 @@
       graph = import ./graph.nix { inherit genScope lib; };
       attributes = import ./attributes.nix { inherit genScope lib; };
       result = genScope.eval {
-        inherit (graph) roots;
+        scope = graph.roots;
         attributes = graph.mkAttributes graph.roots attributes;
       };
     in

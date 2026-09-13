@@ -68,7 +68,7 @@ let
       annotated = map (
         node:
         let
-          ctx = mkCtxFromGraph synthGraph node synthesizedNodes;
+          ctx = mkCtxFromGraph synthGraph.nodes node synthesizedNodes;
           matchingRules = builtins.filter (r: matchesOne node r.is ctx) rules;
         in
         node // { __mergedCfg = mergeRuleConfigs node matchingRules ctx; }

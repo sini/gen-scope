@@ -9,7 +9,7 @@
   roots,
 }:
 {
-  children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots;
+  children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
   imports = _self: id: (_self.node id).decls.__edges.I or [ ];
 
   # Lookup a declaration name. Walks: local decls → imports → parent chain.
