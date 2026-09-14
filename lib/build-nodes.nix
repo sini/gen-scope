@@ -22,7 +22,11 @@
 # the caller's declared order to live. It is the caller's OWN label space, open on every label
 # except `P` and `I`, which are this constructor's names for the containment and import relations
 # and are refused by name at the entry — see the reservation below.
-{ prelude }:
+#
+# `isKindSet` is `cascade.nix`'s discriminator over the tag `mkKinds` writes, taken as a formal for
+# `require-scope.nix`'s reason: the test belongs with the constructor and the refusal belongs at the
+# door. This constructor owns the door the malformed record would otherwise be BUILT at.
+{ prelude, isKindSet }:
 let
   graph = import ./graph.nix;
 
@@ -102,8 +106,34 @@ let
         in
         prelude.filter (l: builtins.length byLabel.${l} > 1) (builtins.attrNames byLabel);
 
+      # ── THE REGISTRY IS ADMITTED BEFORE IT IS READ ──
+      # This arm DOMINATES the two below it, and the order is load-bearing rather than stylistic:
+      # `unregisteredKinds` reads `kinds.kinds or { }`, and that read IS the unvalidated read. Nix's
+      # sibling bindings have no order, so the only thing that sequences the admission ahead of the
+      # use is putting it first in this chain.
+      #
+      # It is the same accept-list, the same two-armed detail and the same admit-set as
+      # `require-scope.nix`'s fifth conjunct — one property, one answer, two doors — under this
+      # entry's own name. What it buys here is that the malformed scope record is never CONSTRUCTED,
+      # so the residual door at `requireScope` covers only the route that skips this one: a
+      # hand-built record, which this library's own suite uses and the published surface permits.
+      #
+      # ★ `null` PASSES AND SO DOES AN ABSENT `kinds`. The formal's own default is `null`, and
+      # `gen-link` calls `buildRoots { importGraph; decls; }` with no registry at all — reading this
+      # arm as "require `isKindSet`" breaks every kindless caller, which is most of them.
+      registryRefusal =
+        detail:
+        throw "gen-scope.buildRoots: `scope.kinds` must be the registry `mkKinds` returns; ${detail}. Build it with `mkKinds` and pass the result: the `below` relation's acyclicity is decided where the registry is constructed, so a value this entry cannot tell apart from a registered one is one it must refuse.";
+
       contributions =
-        if kinds == null && declaredTypes != [ ] then
+        if !(kinds == null || isKindSet kinds) then
+          registryRefusal (
+            if builtins.isAttrs kinds then
+              "received an attrset that `mkKinds` did not build"
+            else
+              "received a ${builtins.typeOf kinds}"
+          )
+        else if kinds == null && declaredTypes != [ ] then
           throw "gen-scope.buildRoots: `types` declares kind(s) ${builtins.toJSON (prelude.unique declaredTypes)} but no `kinds` registry was supplied. A kind is a name in a registered vocabulary, not a free string: without the registry there is no order for the kinds to be ranked in, so nothing can say that an expansion descends and every spelling is its own kind. Register them with `mkKinds` and pass the result as `kinds`, or declare no types."
         else if unregistered != [ ] then
           throw "gen-scope.buildRoots: `types` declares kind(s) ${builtins.toJSON unregistered} that the supplied `kinds` registry does not carry. An unregistered kind has no rank, so nothing can decide whether an expansion into or out of it descends — register the kind, or use one that is registered."

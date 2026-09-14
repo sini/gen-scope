@@ -566,8 +566,25 @@ let
   # asserted that and nothing here can check it. So what the token does NOT establish is the
   # agreement between `kinds`, `depth` and `maxDepth` — and the run is built so that a disagreement
   # is REPORTED rather than absorbed: it reads what it settled, never what the record declared.
-  asKindSet =
-    kinds: if isAttrs kinds && (kinds._type or null) == kindSetMarker then kinds else mkKinds kinds;
+  asKindSet = kinds: if isKindSet kinds then kinds else mkKinds kinds;
+
+  # ── THE DISCRIMINATOR, PUBLISHED BESIDE THE CONSTRUCTOR ──
+  # The one question a consumer cannot answer for itself: did this registry come out of `mkKinds`,
+  # and has `graph.coneRank` therefore been forced over the whole of its `below` relation?
+  # Acyclicity is a property of the SET, so no kind record decides it and no reader re-derives it
+  # from the value — only the tag `mkKinds` writes says so. `asKindSet` computed exactly this test
+  # inline and now calls it, so there is ONE definition of what a registry is and one spelling of
+  # the tag.
+  #
+  # ★ THE PREDICATE SHIPS AND THE REFUSAL DOES NOT, which is `gen-graph.isDeclaredEdges`' division
+  # exactly. A consumer entry refusing a forged registry must name ITS OWN door — a refusal minted
+  # here would name the cascade for a defect at `eval`'s or `buildRoots`' — so what travels is the
+  # discriminator and what stays at each door is the message. The consumers are
+  # `require-scope.nix` and `build-nodes.nix`, each of which takes this as a formal.
+  #
+  # It answers PROVENANCE and not agreement: the bargain and its limit are stated above `asKindSet`
+  # and are unchanged by publishing the test.
+  isKindSet = kinds: isAttrs kinds && (kinds._type or null) == kindSetMarker;
 
   claimMarker = "gen-scope/claim";
 
@@ -1257,5 +1274,11 @@ in
     mkKinds
     mkClaim
     resolveClaims
+    # Not a fifth door but a PREDICATE, and the fifth name this module contributes. `merge-surface`
+    # folds every module's exports into one flat surface, so this reaches consumers as
+    # `genScope.isKindSet` — beside `mkKinds`, which is where `gen-graph` puts `isDeclaredEdges`
+    # beside `mkDeclaredEdges` for the same reason: the test that answers "did this constructor
+    # build it" is public wherever the constructor is.
+    isKindSet
     ;
 }

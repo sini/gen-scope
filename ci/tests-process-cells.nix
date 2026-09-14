@@ -27,7 +27,9 @@ let
   # `prelude` means the entry's own fetching default is never forced, which is what keeps this
   # readable inside the build sandbox.
   graph = import "${genGraphSrc}" { inherit prelude; };
-  inherit (import "${libSrc}/require-scope.nix" { inherit prelude; }) requireScope;
+  # The registry discriminator ships with `mkKinds`; the two guards below take it as a formal.
+  inherit (import "${libSrc}/cascade.nix" { inherit prelude graph; }) isKindSet;
+  inherit (import "${libSrc}/require-scope.nix" { inherit prelude isKindSet; }) requireScope;
   # The declared relation's input type. The evaluator takes it as a formal like `requireScope`, so
   # this wiring binds it the same way; none of the arms below supplies a relation, so every one of
   # them runs under the evaluator's third state and the guard is never reached.
@@ -42,7 +44,7 @@ let
       graph
       ;
   };
-  inherit (import "${libSrc}/build-nodes.nix" { inherit prelude; }) buildRoots;
+  inherit (import "${libSrc}/build-nodes.nix" { inherit prelude isKindSet; }) buildRoots;
   ag = import "${libSrc}/graph.nix";
   # The declaration constructor, inlined rather than imported: `resolve.nix` is not needed for
   # anything else here, and the record shape is the (K1)-capped one the evaluator checks.

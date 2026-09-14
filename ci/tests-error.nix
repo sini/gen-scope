@@ -2691,4 +2691,143 @@ in
         };
       };
     };
+
+  # ── THE KIND REGISTRY'S ADMISSION, BY MESSAGE ──
+  # The same division as the relation contract above: `mkKinds` decides acyclicity of the whole
+  # `below` relation as it builds and stamps a tag saying so, the discriminator over that tag ships
+  # beside the constructor as `isKindSet`, and each door mints its OWN refusal naming ITSELF. A
+  # message naming the cascade for a defect at `eval`'s door sends a reader to a call they did not
+  # make.
+  #
+  # THAT these fire, and that a minted registry and the no-kinds cases still pass, are in
+  # `tests/registry-admission.nix` — whose `tryEval` cells carry the part no message can: the state
+  # this replaced was an UNCATCHABLE stack overflow, so a caller had no value to read the message
+  # off in the first place.
+  #
+  # BOTH DETAIL ARMS ARE EXERCISED AT BOTH DOORS, because they are not interchangeable and the
+  # second is the one that matters. A registry is an attrset carrying a `kinds` attrset, so of the
+  # bypass `builtins.typeOf` says `set` and tells the reader nothing — that arm names the
+  # CONSTRUCTOR that was missed. Only where no constructor is plausibly in play does the message
+  # fall back to the type.
+  #
+  # ★ THE NON-ATTRSET ARM IS NOT COSMETIC. Before this guard, `kinds = [ … ]` reached
+  # `unregisteredKinds`, whose `kinds.kinds or { }` falls back to `{ }` on a list — so a
+  # mis-TYPED registry was reported as an unregistered KIND, naming the wrong defect at the wrong
+  # argument. The cells below pin the message that replaced it.
+  config.flake.testsError.registry-admission-refusals =
+    let
+      spawnOf = _self: id: {
+        "${id}-i" = {
+          id = "${id}-i";
+          parent = id;
+          decls = { };
+        };
+      };
+
+      # `mkKind` BUILDS this (the per-record checks are `spawns ⊆ below` and the field shapes);
+      # `mkKinds` is what refuses it, and nothing required `mkKinds` to have run.
+      selfNaming = genScope.mkKind {
+        name = "k";
+        below = [ "k" ];
+        spawns.k = spawnOf;
+      };
+      forgedRegistry = {
+        kinds.k = selfNaming;
+      };
+
+      # The hand-built record — the route the constructor does not stand in front of, and the one
+      # this repository's own fixtures use.
+      handBuilt = kinds: {
+        nodes.root = {
+          id = "root";
+          type = "k";
+          parent = null;
+          decls = { };
+        };
+        nodeOrder = [ "root" ];
+        inherit kinds;
+      };
+      attributes.children = _self: _id: { };
+
+      buildWith =
+        kinds:
+        genScope.buildRoots {
+          parentGraph = genScope.vertex "root";
+          types.root = "k";
+          decls.root = { };
+          inherit kinds;
+        };
+
+      # The invariant frame, with the entry name and the detail left to the cell — which is exactly
+      # what a caller reads to learn WHICH door they are at and WHAT they handed it.
+      registryRefusal =
+        entry: detail:
+        "gen-scope.${entry}: `scope.kinds` must be the registry `mkKinds` returns; ${detail}. Build it with `mkKinds` and pass the result: the `below` relation's acyclicity is decided where the registry is constructed, so a value this entry cannot tell apart from a registered one is one it must refuse.";
+
+      missedConstructor = "received an attrset that `mkKinds` did not build";
+    in
+    {
+      # The EVALUATOR, on a hand-built record. The detail names the constructor, not the type.
+      test-eval-refuses-an-unminted-registry-by-name = {
+        expr =
+          (genScope.eval {
+            scope = handBuilt forgedRegistry;
+            inherit attributes;
+          }).allNodeIds;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (registryRefusal "eval" missedConstructor);
+        };
+      };
+
+      # And on a NON-attrset, where no constructor is plausibly in play.
+      test-eval-names-the-type-of-a-registry-that-is-not-an-attrset = {
+        expr =
+          (genScope.eval {
+            scope = handBuilt [ selfNaming ];
+            inherit attributes;
+          }).allNodeIds;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (registryRefusal "eval" "received a list");
+        };
+      };
+
+      # The CONSTRUCTOR names itself: a record refused before it forms is a defect at a different
+      # call site from one refused as it is read, and a caller fixes them in different places.
+      test-buildRoots-refuses-an-unminted-registry-by-name = {
+        expr = (buildWith forgedRegistry).nodeOrder;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (registryRefusal "buildRoots" missedConstructor);
+        };
+      };
+
+      test-buildRoots-names-the-type-of-a-registry-that-is-not-an-attrset = {
+        expr = (buildWith [ selfNaming ]).nodeOrder;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (registryRefusal "buildRoots" "received a list");
+        };
+      };
+
+      # The third evaluator entry, which shares the guard and must not borrow another's name.
+      # Read through `node`, and the accessor is load-bearing. The guard fires when a field of
+      # `requireScope`'s RESULT is selected: `trace` and `getTraced` are assembled without reaching
+      # the scope and report "no error was caught" against a live guard, while `allNodes` and
+      # `allNodeIds` throw this entry's OWN materialization refusal first and would pin this cell to
+      # that message instead. Only a read that reaches a node reaches the registry.
+      test-evalDebug-refuses-an-unminted-registry-under-its-own-name = {
+        expr =
+          (genScope.evalDebug {
+            scope = handBuilt forgedRegistry;
+            inherit attributes;
+          }).node
+            "root";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (registryRefusal "evalDebug" missedConstructor);
+        };
+      };
+    };
 }

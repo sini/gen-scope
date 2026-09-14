@@ -76,7 +76,9 @@ let
   # Through gen-graph's own standalone entry, never its bare `./lib`: the root shim's rule, so a
   # formal gained downstream is defaulted downstream instead of re-tracked here by hand.
   graph = import "${fetch "gen-graph"}" { inherit prelude; };
-  inherit (import ../../lib/require-scope.nix { inherit prelude; }) requireScope;
+  # The registry discriminator ships with `mkKinds`; the guard below takes it as a formal.
+  inherit (import ../../lib/cascade.nix { inherit prelude graph; }) isKindSet;
+  inherit (import ../../lib/require-scope.nix { inherit prelude isKindSet; }) requireScope;
   inherit (import ../../lib/require-declared-dependencies.nix { inherit graph; })
     requireDeclaredDependencies
     ;

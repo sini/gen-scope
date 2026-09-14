@@ -18,12 +18,25 @@ let
   # library bound as `graph`: these build a scope graph out of vertices and overlays, that one
   # answers reachability and partition questions about a graph already built.
   algebraicGraph = import ./graph.nix;
-  buildRoots = import ./build-nodes.nix { inherit prelude; };
+  # `isKindSet` is `cascade.nix`'s, for the reason `requireDeclaredDependencies` takes `graph`
+  # below: the discriminator over a constructor's tag ships WITH that constructor, and the refusal
+  # is minted at the door where the defect is. `cascade.nix` takes `{ prelude, graph }` and reaches
+  # neither of these two modules, so the binding is acyclic.
+  buildRoots = import ./build-nodes.nix {
+    inherit prelude;
+    inherit (cascade) isKindSet;
+  };
   queries = import ./queries.nix { inherit prelude; };
   resolve = import ./resolve.nix { inherit prelude; };
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
-  inherit (import ./require-scope.nix { inherit prelude; }) requireScope;
+  inherit
+    (import ./require-scope.nix {
+      inherit prelude;
+      inherit (cascade) isKindSet;
+    })
+    requireScope
+    ;
   # The declared relation's input type. It takes `graph` because the DISCRIMINATOR is `gen-graph`'s
   # — the tag only that library's constructors write — while the refusal is this library's, naming
   # this library's entry point for a defect at this library's door.

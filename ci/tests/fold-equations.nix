@@ -106,7 +106,13 @@ let
     import ../../lib/fold-equations.nix {
       prelude = genPreludeLib;
       inherit (genScope) eval;
-      inherit (import ../../lib/require-scope.nix { prelude = genPreludeLib; }) requireScope;
+      inherit
+        (import ../../lib/require-scope.nix {
+          prelude = genPreludeLib;
+          inherit (genScope) isKindSet;
+        })
+        requireScope
+        ;
       inherit (import ../../lib/require-declared-dependencies.nix { graph = genGraph; })
         requireDeclaredDependencies
         ;
@@ -329,10 +335,12 @@ in
       ];
     };
     # The library's surface minus this module's one name. The figure is a baseline over the export
-    # surface and re-derives whenever that surface grows.
+    # surface and re-derives whenever that surface grows. 91 rather than 90: `cascade.nix` now
+    # publishes `isKindSet` beside `mkKinds`, the discriminator the two entry guards bind as a
+    # formal, and `merge-surface` folds every module's exports into one flat surface.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 90;
+      expected = 91;
     };
     # One: the fold's entry, and nothing else. This cell is the module's inventory, and an export it
     # does not list is an export nothing measured.

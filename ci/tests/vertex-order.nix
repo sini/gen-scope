@@ -212,7 +212,10 @@ let
   o10PatchedText = builtins.replaceStrings [ o10FoldSite ] [ o10FoldSiteThreaded ] o10ThreadedFormal;
   o10PatchedFile = builtins.toFile "eval-o10-patched.nix" o10PatchedText;
   o10RequireScope =
-    (import (libDir + "/require-scope.nix") { prelude = genPreludeLib; }).requireScope;
+    (import (libDir + "/require-scope.nix") {
+      prelude = genPreludeLib;
+      inherit (genScope) isKindSet;
+    }).requireScope;
   o10RequireDeclaredDependencies =
     (import (libDir + "/require-declared-dependencies.nix") { graph = genGraph; })
     .requireDeclaredDependencies;

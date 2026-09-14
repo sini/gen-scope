@@ -2044,13 +2044,18 @@ in
       expr = builtins.length incumbentNames;
       expected = 87;
     };
-    # Four: the registration and run doors, and nothing else. The consumer accessors that used to
-    # sit beside them reconstructed a list the run already computed, and the run publishes it now —
-    # so reading one subject's wiring is an attribute lookup with no surface of its own. This cell
-    # is the module's inventory, and an export it does not list is an export nothing measured.
-    test-this-module-exports-exactly-its-four-names = {
+    # Four doors and one predicate. The doors are the registration and run entries and nothing else
+    # — the consumer accessors that used to sit beside them reconstructed a list the run already
+    # computed, and the run publishes it now, so reading one subject's wiring is an attribute lookup
+    # with no surface of its own. `isKindSet` is the fifth name and is not a door: it is the
+    # discriminator over the tag `mkKinds` writes, exported because the two entry guards
+    # (`require-scope.nix`, `build-nodes.nix`) bind it as a formal and a consumer cannot re-derive
+    # provenance from the value. This cell is the module's inventory, and an export it does not list
+    # is an export nothing measured.
+    test-this-module-exports-exactly-its-five-names = {
       expr = cascadeNames;
       expected = [
+        "isKindSet"
         "mkClaim"
         "mkKind"
         "mkKinds"
