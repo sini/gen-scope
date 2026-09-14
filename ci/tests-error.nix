@@ -2507,6 +2507,114 @@ in
       };
     };
 
+  # ── THE STARTING SET'S CARRIER, AND WHY THE TWO ARMS OWE THE SAME SENTENCE ──
+  # A starting set is a SET OF GROUND ATOMS, and the two arms disagreed about a value outside that
+  # carrier rather than refusing it: the closure arm reads a member's NAME and rebuilds its answer
+  # canonically, the round arm carries the VALUE through. On `seed = { a = 42; }` they returned
+  # `{ a = true; q = true; }` and `{ a = 42; q = true; }` — and since the door routes on the
+  # program, ADDING AN UNRELATED BINARY RULE changed a seeded atom's reported value. Neither the
+  # termination argument nor the two-arm equivalence covers that, so the seed is refused.
+  #
+  # THREE OF THESE FOUR ARE ABOUT THE MESSAGE AND CANNOT BE BOOLEANS. That each refuses is in
+  # `tests/least-model.nix` beside its live control. That the two arms refuse with the IDENTICAL
+  # sentence is the property the defect made false, and `tryEval` discards exactly the text that
+  # carries it.
+  #
+  # ★ THE FOURTH IS THE ORDERING CELL, and it is why a `success = false` cell would not do. A
+  # directly bound closure arm holding a conjunctive program AND a bad seed is the ONLY call at
+  # which the order of the two refusals is observable — the door never routes a conjunctive program
+  # to that arm. Under a seed-first ordering that caller still gets a REAL REFUSAL; they just get
+  # the wrong one, and are told nothing about why fixing the seed will not make this arm answer.
+  config.flake.testsError.least-model-refusals =
+    let
+      # `q :- a.` — the smallest program whose answer moves with the starting set.
+      unary = genScope.mkProgram {
+        rules = [
+          {
+            head = "q";
+            pos = [ "a" ];
+          }
+        ];
+      };
+      # The same program plus an UNRELATED binary rule. That rule is the whole of the difference:
+      # it mentions neither `a` nor `q`, and it is what routes the door to the round arm.
+      conj = genScope.mkProgram {
+        rules = [
+          {
+            head = "q";
+            pos = [ "a" ];
+          }
+          {
+            head = "z";
+            pos = [
+              "m"
+              "n"
+            ];
+          }
+        ];
+      };
+      # The payload refusal is a function of the SEED ALONE, so the two arms owe the same string.
+      # It is written once here for that reason and not to save a line: two literals would be
+      # equally satisfied by two arms that refuse DIFFERENTLY, which is the shape this row closes.
+      payloadRefusal = ''gen-scope: the seed carries a value on ["a"], the first of them a int. A starting set is a SET OF GROUND ATOMS and `true` is the only value a member takes, so a payload is REFUSED rather than canonicalised: the closure arm reads a member's NAME and the round arm carries its VALUE through, so the two compute different things about a value the carrier does not contain'';
+    in
+    {
+      test-the-round-arm-refuses-a-seed-carrying-a-value = {
+        expr = genScope.leastModelRounds {
+          program = conj;
+          seed = {
+            a = 42;
+          };
+        };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly payloadRefusal;
+        };
+      };
+
+      test-the-closure-arm-refuses-the-same-seed-with-the-same-message = {
+        expr = genScope.leastModelUnary {
+          program = unary;
+          seed = {
+            a = 42;
+          };
+        };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly payloadRefusal;
+        };
+      };
+
+      # The non-set arm names the TYPE it received and the encoding it wanted. Before the guard this
+      # raised the EVALUATOR's `expected a set but found a list`, which is a `TypeError` that
+      # `tryEval` does not contain and no cell could observe.
+      test-a-non-set-seed-is-refused-by-name = {
+        expr = genScope.leastModelUnary {
+          program = unary;
+          seed = [ "a" ];
+        };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: the seed is a list rather than a set of ground atoms — `lfp_{⊇S} T_P` is taken over subsets of the Herbrand base, and a starting set is written as an attribute set whose every value is `true`";
+        };
+      };
+
+      # ★ THE ORDERING CELL. The same seed as the two above and a conjunctive program: the arm owes
+      # the PROGRAM refusal, because fixing the seed would not make this arm answer.
+      test-a-directly-bound-closure-arm-names-the-PROGRAM-before-the-seed = {
+        expr = genScope.leastModelUnary {
+          program = conj;
+          seed = {
+            a = 42;
+          };
+        };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: leastModelUnary is unary-only: the rule for 'z' has a positive body of arity 2";
+        };
+      };
+    };
+
   # ── THE DECLARED RELATION'S INPUT TYPE, AND THE TWO ENTRIES THAT STATE IT ──
   # `gen-graph` ships the CONSTRUCTOR, the shared TYPE and the discriminator, and deliberately no
   # refusal helper: a refusal minted there would name `gen-graph` for a defect at this library's

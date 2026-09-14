@@ -69,6 +69,31 @@ let
       inherit program;
       seed = { };
     };
+
+  # ── THE SEEDED FIXTURE, WHERE THE SEED IS THE SUBJECT ──
+  # `q :- a.` is the smallest program whose answer MOVES with the starting set, so a seed that is
+  # admitted is visibly admitted rather than merely not refused. `atoms = [ "q" "a" ]`, which is
+  # what makes `offbase` below off-base.
+  seedable = genScope.mkProgram {
+    rules = [
+      {
+        head = "q";
+        pos = [ "a" ];
+      }
+    ];
+  };
+  seededUnary =
+    seed:
+    genScope.leastModelUnary {
+      program = seedable;
+      inherit seed;
+    };
+  seededRounds =
+    seed:
+    genScope.leastModelRounds {
+      program = seedable;
+      inherit seed;
+    };
 in
 {
   flake.tests."engine-least-model" = {
@@ -172,6 +197,56 @@ in
         success = true;
         value = true;
       };
+    };
+
+    # ── THE STARTING SET'S CARRIER ──
+    # WHICH message each refusal carries is in `ci/tests-error.nix`, group `least-model-refusals`;
+    # these three cells hold the properties `tryEval` can see — that a non-set is refused
+    # CATCHABLY, that the canonical set is still admitted, and that the guard is a membership
+    # question rather than a containment one.
+    #
+    # A non-set seed used to be an evaluator type error (`expected a set but found a list`), which
+    # `tryEval` does not contain: this cell could not be EVALUATED before the guard, so it crashed
+    # the batch asserter behind `checks.default` rather than failing. What it holds is that the
+    # refusal is now in-language and a caller can recover from one.
+    test-a-seed-that-is-not-a-set-is-refused-CATCHABLY = {
+      expr = builtins.tryEval (builtins.deepSeq (seededUnary [ "a" ]) true);
+      expected = {
+        success = false;
+        value = false;
+      };
+    };
+    # ★ THE LIVE CONTROL. Every refusal cell above and in `tests-error.nix` is equally satisfied by
+    # a guard that refuses EVERYTHING; this is what says the door still opens, on both arms and on
+    # both the empty and the non-empty canonical seed.
+    test-the-seed-guard-admits-the-canonical-set = {
+      expr = builtins.tryEval (
+        builtins.deepSeq [
+          (seededUnary { })
+          (seededUnary { a = true; })
+          (seededRounds { })
+          (seededRounds { a = true; })
+        ] true
+      );
+      expected = {
+        success = true;
+        value = true;
+      };
+    };
+    # THE GUARD IS A MEMBERSHIP QUESTION, NOT A CONTAINMENT ONE. `seed ⊆ program.atoms` would be the
+    # obvious over-narrow reading and it breaks this library's own caller: `wellFoundedModel` seeds
+    # atoms the program never mentions, carrying `parsed.undef` into a base extended past
+    # `program.atoms`. `tests/interpretation.nix`'s `test-the-base-extends-to-carry-only-atoms` is
+    # the end-to-end half of this; this cell is the arm-level one.
+    test-a-seed-atom-outside-the-program-base-stays-admitted = {
+      expr = [
+        (seededUnary { offbase = true; }).derived
+        (seededRounds { offbase = true; }).derived
+      ];
+      expected = [
+        { offbase = true; }
+        { offbase = true; }
+      ];
     };
 
     # ── THE FORCING DISCIPLINE, AS A VALUE ──

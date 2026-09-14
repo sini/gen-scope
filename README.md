@@ -653,6 +653,8 @@ model.verdict "nothing-mentions-this"   # "false" — total on every string
 | `leastModelUnary`  | `builtins.genericClosure` — a C-level worklist, no accumulator, no recursion | **unary bodies only**; refuses conjunctive input by name | not observable (the done-set is C++-side) |
 | `leastModelRounds` | one `T_P` application per round over a flat fold                             | every program                                            | reported                                  |
 
+**And both arms refuse a STARTING SET outside the carrier, by name and with the same sentence.** A starting set is a set of ground atoms — `2^{HB}`, written in the encoding this library both produces (`genAttrs … (_: true)`) and compares (`==`, at the alternating fixpoint's outer test) — so `true` is a member's representative rather than a payload it holds. A seed carrying anything else is refused rather than canonicalised: the closure arm reads a member's NAME and rebuilds its answer canonically while the round arm carries the VALUE through, so the two arms computed *different things about a value the carrier does not contain*, and because the door routes on the program, **adding an unrelated binary rule changed a seeded atom's reported value**. Canonicalising on entry would make the arms agree, and it would admit a value outside the carrier and silently reinterpret it. On the closure arm the conjunctive refusal is raised FIRST — observable only at a directly bound call, where fixing the seed would not make that arm answer anyway.
+
 ```nix
 engine.armFor program                            # "unary" | "conjunctive" — from the program
 engine.leastModel { inherit program; seed = { }; }  # the door: routes, then delegates

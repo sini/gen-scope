@@ -29,6 +29,18 @@
 # `lfp_{⊇seed} T_P` — the least fixpoint taken from `seed` rather than from `∅`. An EMPTY starting
 # set is the ordinary least model, so nothing about the un-seeded case moves.
 #
+# ★ THE STARTING SET'S CARRIER IS `2^{HB}`, AND A PAYLOAD IS REFUSED RATHER THAN CANONICALISED. A
+# starting set is a SET OF GROUND ATOMS, written in the encoding this file both PRODUCES and
+# COMPARES — an attribute set whose every value is `true`. That is not a convention: `well-founded`'s
+# outer alternating loop tests its own fixpoint with `==` on `derived`, so the value a member carries
+# is part of what the library compares, and `true` is the member's representative rather than a
+# payload it holds. A seed outside that carrier is REFUSED at both arm heads (`seedDefect`), because
+# the two arms compute different things about it — the closure arm reads a member's NAME and rebuilds
+# the answer canonically, the round arm carries the VALUE through — so neither the termination
+# argument above nor the two-arm equivalence below covers one. Canonicalising it instead would ADMIT
+# a value outside the carrier and silently reinterpret it, which deletes a caller's belief with no
+# signal; refusing says so.
+#
 # THEORY, and the two halves are cited apart because they are two claims. Van Gelder 1993
 # Definition 4.1 makes an adjoined literal set a PARAMETER of the immediate-consequence
 # transformation, in its own words — negative literals "can be treated as 'additional EDB
@@ -69,6 +81,39 @@ let
   # mistaken for coverage of the rest.
   forceFields = acc: prelude.foldl' (a: v: builtins.seq v a) null (prelude.attrValues acc);
 
+  # THE CARRIER, AS A PREDICATE. `derived` is a set of ground atoms in the canonical encoding this
+  # library both PRODUCES (`genAttrs … (_: true)`) and COMPARES (`==`, at well-founded.nix's outer
+  # fixpoint test), so `true` is the member's representative and not a payload it carries. The reason
+  # is RETURNED and the arm raises it, which is `carrierDefect`'s shape: a guard that only throws is
+  # a guard whose message no cell can assert.
+  #
+  # It names the offending ATOMS and the first one's TYPE and never RENDERS a value, for
+  # `carrierDefect`'s reason — rendering is an abort no caller can catch.
+  #
+  # ★★ NOT TOTAL, AND THE BOUND IS THE LANGUAGE'S, SO IT IS STATED RATHER THAN CLAIMED AWAY. The
+  # check forces each seed value to WHNF and no further, which is the minimum a membership question
+  # needs and more than the closure arm forced before it (that arm read only `attrNames`). On a
+  # ⊥-valued seed the two bottoms part company: a `throw`-valued member becomes a `tryEval`-catchable
+  # refusal, which is what was intended, while an `abort`-valued one becomes an UNCATCHABLE abort.
+  # Wrapping the comparison in `tryEval` would buy the throw case a by-name refusal at the cost of
+  # the caller's own message and would leave the abort case irreducible and still needing this
+  # paragraph — it pays a real cost and discharges nothing. `abort` is the language's ceiling, and a
+  # real ceiling is stated.
+  seedDefect =
+    seed:
+    if !builtins.isAttrs seed then
+      "gen-scope: the seed is a ${builtins.typeOf seed} rather than a set of ground atoms — `lfp_{⊇S} T_P` is taken over subsets of the Herbrand base, and a starting set is written as an attribute set whose every value is `true`"
+    else
+      let
+        offenders = builtins.filter (a: seed.${a} != true) (prelude.attrNames seed);
+      in
+      if offenders == [ ] then
+        null
+      else
+        "gen-scope: the seed carries a value on ${builtins.toJSON offenders}, the first of them a ${
+          builtins.typeOf seed.${prelude.head offenders}
+        }. A starting set is a SET OF GROUND ATOMS and `true` is the only value a member takes, so a payload is REFUSED rather than canonicalised: the closure arm reads a member's NAME and the round arm carries its VALUE through, so the two compute different things about a value the carrier does not contain";
+
   # ── ARM: THE CLOSURE ──
   # `builtins.genericClosure` is a C-level worklist: it holds its done-set outside the evaluator,
   # so it carries no accumulator, spends no frame per step and has no round to force. Its
@@ -79,11 +124,20 @@ let
   # never routes one here, so this refusal is reachable only by a caller binding the arm
   # directly — which is the case it exists for: a caller who has bound the arm by name has
   # asserted a property of their program, and the refusal is where that assertion is checked.
+  #
+  # ★ THE PROGRAM IS CHECKED BEFORE THE SEED, AND THE ORDER IS OBSERVABLE AT EXACTLY ONE CALL — a
+  # directly bound closure arm with a conjunctive program AND a seed outside the carrier. The door
+  # never routes a conjunctive program here, so no other caller can see it. That caller is owed the
+  # unary-only refusal FIRST, because fixing their seed would not make this arm answer: the
+  # unary-only message sends them back to the door, which routes them to `leastModelRounds`, whose
+  # seed refusal then fires from the arm that would actually have answered. Seed-first costs them a
+  # second round trip and says nothing about why they were on the wrong arm.
   leastModelUnary =
     { program, seed }:
     let
       conjunctive = builtins.filter (r: prelude.length r.pos > 1) program.rules;
       offender = prelude.head conjunctive;
+      defect = seedDefect seed;
       # The seeded atoms join the program's own facts, which is the whole of the seeding on this
       # arm: `genericClosure` starts from the union and propagates through the same index, so a
       # seeded atom that appears in a body derives its heads exactly as a fact would.
@@ -103,6 +157,8 @@ let
     in
     if conjunctive != [ ] then
       throw "gen-scope: leastModelUnary is unary-only: the rule for '${offender.head}' has a positive body of arity ${toString (prelude.length offender.pos)}"
+    else if defect != null then
+      throw defect
     else
       {
         derived = prelude.genAttrs (map (item: item.key) closure) (_: true);
@@ -125,6 +181,7 @@ let
   leastModelRounds =
     { program, seed }:
     let
+      defect = seedDefect seed;
       # One round per atom plus the detection round — the theorem's own bound, above. The SEED does
       # not widen it: seeded atoms are present at round zero, so no round is ever spent adding one,
       # and the rounds that do fire still add only atoms some rule heads.
@@ -153,17 +210,22 @@ let
         rounds = 0;
       } roundBound;
     in
-    {
-      inherit (final) derived;
-      # An unconverged result is INVALID, never merely slow, and it is visible on the value
-      # rather than inferable from a cost. Under the bound above it is unreachable; carrying it
-      # is what makes that an observation instead of an assumption.
-      converged = final.done;
-      work = {
-        arm = "conjunctive";
-        inherit (final) rounds;
+    # This arm asserts nothing about the program — it expresses every one — so the seed is its first
+    # and only refusal, and the same reason the closure arm raises.
+    if defect != null then
+      throw defect
+    else
+      {
+        inherit (final) derived;
+        # An unconverged result is INVALID, never merely slow, and it is visible on the value
+        # rather than inferable from a cost. Under the bound above it is unreachable; carrying it
+        # is what makes that an observation instead of an assumption.
+        converged = final.done;
+        work = {
+          arm = "conjunctive";
+          inherit (final) rounds;
+        };
       };
-    };
 
   # ── THE DOOR ──
   # The routing decision is ONE function of the program, and everything that needs to know which
