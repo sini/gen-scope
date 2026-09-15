@@ -69,7 +69,7 @@ in
       # ★ TOTALITY OVER THE DIRECTORY. The forced set and the excluded set together are exactly what
       # is on disk, so a new example is either forced or named here — never silently neither.
       # Shown to fire in the run that landed it: with `demo` absent from this roster the cell read
-      # ❌ against the directory that carries it, while every forcing cell above stayed ✅.
+      # failing against the directory that carries it, while every forcing cell above stayed ✅.
       test-every-example-directory-is-forced-or-excluded-by-name = {
         expr = builtins.attrNames (builtins.readDir examplesDir);
         expected = builtins.sort builtins.lessThan (testsBearing ++ [ "demo" ] ++ excluded);

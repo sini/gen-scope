@@ -364,7 +364,7 @@ in
     # ★ THE MARKER WITHOUT A PATH IS THE OTHER HALF OF THE CONJUNCTION, and this cell is the one
     # that fails LOUDEST when the stop is written on one term: a stop testing the marker alone
     # skips these, hands them to a comparison their functions decide, and then to a `toJSON` that
-    # ABORTS — so this cell does not go red, it takes the runner's cell down with it (☢️). That is
+    # ABORTS — so this cell does not go red, it takes the runner's cell down with it (radioactive). That is
     # the same uncatchable failure the fold's whole precondition exists to remove.
     test-a-derivation-marker-without-a-store-path-is-refused = {
       expr = didThrow (
