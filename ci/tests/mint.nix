@@ -191,11 +191,16 @@ in
     # entry does not participate in the fixpoint that produces kind options, and the observable form
     # of that is a result carrying no handle through which one could be re-opened. Asserting a throw
     # instead would be vacuous — under this construction there is nothing to throw.
-    test-result-record-is-exactly-nodes-edges-strata-and-unrun = {
+    # den-hoag-u528o: `sites` joins as a fifth top-level field, a sibling of `nodes` rather than a
+    # fourth field forced into it (`AGENTS.md:216`'s argument-set closure names `{ emitters, kinds
+    # }`, not the return record — this cell's own name and `expected` list are updated to the new
+    # closed set, five rather than four).
+    test-result-record-is-exactly-nodes-edges-sites-strata-and-unrun = {
       expr = builtins.attrNames (mint fixtureAdmitted);
       expected = [
         "edges"
         "nodes"
+        "sites"
         "strata"
         "unrun"
       ];
@@ -454,6 +459,53 @@ in
       expected = {
         nodes = [ "dup" ];
         content.port = 80;
+      };
+    };
+
+    # ── SITES: A COLLAPSED DIAMOND'S PROVENANCE IS RECOVERABLE (den-hoag-u528o) ──
+    # `mergeGroup`'s success branch computes `sites` from the settled group's own `records` rather
+    # than from `contributed.sites`: that per-key accumulator writes a key's site only on the fold
+    # branch that first sees the key, so a second agreeing producer's site is unrecoverable from it
+    # even read as-is. This is the diamond that dropped one producer before the repair.
+    test-sites-both-producers-recoverable-on-a-collapsed-diamond = {
+      expr =
+        (mint (withKinds [
+          collapseA
+          collapseB
+        ])).sites.dup;
+      expected = [
+        "site-a"
+        "site-b"
+      ];
+    };
+
+    # `sites` rides the same within-pass total order `itemsAt` already imposes rather than
+    # presentation order, so it does not reopen the invariant
+    # `test-arm-1b-within-pass-order-is-byte-identical` already asserts over the whole result — this
+    # cell restates it narrowed to the new field alone.
+    test-sites-order-is-presentation-invariant = {
+      expr =
+        builtins.toJSON
+          (mint (withKinds [
+            collapseA
+            collapseB
+          ])).sites == builtins.toJSON
+          (mint (withKinds [
+            collapseB
+            collapseA
+          ])).sites;
+      expected = true;
+    };
+
+    # A singleton contributor is not a special case: `sites.<id>` is still a list, one element,
+    # never a bare string or an omitted key. Catches an implementation that only handles the
+    # multi-producer branch.
+    test-sites-singleton-producer-is-a-one-element-list = {
+      expr = (mint fixtureAdmitted).sites;
+      expected = {
+        db = [ "site-db" ];
+        web = [ "site-web" ];
+        app = [ "site-app" ];
       };
     };
 

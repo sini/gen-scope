@@ -211,11 +211,11 @@ The evaluator's actual read channels are `self.node id`, `self.get id attrName`,
 
 **Staged minting** — `lib/mint.nix`. The only surface here that BUILDS a scope graph instead of reading one.
 
-| Export       | Signature                                                                                          |
-| ------------ | -------------------------------------------------------------------------------------------------- |
-| `mintStrata` | `{ emitters, kinds } -> { nodes; edges; strata; unrun; }` — argument set CLOSED at those two names |
+| Export       | Signature                                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| `mintStrata` | `{ emitters, kinds } -> { nodes; edges; strata; unrun; sites; }` — argument set CLOSED at those two names |
 
-`emitters` is `[ { pass; identifier; kind; relata; content; site; } ]`, a fixed list; `relata` is `{ <label> = <identifier>; }` and `site` is the string a conflicting-contribution refusal reports. `kinds` is the schema stratum's already-evaluated output — forced to WHNF and never read, which establishes that it is a value this call received rather than a fixpoint it participates in. `nodes` is `{ <identifier> = { identity; kind; content; }; }`; `edges` is `[ { from; to; label; } ]`, one per relatum, the label being the identity key; `strata` is the number of distinct declared passes; `unrun` is the driver's leftovers, empty on every run.
+`emitters` is `[ { pass; identifier; kind; relata; content; site; } ]`, a fixed list; `relata` is `{ <label> = <identifier>; }` and `site` is the string a conflicting-contribution refusal reports. `kinds` is the schema stratum's already-evaluated output — forced to WHNF and never read, which establishes that it is a value this call received rather than a fixpoint it participates in. `nodes` is `{ <identifier> = { identity; kind; content; }; }`; `edges` is `[ { from; to; label; } ]`, one per relatum, the label being the identity key; `strata` is the number of distinct declared passes; `unrun` is the driver's leftovers, empty on every run. `sites` is `{ <identifier> = [ <site>, ... ]; }`, a sibling of `nodes` rather than a field on it — one entry per settled record that contributed to that identifier's collapse, in the merge's own schedule/within order, so a diamond's producers stay recoverable from the graph's own contribution set (ADR-0010 §2) rather than from a single-valued field.
 
 **Neither `hashIdentity` nor a frozen set is a formal.** The authority — `gen-identity`'s, a dependency-free leaf — is injected by `lib/default.nix` (ADR-0016 ruling 5's one minting authority is a fact of the dataflow, not a convention), and the frozen set is built by this module's own fold — a caller-supplied one would be forgeable. Stratum 0 resolves against `{ }`. The identity key set is `[ "identifier" ] ++ attrNames relata`, values being the relata's resolved IDENTITIES and, for the reserved key, the node's own identifier string.
 

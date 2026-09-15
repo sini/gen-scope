@@ -415,6 +415,13 @@ in
               relata
               ;
             inherit (contributed) content;
+            # `sites` names every contributing record's site, computed directly from `records`
+            # rather than reused from `contributed.sites`: that accumulator writes a content key's
+            # site only on the fold branch that first sees the key (mint.nix:381-397 above), so a
+            # second agreeing producer's site is unrecoverable from it even read as-is. `records`
+            # is the full agreeing group at this point — a disagreement has already thrown above —
+            # so this enumerates every producer, in the group's own schedule/within order.
+            sites = map (r: r.site) records;
           };
 
       merged = mapAttrs (_: mergeGroup) (groupBy (r: r.identifier) run.settled);
@@ -439,6 +446,12 @@ in
             inherit label;
           }) (attrNames merged.${identifier}.relata)
         ) (attrNames merged);
+
+        # A sibling of `nodes`, not a fourth field on it: `sites.<identifier>` is the ordered list
+        # of every settled record's site that contributed to that identifier's collapse. Provenance
+        # is the graph's own contribution set (ADR-0010 §2), so it is recoverable here rather than
+        # folded into the closed `{ identity; kind; content; }` node record above.
+        sites = mapAttrs (_: node: node.sites) merged;
 
         # The driver's own two, carried rather than re-derived. `unrun` is the list the driver
         # returned — not filtered, not re-typed, not replaced by a constant. On every run it is empty
