@@ -56,7 +56,12 @@
       # other member of the surface is forced.
       lib =
         let
-          surface = import ./lib {
+          # ★ THE ROOT, NOT `./lib`. `./.` and `./lib` were two independent constructions of one
+          # value and so free to disagree; there is ONE construction site now, and the two entry
+          # paths differ only in who supplies the arguments. Here the flake supplies them, so
+          # `follows` governs every argument passed, while the standalone path falls back to
+          # `ci/flake.lock`.
+          surface = import ./. {
             prelude = gen-prelude.lib;
             graph = gen-graph.lib;
             schema = gen-schema.lib;
