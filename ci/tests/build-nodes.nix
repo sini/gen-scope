@@ -290,5 +290,124 @@ in
       expr = (genScope.buildRoots { parentGraph = genScope.vertex "n"; }).nodes.n.type;
       expected = null;
     };
+
+    # ── MULTI-PARENT ATTACHMENT: `mintAttachmentId` / `parseParent` ──
+    # `parentIndex`'s own refusal above (`test-multiple-parent-edges-strict-throws`, O9) recommends
+    # minting a distinct `@`-suffixed id per parent; these cells are the convention it names,
+    # shipped. `ci/tests-error.nix`'s `multi-parent-attachment-refusals` carries the message text
+    # for the boolean doors below (O5-O7).
+
+    # O1 — both functions are on the exported surface, alongside the pre-existing constructor.
+    test-O1-mintAttachmentId-is-exported = {
+      expr = builtins.isFunction genScope.mintAttachmentId;
+      expected = true;
+    };
+    test-O1-parseParent-is-exported = {
+      expr = builtins.isFunction genScope.parseParent;
+      expected = true;
+    };
+    test-O1-control-buildRoots-is-still-exported = {
+      expr = builtins.isFunction genScope.buildRoots;
+      expected = true;
+    };
+
+    # O2 — round trip, ordinary case.
+    test-O2-mintAttachmentId-round-trips-an-ordinary-attachment = {
+      expr =
+        let
+          minted = genScope.mintAttachmentId "shared" [ "p1" "p2" ] "p2";
+        in
+        {
+          inherit minted;
+          parsedBack = genScope.parseParent minted;
+        };
+      expected = {
+        minted = "shared@p2";
+        parsedBack = "p2";
+      };
+    };
+
+    # O3 — the load-bearing "no hidden fork" oracle: a parent id that itself contains '@' (chained
+    # attachment) round-trips correctly, because the split takes everything after the FIRST '@'.
+    test-O3-parseParent-round-trips-a-parent-that-itself-contains-at = {
+      expr =
+        let
+          minted = genScope.mintAttachmentId "shared" [ "p@q" "other" ] "p@q";
+        in
+        {
+          inherit minted;
+          parsedBack = genScope.parseParent minted;
+        };
+      expected = {
+        minted = "shared@p@q";
+        parsedBack = "p@q";
+      };
+    };
+
+    # O4 — id stability: a single-parent bareId is returned unchanged, and parses back to `null`
+    # (no shortcut encoded — `node.parent` is already authoritative for it).
+    test-O4-single-parent-bareId-is-returned-unchanged = {
+      expr =
+        let
+          minted = genScope.mintAttachmentId "solo" [ "onlyparent" ] "onlyparent";
+        in
+        {
+          minted = minted;
+          parsedBack = genScope.parseParent minted;
+        };
+      expected = {
+        minted = "solo";
+        parsedBack = null;
+      };
+    };
+    test-O4-a-bare-root-id-parses-to-null = {
+      expr = genScope.parseParent "shaft1";
+      expected = null;
+    };
+
+    # O5-O7 — THAT each door fires. WHICH one, and its exact text, is in `tests-error.nix`.
+    test-O5-door-bareId-with-at-refuses = {
+      expr = !(builtins.tryEval (genScope.mintAttachmentId "heddle@x" [ "a" "b" ] "a")).success;
+      expected = true;
+    };
+    test-O6-door-parent-not-in-parents-refuses = {
+      expr = !(builtins.tryEval (genScope.mintAttachmentId "heddle" [ "a" "b" ] "c")).success;
+      expected = true;
+    };
+    test-O7-door-non-string-bareId-refuses-catchably = {
+      expr = !(builtins.tryEval (genScope.mintAttachmentId { } [ "a" "b" ] "a")).success;
+      expected = true;
+    };
+    test-O7-door-non-string-parseParent-id-refuses-catchably = {
+      expr = !(builtins.tryEval (genScope.parseParent { })).success;
+      expected = true;
+    };
+
+    # O8/O9 — integration: `buildRoots` is UNCHANGED. A pre-multiplied `@`-suffixed id already
+    # resolves correctly (O8, a regression oracle on the construction touching nothing in
+    # `buildRoots`), and the pre-existing partial-function refusal it composes with is untouched
+    # (O9 — see `test-multiple-parent-edges-strict-throws` above, which is that same regression
+    # oracle already in this suite).
+    test-O8-buildRoots-resolves-ids-minted-by-mintAttachmentId = {
+      expr =
+        let
+          h1 = genScope.mintAttachmentId "heddle" [ "shaft1" "shaft2" ] "shaft1";
+          h2 = genScope.mintAttachmentId "heddle" [ "shaft1" "shaft2" ] "shaft2";
+          built = genScope.buildRoots {
+            parentGraph = genScope.overlays [
+              (genScope.edge h1 "shaft1")
+              (genScope.edge h2 "shaft2")
+            ];
+          };
+        in
+        {
+          shaft1Parent = built.nodes.${h1}.parent;
+          shaft2Parent = built.nodes.${h2}.parent;
+        };
+      expected = {
+        shaft1Parent = "shaft1";
+        shaft2Parent = "shaft2";
+      };
+    };
   };
 }

@@ -337,10 +337,11 @@ in
     # The library's surface minus this module's one name. The figure is a baseline over the export
     # surface and re-derives whenever that surface grows. 91 rather than 90: `cascade.nix` now
     # publishes `isKindSet` beside `mkKinds`, the discriminator the two entry guards bind as a
-    # formal, and `merge-surface` folds every module's exports into one flat surface.
+    # formal, and `merge-surface` folds every module's exports into one flat surface. 93 rather
+    # than 91: `build-nodes.nix` now also publishes `mintAttachmentId`/`parseParent`.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 91;
+      expected = 93;
     };
     # One: the fold's entry, and nothing else. This cell is the module's inventory, and an export it
     # does not list is an export nothing measured.

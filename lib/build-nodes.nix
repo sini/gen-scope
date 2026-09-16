@@ -253,7 +253,56 @@ let
   # `allNodesWhere`) answers `[ "nodeOrder" "nodes" ]` with no error at all. Refusing the name means
   # that call cannot be written, rather than being detected after it is.
   buildNodes = throw "gen-scope: `buildNodes` is retired. Use `buildRoots`, which returns `{ nodes, nodeOrder }` — the node set together with its declared vertex order. Renaming the call is NOT sufficient: the evaluators take that whole record as `scope`, not a bare node map as `roots`, so `eval { roots = buildRoots {…}; }` is refused too.";
+
+  # ── MULTI-PARENT ATTACHMENT, THE OTHER HALF OF THE `P`-PARTIAL-FUNCTION REFUSAL ──
+  # `parentIndex`'s own throw above recommends minting a distinct `@`-suffixed id per parent when one
+  # root is conceptually attached under N>1 parents, but ships neither direction of that convention.
+  # These two pure functions ship it, as an opt-in the CALLER applies before building `parentGraph` —
+  # `buildRoots` itself is untouched, because a pre-multiplied id already resolves correctly today
+  # (each minted id carries exactly one `P` edge, so the partial-function constraint is never
+  # violated in the first place). Co-located here because the recommending error string lives here,
+  # and `mergeSurface` (lib/merge-surface.nix) flattens every module's exports automatically, so no
+  # new wiring seam is needed to reach the top-level surface.
+  #
+  # Neither function calls `hashIdentity` or reaches `mint.nix`: an `@`-suffixed id is an
+  # IDENTIFIER (ADR-0016 ruling 5's "taken by declaration"), never routed through the one minting
+  # authority for IDENTITY.
+  mintAttachmentId =
+    bareId: parents: parent:
+    if !(builtins.isString bareId) then
+      throw "gen-scope: mintAttachmentId: bareId must be a string, got ${builtins.typeOf bareId}"
+    else if !(builtins.isList parents) then
+      throw "gen-scope: mintAttachmentId: parents must be a list, got ${builtins.typeOf parents}"
+    else if !(builtins.isString parent) then
+      throw "gen-scope: mintAttachmentId: parent must be a string, got ${builtins.typeOf parent}"
+    else if builtins.match ".*@.*" bareId != null then
+      throw "gen-scope: mintAttachmentId: bareId '${bareId}' contains '@', reserved to separate a multiply-attached id from its parent (Neron §2.2, buildRoots' own throw). Choose a bareId with no '@'."
+    else if builtins.length parents <= 1 then
+      bareId
+    else if !(builtins.elem parent parents) then
+      throw "gen-scope: mintAttachmentId: parent '${parent}' is not a member of the parents passed for '${bareId}'."
+    else
+      "${bareId}@${parent}";
+
+  # The inverse: recovers the parent half of a `mintAttachmentId`-minted id, or `null` on a bare
+  # (unattached, or single-parent) id. First-`@`-split, so a parent id that itself contains `@`
+  # (chained/nested attachment) round-trips correctly — everything after the FIRST `@` is the
+  # parent, whatever it contains.
+  parseParent =
+    id:
+    if !(builtins.isString id) then
+      throw "gen-scope: parseParent: id must be a string, got ${builtins.typeOf id}"
+    else
+      let
+        m = builtins.match "[^@]*@(.*)" id;
+      in
+      if m == null then null else builtins.head m;
 in
 {
-  inherit buildRoots buildNodes;
+  inherit
+    buildRoots
+    buildNodes
+    mintAttachmentId
+    parseParent
+    ;
 }

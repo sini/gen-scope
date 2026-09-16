@@ -1436,6 +1436,60 @@ in
     };
   };
 
+  # ── MULTI-PARENT ATTACHMENT, THE DOORS ──
+  # `ci/tests/build-nodes.nix` asserts THAT `mintAttachmentId`/`parseParent` refuse each of their
+  # three decidable failure modes (O5/O6/O7 in the carrying spec); WHICH one fired is a claim about
+  # the message, asserted here.
+  config.flake.testsError.multi-parent-attachment-refusals = {
+    # O5 — bareId already contains '@'.
+    test-mintAttachmentId-refuses-a-bareId-containing-at = {
+      expr = genScope.mintAttachmentId "heddle@shaft1" [ "shaft1" "shaft2" ] "shaft1";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: mintAttachmentId: bareId 'heddle@shaft1' contains '@', reserved to separate a multiply-attached id from its parent (Neron §2.2, buildRoots' own throw). Choose a bareId with no '@'.";
+      };
+    };
+
+    # O6 — parent is not a member of parents.
+    test-mintAttachmentId-refuses-a-parent-not-in-parents = {
+      expr = genScope.mintAttachmentId "heddle" [ "shaft1" "shaft2" ] "shaft3";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: mintAttachmentId: parent 'shaft3' is not a member of the parents passed for 'heddle'.";
+      };
+    };
+
+    # O7 — non-string/non-list arguments, each named with its actual (wrong) type.
+    test-mintAttachmentId-refuses-a-non-string-bareId = {
+      expr = genScope.mintAttachmentId 1 [ "shaft1" "shaft2" ] "shaft1";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: mintAttachmentId: bareId must be a string, got int";
+      };
+    };
+    test-mintAttachmentId-refuses-a-non-list-parents = {
+      expr = genScope.mintAttachmentId "heddle" "shaft1" "shaft1";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: mintAttachmentId: parents must be a list, got string";
+      };
+    };
+    test-mintAttachmentId-refuses-a-non-string-parent = {
+      expr = genScope.mintAttachmentId "heddle" [ "shaft1" "shaft2" ] 3;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: mintAttachmentId: parent must be a string, got int";
+      };
+    };
+    test-parseParent-refuses-a-non-string-id = {
+      expr = genScope.parseParent [ ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: parseParent: id must be a string, got list";
+      };
+    };
+  };
+
   # ── THE INTERPRETATION'S REFUSALS, WHERE THEIR CONTENT LIVES ──
   # `ci/tests/interpretation.nix` asserts THAT each of these fires, which is a boolean `tryEval`
   # can read. WHICH one fired is a claim about the message, and four booleans are equally satisfied

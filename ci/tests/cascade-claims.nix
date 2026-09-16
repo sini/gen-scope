@@ -2035,14 +2035,16 @@ in
         "leastModel"
       ];
     };
-    # 87 rather than 80: the fold vocabulary, the two drivers, the minting entry and the cold fold
+    # 89 rather than 80: the fold vocabulary, the two drivers, the minting entry and the cold fold
     # are each a module of their own, so `folds`, `stratify`, `ascend`, `mintStrata` and
     # `foldEquations` are part of the library's surface WITHOUT being one of this module's names —
     # which is exactly what an incumbent is. The figure is a baseline over the library's export
-    # surface and re-derives whenever that surface grows.
+    # surface and re-derives whenever that surface grows. 89 rather than 87: `build-nodes.nix` now
+    # also publishes `mintAttachmentId`/`parseParent`, the multi-parent attachment convention
+    # `buildRoots`' own partial-function refusal recommends but did not, until now, ship.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 87;
+      expected = 89;
     };
     # Four doors and one predicate. The doors are the registration and run entries and nothing else
     # — the consumer accessors that used to sit beside them reconstructed a list the run already
