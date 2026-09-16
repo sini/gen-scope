@@ -7,9 +7,12 @@
 # ITSELF rather than falling back; the default is resolved from `./ci/flake.lock`, read as local
 # data. There is NO `...`: an argument this root does not declare is a loud error, not a silent drop.
 #
-# THE PIN SOURCE IS `ci/flake.lock`, NOT THE ROOT `flake.lock`. The root lock stays the flake path's
-# lock and is no longer read by Nix code, which is what lets one rule hold across the roster: a root
-# lock exists only where the root flake declares inputs, while `ci/flake.lock` exists everywhere.
+# THE PIN SOURCE IS THE ROOT `flake.lock`, NOT `ci/flake.lock` (ADR-0037 as amended 2026-09-15): a
+# library's dependency graph and its test/oracle graph are SEPARATE, and the second must not enter
+# the first — "whatever the optimal pattern is, it can no longer be DEFER TO THE TEST LOCK". The
+# ci lock keeps every input it has, including any cycle it carries, and is the TEST graph's own
+# pin source; no library code reads it any more. All 4 dependencies are root inputs of the root
+# lock, so every path below is one segment.
 #
 # `src` AND `dep` ARE FORMALS, NOT `let` BINDINGS, AND THAT IS THE INJECTABLE RESOLVER SEAM — the
 # one channel a cell can close. `src` is the only expression here that fetches; everything else
@@ -39,7 +42,7 @@
 # The `let` is OUTSIDE the lambda because a formal's default is evaluated in the FORMAL scope, which
 # does not see a `let` in the body.
 let
-  lock = builtins.fromJSON (builtins.readFile ./ci/flake.lock);
+  lock = builtins.fromJSON (builtins.readFile ./flake.lock);
   # A direct edge IS the node key; a `follows` value is a PATH resolved segment by segment from this
   # lock's own root. Never by indexing `lock.nodes.<label>` — a last-segment shortcut reads a
   # different node: this library's OWN `ci/flake.lock` resolves its `gen-prelude` root input to a
