@@ -89,14 +89,13 @@ in
   graph ? inputs.gen-graph or (dep [ "gen-graph" ]),
   identity ? inputs.gen-identity or (dep [ "gen-identity" ]),
   # The reflection authority — the typed record registry and the identity-key REFLECTION that
-  # decides which of a kind's options count. Measured (this migration): `schema` does not appear
-  # past its own declaration anywhere in `lib/*.nix` — not the minting path alone, the whole
-  # directory — so it is CONSTRUCTED and forced by this shim's eager body but reached by nothing
-  # `lib/default.nix` builds. That is not a licence to drop it: `den-hoag-ams0d` fences removal on
-  # exactly the narrower (minting-path) measurement, and states in terms that the wider claim —
-  # unread across gen-scope's whole PUBLISHED surface, which a consumer could still reach through —
-  # is not established by it. `0pk67-injection-test` is dispatched on that wider claim; this formal
-  # stays wired until that lands.
+  # decides which of a kind's options count. Measured, wide domain (all of `lib/*.nix`, not the
+  # minting path alone): `schema` does not appear past its own declaration anywhere in the
+  # directory, so it is CONSTRUCTED and forced by this shim's eager body but reached by nothing
+  # `lib/default.nix` builds. That is not a licence to drop it: `den-hoag-ams0d` — the row this
+  # measurement lives on — is itself blocked by `den-hoag-mehb8`'s fence on every library-input
+  # removal ("No input is removed anywhere until this carrier is read"); this formal stays wired
+  # until that fence lifts.
   schema ? inputs.gen-schema or (dep [ "gen-schema" ]),
 }:
 # THE BODY IS EAGER, AND THAT IS WHAT MAKES THE ENTRY CELL TOTAL RATHER THAN PARTIAL. `forced` forces

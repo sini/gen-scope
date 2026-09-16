@@ -16,9 +16,14 @@
   # content-address formulas for one node. The authority reaches a minting module by injection from
   # `lib/default.nix`, never by that module importing a library of its own, and gen-scope
   # re-exports none of it: re-exporting another library's value re-exports its build (ADR-0014),
-  # and the count of minting authorities is one (ADR-0016 ruling 5). gen-schema stays an input for
-  # its own concern — the typed record registry and the identity-key REFLECTION that decides which
-  # of a kind's options count — which is a different question from where the formula lives.
+  # and the count of minting authorities is one (ADR-0016 ruling 5). gen-schema stays a declared
+  # input that `lib/` does not read: `schema` occurs once in this library's source, at its own
+  # formal (`lib/default.nix:13`), never past that declaration. Removal is fenced by
+  # `den-hoag-mehb8` (den-ag-design tracker) — "No input is removed anywhere until this carrier is
+  # read" — until that carrier is read; the input is retained, not justified by use. gen-schema
+  # reaching this library's minting capability is a separate question, settled elsewhere:
+  # `den-hoag-ams0d`'s arm B1 resolves it at the hub, injecting `scope` into gen-schema's own
+  # import under ADR-0014's constructing arm, not through this edge.
   #
   # The `follows` is load-bearing, not hygiene. Two instances of this library in one evaluation are
   # two identity formulas for the same node — a failure measured in a shipped consumer, not a
