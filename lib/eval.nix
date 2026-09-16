@@ -353,7 +353,7 @@ let
       throw "gen-scope: node '${id}' declares child(ren) ${builtins.toJSON unregistered} that the scope does not carry. `children` SELECTS among the nodes the scope already registered — it is not a growth channel, and a record under an unregistered key is a node minted while the attribute is read, whose kind nothing can have checked descends its host's. Growth is the spawn channel's: declare it on the host's kind as `mkKind { spawns = { <produced-kind> = builder; }; }` with the produced kind named in that kind's `below`. To keep a node here, register it in the scope and select it.";
 
   spawnFrom =
-    kinds: ev: id:
+    kinds: nodes: ev: id:
     let
       hostKind = (ev.node id).type or null;
       # A node of NO kind spawns nothing, and that is the honest reading rather than a hole: an
@@ -372,9 +372,22 @@ let
         produced:
         let
           builder = spawns.${produced};
+          raw =
+            if isCircularDecl builder then
+              throw "gen-scope: kind '${hostKind}' declares spawn '${produced}' whose builder is a circular declaration. A spawn builder computes the NODE SET, and wrapping it in `circular` makes that set a fixed point of its own iterate — the per-step growth the spawn-read restriction refuses. A spawned node's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function."
+            else
+              builder (spawnHandle ev) id;
+          # Checked against `raw`'s own KEYS — eager, and forced as WHNF the moment `stamped` is —
+          # rather than inside the `mapAttrs` value below: a key colliding with an ALREADY-REGISTERED
+          # node is a key `resolveNode` never re-derives past its roots-first short-circuit, so a
+          # check living in that lazy per-record thunk would never be demanded and never fire for
+          # exactly the case it exists to catch.
+          collidingWithRegistered = builtins.filter (childId: nodes ? ${childId}) (builtins.attrNames raw);
         in
-        builtins.mapAttrs
-          (
+        if collidingWithRegistered != [ ] then
+          throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${builtins.head collidingWithRegistered}', which is already a registered node's id. A spawned key mints an identity nothing declared; colliding with a key the scope already carries discards whichever record materializes second, silently. Choose a key no registered node already carries."
+        else
+          builtins.mapAttrs (
             childId: record:
             if record ? type then
               throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
@@ -386,15 +399,19 @@ let
                 type = produced;
                 parent = id;
               }
-          )
-          (
-            if isCircularDecl builder then
-              throw "gen-scope: kind '${hostKind}' declares spawn '${produced}' whose builder is a circular declaration. A spawn builder computes the NODE SET, and wrapping it in `circular` makes that set a fixed point of its own iterate — the per-step growth the spawn-read restriction refuses. A spawned node's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function."
-            else
-              builder (spawnHandle ev) id
-          );
+          ) raw;
     in
-    prelude.foldl' (acc: produced: acc // stamped produced) { } (builtins.attrNames spawns);
+    prelude.foldl' (
+      acc: produced:
+      let
+        next = stamped produced;
+        collidingWithSibling = builtins.filter (childId: acc ? ${childId}) (builtins.attrNames next);
+      in
+      if collidingWithSibling != [ ] then
+        throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${builtins.head collidingWithSibling}', which an earlier spawn on this same host already produced. Two spawns sharing a key on one host silently overwrite one another. Choose a key none of this host's own spawns already produced."
+      else
+        acc // next
+    ) { } (builtins.attrNames spawns);
 
   # The attribute set the evaluators actually run: the caller's, with the selection channel guarded
   # and the spawn channel the registry declares added. Writing the spawn channel by hand is refused —
@@ -427,7 +444,7 @@ let
     else
       selected
       // {
-        ${spawnChannel} = spawnFrom kinds;
+        ${spawnChannel} = spawnFrom kinds checked.nodes;
       };
 
   eval =

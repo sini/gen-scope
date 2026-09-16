@@ -1643,6 +1643,93 @@ in
       };
     };
 
+  # ── THE SPAWNED KEY'S CONTRACT, TWO COLLISION FLAVORS ──
+  # A spawn builder's return is keyed by the child it names, and that key was checked against
+  # neither the scope's own registered nodes nor a sibling spawn's own output — either one silently
+  # discards whichever record materializes second. Both cells build their own fixture by hand
+  # (rather than through `domain-carrier-refusals`' `runWith`) because that helper's scope carries
+  # exactly one registered vertex, and a registered-id collision needs a second one to collide with.
+  config.flake.testsError.spawn-key-collision-refusals = {
+    # flavor (B): the spawned key equals an ALREADY-REGISTERED node's id.
+    test-a-spawned-key-colliding-with-a-registered-node-is-refused-by-name = {
+      expr =
+        builtins.deepSeq
+          (genScope.eval {
+            scope = genScope.buildRoots {
+              parentGraph = genScope.overlay (genScope.vertex "a") (genScope.vertex "b");
+              types.a = "host";
+              types.b = "leaf";
+              decls.a = { };
+              decls.b = { };
+              kinds = genScope.mkKinds [
+                (genScope.mkKind { name = "leaf"; })
+                (genScope.mkKind {
+                  name = "host";
+                  below = [ "leaf" ];
+                  spawns.leaf = _self: id: {
+                    b = {
+                      id = "b";
+                      parent = id;
+                      decls = { };
+                    };
+                  };
+                })
+              ];
+            };
+            attributes.children = _self: _id: { };
+          }).allNodes
+          null;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: kind 'host' spawns 'leaf' and its builder returned a child 'b', which is already a registered node's id. A spawned key mints an identity nothing declared; colliding with a key the scope already carries discards whichever record materializes second, silently. Choose a key no registered node already carries.";
+      };
+    };
+
+    # flavor (C): two of a host's OWN spawns produce the same key.
+    test-a-spawned-key-colliding-with-a-sibling-spawn-is-refused-by-name = {
+      expr =
+        builtins.deepSeq
+          (genScope.eval {
+            scope = genScope.buildRoots {
+              parentGraph = genScope.vertex "a";
+              types.a = "host";
+              decls.a = { };
+              kinds = genScope.mkKinds [
+                (genScope.mkKind { name = "leafOne"; })
+                (genScope.mkKind { name = "leafTwo"; })
+                (genScope.mkKind {
+                  name = "host";
+                  below = [
+                    "leafOne"
+                    "leafTwo"
+                  ];
+                  spawns.leafOne = _self: id: {
+                    shared = {
+                      id = "shared";
+                      parent = id;
+                      decls = { };
+                    };
+                  };
+                  spawns.leafTwo = _self: id: {
+                    shared = {
+                      id = "shared";
+                      parent = id;
+                      decls = { };
+                    };
+                  };
+                })
+              ];
+            };
+            attributes.children = _self: _id: { };
+          }).allNodes
+          null;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: kind 'host' spawns 'leafTwo' and its builder returned a child 'shared', which an earlier spawn on this same host already produced. Two spawns sharing a key on one host silently overwrite one another. Choose a key none of this host's own spawns already produced.";
+      };
+    };
+  };
+
   # ── THE CIRCULAR CARRIER'S REFUSALS, EACH BY ITS OWN TEXT ──
   # A caller must act differently on each of these and `tryEval` cannot tell them apart: an absent
   # carrier is a declaration missing, a malformed one is a declaration wrong, an antitone step is
