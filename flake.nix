@@ -1,42 +1,39 @@
 {
   description = "gen-scope: demand-driven attribute grammar evaluator over algebraic scope graphs";
 
-  # gen-scope is nixpkgs-lib-free: its inputs are gen-prelude, gen-graph, gen-schema and
-  # gen-identity, all four pure and nixpkgs-lib-free — gen-schema's `./lib` is checked by that
-  # library's own `ci/tests/purity.nix`, which pulls nixpkgs no further than its `ci/`. The HOAG
-  # evaluator is pure list/attr combinators + builtins — no module system, no nixpkgs.lib.
+  # gen-scope is nixpkgs-lib-free: its inputs are gen-prelude, gen-graph and gen-identity, all three
+  # pure and nixpkgs-lib-free. The HOAG evaluator is pure list/attr combinators + builtins — no
+  # module system, no nixpkgs.lib.
   #
   # gen-graph is the ENGINE's dependency, not the evaluator's: the well-founded engine consumes
   # that library's one published SCC-partition front door rather than carrying a second
   # partitioner, because reverse reachability and the condensation are its concern.
   #
   # gen-identity is the identity authority's home — a DEPENDENCY-FREE LEAF, taken directly rather
-  # than through gen-schema, because a mint reached through a second library is a mint whose
+  # than through an intermediary, because a mint reached through a second library is a mint whose
   # identity depends on that library's pin, and two pins of the intermediary are two
   # content-address formulas for one node. The authority reaches a minting module by injection from
   # `lib/default.nix`, never by that module importing a library of its own, and gen-scope
   # re-exports none of it: re-exporting another library's value re-exports its build (ADR-0014),
-  # and the count of minting authorities is one (ADR-0016 ruling 5). gen-schema stays a declared
-  # input that `lib/` does not read: `schema` occurs once in this library's source, at its own
-  # formal (`lib/default.nix:13`), never past that declaration. Removal is fenced by
-  # `den-hoag-mehb8` (den-ag-design tracker) — "No input is removed anywhere until this carrier is
-  # read" — until that carrier is read; the input is retained, not justified by use. gen-schema
-  # reaching this library's minting capability is a separate question, settled elsewhere:
-  # `den-hoag-ams0d`'s arm B1 resolves it at the hub, injecting `scope` into gen-schema's own
-  # import under ADR-0014's constructing arm, not through this edge.
+  # and the count of minting authorities is one (ADR-0016 ruling 5).
   #
-  # The `follows` is load-bearing, not hygiene. Two instances of this library in one evaluation are
-  # two identity formulas for the same node — a failure measured in a shipped consumer, not a
-  # hazard imagined here.
+  # ★★ gen-schema IS NOT AN INPUT, AND THE ABSENCE IS THE DEPENDENCY FACT RATHER THAN AN OMISSION.
+  # Nothing this library builds reads it: over every file in `lib/`, `schema` occurs only in prose
+  # about the schema STRATUM — a data stage of this evaluator, a different thing from the library of
+  # that name — and in no expression at all. A declared-and-unread input is not free: it is a second
+  # pin of a library this one never evaluates, and it is the back-edge on which a flake cycle
+  # between the two would rest the moment gen-schema takes an edge this way. The reflection
+  # authority reaches the evaluator at a consumer that already holds both, never here. Re-adding it
+  # takes a reader in `lib/`, not a caller who happens to have one.
+  #
+  # A CONSUMER's `follows` over this library is load-bearing, not hygiene. Two instances of gen-scope
+  # in one evaluation are two identity formulas for the same node — a failure measured in a shipped
+  # consumer, not a hazard imagined here.
   inputs = {
     gen-prelude.url = "github:sini/gen-prelude";
     gen-graph.url = "github:sini/gen-graph";
-    gen-schema = {
-      url = "github:sini/gen-schema";
-      inputs.gen-prelude.follows = "gen-prelude";
-    };
     # The one minting authority, now a dependency-free leaf. It is taken directly rather than
-    # through gen-schema: a mint reached through a second library is a mint whose identity
+    # through an intermediary: a mint reached through a second library is a mint whose identity
     # depends on that library's pin.
     gen-identity.url = "github:sini/gen-identity";
   };
@@ -45,7 +42,6 @@
     {
       gen-prelude,
       gen-graph,
-      gen-schema,
       gen-identity,
       ...
     }:
@@ -69,7 +65,6 @@
           surface = import ./. {
             prelude = gen-prelude.lib;
             graph = gen-graph.lib;
-            schema = gen-schema.lib;
             identity = gen-identity.lib;
           };
         in

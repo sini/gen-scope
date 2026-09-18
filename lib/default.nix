@@ -10,7 +10,6 @@
 {
   prelude,
   graph,
-  schema,
   identity,
 }:
 let

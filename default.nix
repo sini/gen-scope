@@ -1,6 +1,6 @@
 # Standalone (non-flake) entry. Flake consumers should use the `.lib` output.
 #
-# gen-scope is nixpkgs-lib-free: it depends on gen-prelude, gen-graph, gen-identity and gen-schema.
+# gen-scope is nixpkgs-lib-free: it depends on gen-prelude, gen-graph and gen-identity.
 #
 # THREE CHANNELS, ONE PRECEDENCE, AND NONE OF THEM IS A PROBE. A named formal per dependency wins;
 # the `inputs` bag is next, tested by attrset membership so a supplied-but-throwing value throws as
@@ -11,7 +11,7 @@
 # library's dependency graph and its test/oracle graph are SEPARATE, and the second must not enter
 # the first — "whatever the optimal pattern is, it can no longer be DEFER TO THE TEST LOCK". The
 # ci lock keeps every input it has, including any cycle it carries, and is the TEST graph's own
-# pin source; no library code reads it any more. All 4 dependencies are root inputs of the root
+# pin source; no library code reads it any more. All 3 dependencies are root inputs of the root
 # lock, so every path below is one segment.
 #
 # `src` AND `dep` ARE FORMALS, NOT `let` BINDINGS, AND THAT IS THE INJECTABLE RESOLVER SEAM — the
@@ -27,17 +27,16 @@
 # dependency's whole formal list by hand — a second signature nothing compares against the first.
 #
 # THE HAND-WRITTEN THREADING IS GONE, AND WHAT REPLACES IT IS PIN COHERENCE RATHER THAN DATAFLOW.
-# This shim used to pass its own `prelude` down into gen-graph and gen-schema so that one evaluator
-# over one authority served both — two instances being two content-address formulas for one node.
+# This shim used to pass its own `prelude` down into its siblings so that one evaluator over one
+# authority served them all — two instances being two content-address formulas for one node.
 # Coherent `ci/flake.lock` pins resolve to one store path and `import` memoises, so there is no
 # second instance for a threading to collapse. What makes the count one is now the PINS, and the
 # roster-wide coherence check that keeps them coherent is the hub's rather than this file's.
 #
 # `identity` IS THE ONE MINTING AUTHORITY: a dependency-free leaf, so its dependency root is a bare
-# value and `dep` passes it through unapplied. It is wired to `./lib` and NOT to `schema` — the
-# flake path binds `schema` from gen-schema's own output, which at the pinned rev takes no
-# identity, so naming one here would be the standalone path claiming a coupling the tested path
-# does not have.
+# value and `dep` passes it through unapplied. It reaches `./lib` and nothing else: the minting
+# module is handed the one function it needs by injection, so there is no second library here for
+# the authority to be reached through and no intermediary pin for its identity to depend on.
 #
 # The `let` is OUTSIDE the lambda because a formal's default is evaluated in the FORMAL scope, which
 # does not see a `let` in the body.
@@ -91,15 +90,6 @@ in
   prelude ? inputs.gen-prelude or (dep [ "gen-prelude" ]),
   graph ? inputs.gen-graph or (dep [ "gen-graph" ]),
   identity ? inputs.gen-identity or (dep [ "gen-identity" ]),
-  # The reflection authority — the typed record registry and the identity-key REFLECTION that
-  # decides which of a kind's options count. Measured, wide domain (all of `lib/*.nix`, not the
-  # minting path alone): `schema` does not appear past its own declaration anywhere in the
-  # directory, so it is CONSTRUCTED and forced by this shim's eager body but reached by nothing
-  # `lib/default.nix` builds. That is not a licence to drop it: `den-hoag-ams0d` — the row this
-  # measurement lives on — is itself blocked by `den-hoag-mehb8`'s fence on every library-input
-  # removal ("No input is removed anywhere until this carrier is read"); this formal stays wired
-  # until that fence lifts.
-  schema ? inputs.gen-schema or (dep [ "gen-schema" ]),
 }:
 # THE BODY IS EAGER, AND THAT IS WHAT MAKES THE ENTRY CELL TOTAL RATHER THAN PARTIAL. `forced` forces
 # every wired dependency to WHNF before `./lib` sees it, so a default that cannot resolve is loud AT
@@ -113,7 +103,6 @@ let
       prelude
       graph
       identity
-      schema
       ;
   };
   forced = builtins.deepSeq (builtins.mapAttrs (_: builtins.typeOf) deps) null;

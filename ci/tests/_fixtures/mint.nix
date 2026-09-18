@@ -49,7 +49,7 @@ let
   mint = genScope.mintStrata;
   mintModule = import ../../../lib/mint.nix;
 
-  # A substituted authority. Identity minting is `gen-schema`'s and stays there; what a cell needs
+  # A substituted authority. Identity minting is `gen-identity`'s and stays there; what a cell needs
   # is a total function of the same arity whose output it can write down, so that a refusal naming
   # an identity has a text a cell can anchor.
   stubIdentity =

@@ -10,15 +10,11 @@
     # The identity authority, pinned here as well as at the root because this flake builds the
     # library from its OWN inputs (`import ../lib` below): a pin declared only at the root would
     # leave the suite asserting identity behaviour under a revision free to drift from the one the
-    # library ships. The `follows` is what keeps the two declarations one instance — two instances
-    # in one evaluation are two identity formulas for the same node.
-    gen-schema = {
-      url = "github:sini/gen-schema";
-      inputs.gen-prelude.follows = "gen-prelude";
-    };
+    # library ships.
     gen-identity.url = "github:sini/gen-identity";
     # nixpkgs is the CI runner's dependency (test harness, treefmt) and supplies the
-    # `lib` the test modules use. The library itself (../lib) takes gen-prelude and gen-graph.
+    # `lib` the test modules use. The library itself (../lib) takes gen-prelude, gen-graph and
+    # gen-identity.
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
   };
 
@@ -27,7 +23,6 @@
       gen-harness,
       gen-prelude,
       gen-graph,
-      gen-schema,
       gen-identity,
       ...
     }:
@@ -36,7 +31,6 @@
       genScope = import ../lib {
         inherit prelude;
         graph = gen-graph.lib;
-        schema = gen-schema.lib;
         identity = gen-identity.lib;
       };
     in
@@ -49,16 +43,15 @@
       # the same graph surface the library calls and instantiating the library against a
       # substituted one. `genPreludeLib` is a second name rather than an override of the harness's
       # `genPrelude`, whose surface is deliberately one function and stays that way.
-      # `genSchema` and `genIdentity` reach the suite because `tests/entry.nix` applies the
-      # STANDALONE root entry with explicit arguments — which is what keeps that cell pure, since
-      # supplying every dependency formal means the shim's fetching defaults are never forced. They
-      # are the SAME instances `genScope` above is built from, so the two sides of that comparison
-      # differ in entry point and in nothing else.
+      # `genIdentity` reaches the suite because `tests/entry.nix` applies the STANDALONE root entry
+      # with explicit arguments — which is what keeps that cell pure, since supplying every
+      # dependency formal means the shim's fetching defaults are never forced. It is the SAME
+      # instance `genScope` above is built from, so the two sides of that comparison differ in entry
+      # point and in nothing else.
       specialArgs = {
         inherit genScope;
         genGraph = gen-graph.lib;
         genPreludeLib = prelude;
-        genSchema = gen-schema.lib;
         genIdentity = gen-identity.lib;
       };
       # Cells whose subject is an error MESSAGE cannot live under `testModules`: the batch

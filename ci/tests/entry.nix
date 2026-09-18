@@ -2,19 +2,19 @@
 # documents, and every OTHER cell in this suite takes `genScope` from `ci/flake.nix`, which builds it
 # with `import ../lib` from ci's own inputs and so never evaluates the root shim. This is the cell
 # that does — the L1 migration replaced this file's PREDECESSOR (the pre-arm-B shape) with the
-# resolver-seam shape below: four dependencies, wired the same three-channel way every other library
+# resolver-seam shape below: three dependencies, wired the same three-channel way every other library
 # in this roster now is.
 #
-# ★ THIS FILE'S FORMALS ARE `genPreludeLib`, `genGraph`, `genSchema`, `genIdentity` — NOT bare
-# `prelude`/`graph`/`schema`/`identity`. `ci/flake.nix`'s `specialArgs` supplies them under those
-# names (`genPreludeLib = prelude;` and three bare `inherit`s), the harness's own naming, which
-# diverges from every other member of this migration's batch: gen-bind and gen-dispatch supply bare
-# `prelude`, gen-graph supplies `genPrelude`, and this library alone supplies `genPreludeLib` and
-# names the other three siblings directly rather than through one shared instance. The SHIM's own
-# dependency formals stay `prelude`, `graph`, `identity`, `schema`; `entryArgs` below is the one place
-# the harness names and the shim names meet.
+# ★ THIS FILE'S FORMALS ARE `genPreludeLib`, `genGraph`, `genIdentity` — NOT bare
+# `prelude`/`graph`/`identity`. `ci/flake.nix`'s `specialArgs` supplies them under those
+# names (`genPreludeLib = prelude;` beside each sibling's own `gen`-prefixed name), the harness's own
+# naming, which diverges from every other member of this migration's batch: gen-bind and
+# gen-dispatch supply bare `prelude`, gen-graph supplies `genPrelude`, and this library alone
+# supplies `genPreludeLib` and names the other two siblings directly rather than through one shared
+# instance. The SHIM's own dependency formals stay `prelude`, `graph`, `identity`; `entryArgs` below
+# is the one place the harness names and the shim names meet.
 #
-# ★★ THE CELL IS PURE, AND THE PURITY IS A CONSEQUENCE OF HOW IT IS CALLED. The shim's four
+# ★★ THE CELL IS PURE, AND THE PURITY IS A CONSEQUENCE OF HOW IT IS CALLED. The shim's three
 # dependency defaults each `builtins.fetchTree` the flake-locked revision; supplying every one
 # explicitly means none of those defaults is ever forced, so this reaches the network not at all.
 # What it tests is the shim's SIGNATURE and its DELEGATION — which is precisely where the defect
@@ -23,7 +23,7 @@
 # reported at the `prelude` key — while the supplied form evaluates clean with that same `throw`
 # installed.
 #
-# THREE KEYS, BECAUSE THIS SHIM CONSTRUCTS FOUR SIBLINGS AND THIS LIBRARY READS THREE OF THEM:
+# ONE KEY PER SIBLING THIS SHIM CONSTRUCTS, AND EACH IS A DRIVEN CALL RATHER THAN AN ECHO:
 #   prelude  — `mkProgram`'s atom fold runs through `prelude.listToAttrs`/`prelude.genList` over the
 #              rule list, so forcing its result is what drives the call through gen-prelude rather
 #              than merely returning the caller-supplied rules unread.
@@ -35,26 +35,18 @@
 #              node's `.identity` is what drives the call through gen-identity rather than merely
 #              echoing the caller-supplied record back.
 #
-# ★★★ `schema` HAS NO KEY HERE, AND THAT IS A MEASURED FACT RATHER THAN AN OVERSIGHT. Grepping
-# `\bschema\b` across every file in `lib/` finds exactly one occurrence — the formal's own
-# declaration at `lib/default.nix` — never referenced again in that file's `let…in` body and absent
-# from the final `mergeSurface { … }` call. So there is no expression in `lib/` this cell could force
-# to observe gen-schema through the library the way the three keys above observe their siblings; a
-# key here would be exercising nothing. This is NOT a claim that `schema` is safe to drop —
-# `den-hoag-ams0d` fences removal on exactly this measurement's narrower predecessor (the minting path
-# alone) and states in terms that the wider claim, unread across gen-scope's whole PUBLISHED surface,
-# is not established by it; `0pk67-injection-test` is dispatched on that wider claim. `schema`'s
-# protection against silent removal from THIS file rests instead on the three structural/totality
-# cells below (`test-every-wired-dependency-defaults-to-its-own-node`,
+# ★★ THE KEYS ABOVE ARE THE SEMANTIC HALF AND THEY DO NOT CARRY THE WIRING ON THEIR OWN: a driven
+# call can only observe a dependency the library actually READS. What holds the wired SET itself are
+# the three structural/totality cells below
+# (`test-every-wired-dependency-defaults-to-its-own-node`,
 # `test-the-wired-dependency-set-is-the-libs-own-formals`,
-# `test-the-defaulted-entry-forces-every-dependency`), each of which is total over every wired
-# dependency BY CONSTRUCTION and would name `schema` on a silent drop precisely because it asks
-# nothing about whether `lib/` reads it.
+# `test-the-defaulted-entry-forces-every-dependency`), each total over every wired dependency BY
+# CONSTRUCTION and so loud on a silent addition or drop precisely because it asks nothing about
+# whether `lib/` reads the thing.
 {
   genScope,
   genPreludeLib,
   genGraph,
-  genSchema,
   genIdentity,
   lib,
   ...
@@ -71,7 +63,7 @@ let
       map (line: lib.head (lib.splitString "#" line)) (lib.splitString "\n" text)
     );
 
-  # ★ THE FOUR dependency formals, from the SAME bindings `ci/flake.nix` builds its `lib` output
+  # ★ THE THREE dependency formals, from the SAME bindings `ci/flake.nix` builds its `lib` output
   # from. That is what keeps this cell offline, and it is also what makes the cell a reading of the
   # SHIM: over two different substrate builds it would be exercising two libraries.
   # ★★ THE ARGUMENT SET IS BOUND ONCE, AND BOTH THE APPLICATION AND THE TOTALITY CELL READ THIS
@@ -82,7 +74,6 @@ let
     prelude = genPreludeLib;
     graph = genGraph;
     identity = genIdentity;
-    schema = genSchema;
     # The shim's own plumbing, which this cell is now obliged to CHOOSE rather than inherit. The
     # `throw` is what makes non-hermeticity IMPOSSIBLE for this application rather than merely
     # detected — but it is NOT the guard: a shim carrying `...` would swallow these keys unread and
@@ -449,7 +440,7 @@ in
   # a throwing root is loud at the BOUNDARY rather than wherever a consumer first happens to reach it.
   #
   # ★ THE FORCE STOPS AT WHNF, DELIBERATELY: `seq` of an attrset does not force its members, so this
-  # never reaches into a dependency's own surface — `schema` included.
+  # never reaches into a dependency's own surface.
   flake.tests.entry.test-the-defaulted-entry-forces-every-dependency =
     let
       root = import ../..;

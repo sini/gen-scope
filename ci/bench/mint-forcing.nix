@@ -73,20 +73,17 @@ let
   # ★ EACH DEPENDENCY THROUGH ITS OWN STANDALONE ENTRY, NEVER ITS BARE `./lib` — the root shim's
   # rule and this file is bound by it. Reaching past the entry obliges the bench to name that
   # library's whole formal list by hand, which is a SECOND SIGNATURE nothing compares against the
-  # first: it is how this file came to omit the `identity` that `./lib` gained. Through the entry
-  # `merge` and `algebra` are defaulted by gen-schema from its own lock and are not named here.
+  # first: it is how this file came to omit the `identity` that `./lib` gained.
   graph = import "${fetch "gen-graph"}" { inherit prelude; };
-  schema = import "${fetch "gen-schema"}" { inherit prelude; };
   # The one minting authority: a dependency-free leaf, so its lib is a bare value and this takes no
-  # argument. Derived from THIS file's lock, and passed to `./lib` and NOT to `schema`, exactly as
-  # the root shim binds it.
+  # argument. Derived from THIS file's lock and handed to `./lib` unapplied, exactly as the root
+  # shim binds it: the ONE minting authority, reached through no intermediary.
   identity = import "${fetch "gen-identity"}/lib";
   inherit
     (import ../../lib {
       inherit
         prelude
         graph
-        schema
         identity
         ;
     })
@@ -155,7 +152,7 @@ let
             content
             site
             ;
-          identity = schema.hashIdentity e.kind ([ "identifier" ] ++ attrNames e.relata) valueOf;
+          identity = identity.hashIdentity e.kind ([ "identifier" ] ++ attrNames e.relata) valueOf;
         };
       accumulate =
         acc:
