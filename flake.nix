@@ -60,8 +60,10 @@
           # ★ THE ROOT, NOT `./lib`. `./.` and `./lib` were two independent constructions of one
           # value and so free to disagree; there is ONE construction site now, and the two entry
           # paths differ only in who supplies the arguments. Here the flake supplies them, so
-          # `follows` governs every argument passed, while the standalone path falls back to
-          # `ci/flake.lock`.
+          # `follows` governs every argument passed, while the standalone path resolves each default
+          # from THIS file's own `flake.lock`, read as local data — never from `ci/flake.lock`, which
+          # is the TEST graph's pin source and which no library code reads (ADR-0037 as amended
+          # 2026-09-15; `default.nix` states the same rule at its head).
           surface = import ./. {
             prelude = gen-prelude.lib;
             graph = gen-graph.lib;
