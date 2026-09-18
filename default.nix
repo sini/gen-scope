@@ -4,8 +4,9 @@
 #
 # THREE CHANNELS, ONE PRECEDENCE, AND NONE OF THEM IS A PROBE. A named formal per dependency wins;
 # the `inputs` bag is next, tested by attrset membership so a supplied-but-throwing value throws as
-# ITSELF rather than falling back; the default is resolved from `./ci/flake.lock`, read as local
-# data. There is NO `...`: an argument this root does not declare is a loud error, not a silent drop.
+# ITSELF rather than falling back; the default is resolved from this directory's own `./flake.lock`,
+# read as local data. There is NO `...`: an argument this root does not declare is a loud error, not
+# a silent drop.
 #
 # THE PIN SOURCE IS THE ROOT `flake.lock`, NOT `ci/flake.lock` (ADR-0037 as amended 2026-09-15): a
 # library's dependency graph and its test/oracle graph are SEPARATE, and the second must not enter
@@ -29,9 +30,9 @@
 # THE HAND-WRITTEN THREADING IS GONE, AND WHAT REPLACES IT IS PIN COHERENCE RATHER THAN DATAFLOW.
 # This shim used to pass its own `prelude` down into its siblings so that one evaluator over one
 # authority served them all — two instances being two content-address formulas for one node.
-# Coherent `ci/flake.lock` pins resolve to one store path and `import` memoises, so there is no
-# second instance for a threading to collapse. What makes the count one is now the PINS, and the
-# roster-wide coherence check that keeps them coherent is the hub's rather than this file's.
+# Coherent pins in THIS directory's `flake.lock` resolve to one store path and `import` memoises, so
+# there is no second instance for a threading to collapse. What makes the count one is now the
+# PINS, and the roster-wide coherence check that keeps them coherent is the hub's, not this file's.
 #
 # `identity` IS THE ONE MINTING AUTHORITY: a dependency-free leaf, so its dependency root is a bare
 # value and `dep` passes it through unapplied. It reaches `./lib` and nothing else: the minting
