@@ -295,7 +295,6 @@ let
   inherit (builtins)
     attrNames
     isAttrs
-    isBool
     isInt
     isList
     isString
@@ -683,19 +682,9 @@ let
     else
       "<unrenderable-subject>";
 
-  # Total rendering of an arbitrary caller value inside a diagnostic. `toJSON` ABORTS on anything
-  # containing a function, at any depth, so a message that renders a value it did not choose is a
-  # message that can kill the evaluation it was written to explain. Scalars and name lists render in
-  # full because those are the shapes a caller can act on; anything else is named by its type, which
-  # is total on every value.
-  renderValue =
-    v:
-    if isString v || isInt v || isBool v || v == null then
-      toJSON v
-    else if isList v && all isString v then
-      toJSON v
-    else
-      "<a ${typeOf v}>";
+  # Total rendering of an arbitrary caller value inside a diagnostic: the one shared renderer, owned
+  # by gen-prelude (its contract and the reason `toJSON` alone cannot do this live there).
+  inherit (prelude) renderValue;
 
   hasId = e: isAttrs e && e ? id_hash;
 
