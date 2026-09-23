@@ -2971,4 +2971,155 @@ in
         };
       };
     };
+
+  # ── THE IDENTIFIER DOORS (den-hoag-bkdkg) ──
+  # A record handed where a node identifier goes — the node VALUE, typically — used to abort past
+  # `tryEval` on an attribute lookup, or answer `false`/`[ ]` about a name no node carries. Each cell
+  # names the door that refuses: the evaluators' `self.node`/`self.get`, which every structural query
+  # reaches by composition; the three queries that hold a name they only compare; and the minting
+  # entry. `evalDebug` builds its own accessor and `evalWarm` reaches `eval`'s, so each is driven here
+  # rather than assumed from the production evaluator's cells.
+  config.flake.testsError.identifier-door-refusals =
+    let
+      S = genScope;
+      roots = S.buildRoots { parentGraph = S.edge "b" "a"; };
+      attributes = {
+        x = self: id: 1;
+        children =
+          self: id:
+          builtins.removeAttrs (builtins.intersectAttrs { b = 0; } roots.nodes) (
+            if id == "a" then [ ] else [ "b" ]
+          );
+        imports = self: id: [ ];
+        "edges-I" = self: id: [ ];
+      };
+      self = S.eval {
+        scope = roots;
+        inherit attributes;
+      };
+      debug = S.evalDebug {
+        scope = roots;
+        inherit attributes;
+        parseParent = id: if id == "b" then "a" else null;
+      };
+      warm = S.evalWarm {
+        scope = roots;
+        inherit attributes;
+        prior = self;
+        decision = S.mkDecision {
+          isClean = _: false;
+          reusable = _: [ ];
+        };
+      };
+      X = {
+        name = "a";
+      };
+      mint =
+        ident: relatum:
+        S.mintStrata {
+          kinds = { };
+          emitters = [
+            {
+              pass = 0;
+              identifier = "pewter";
+              kind = "thimble";
+              relata = { };
+              content = { };
+              site = "p0";
+            }
+            {
+              pass = 1;
+              identifier = ident;
+              kind = "basting";
+              relata.warp = relatum;
+              content = { };
+              site = "p1";
+            }
+          ];
+        };
+      refused = who: noun: {
+        type = "ThrownError";
+        msg = exactly "gen-scope.${who}: got set, expected ${noun} (a string)";
+      };
+      node = refused "self.node" "a node identifier";
+      get = refused "self.get" "a node identifier";
+    in
+    {
+      test-self-node-refuses-a-record = {
+        expr = self.node X;
+        expectedError = node;
+      };
+      test-self-get-refuses-a-record = {
+        expr = self.get X "x";
+        expectedError = get;
+      };
+      test-evalDebug-node-refuses-a-record = {
+        expr = debug.node X;
+        expectedError = node;
+      };
+      test-evalDebug-get-refuses-a-record = {
+        expr = debug.get X "x";
+        expectedError = get;
+      };
+      test-evalDebug-getTraced-refuses-a-record = {
+        expr = (debug.getTraced X "x").trace;
+        expectedError = refused "self.getTraced" "a node identifier";
+      };
+      test-evalWarm-node-refuses-a-record = {
+        expr = warm.node X;
+        expectedError = node;
+      };
+      test-evalWarm-get-refuses-a-record = {
+        expr = warm.get X "x";
+        expectedError = get;
+      };
+      test-parent-refuses-a-record-at-self-node = {
+        expr = S.parent self X;
+        expectedError = node;
+      };
+      test-ancestors-refuses-a-record-at-self-node = {
+        expr = S.ancestors self X;
+        expectedError = node;
+      };
+      test-children-refuses-a-record-at-self-get = {
+        expr = S.children self X;
+        expectedError = get;
+      };
+      test-childrenIds-refuses-a-record-at-self-get = {
+        expr = S.childrenIds self X;
+        expectedError = get;
+      };
+      test-descendants-refuses-a-record-at-self-get = {
+        expr = S.descendants self X;
+        expectedError = get;
+      };
+      test-followEdge-refuses-a-record-at-self-get = {
+        expr = S.followEdge "I" self X;
+        expectedError = get;
+      };
+      test-collectImports-refuses-a-record-at-self-get = {
+        expr = S.collectImports (_: _: [ ]) self X;
+        expectedError = get;
+      };
+      test-isAncestor-refuses-a-record-it-would-only-compare = {
+        expr = S.isAncestor self X "b";
+        expectedError = refused "isAncestor" "a node identifier";
+      };
+      test-isDescendant-refuses-a-record-it-would-only-compare = {
+        expr = S.isDescendant self X "a";
+        expectedError = refused "isDescendant" "a node identifier";
+      };
+      test-nodesByType-refuses-a-record-kind = {
+        expr = S.nodesByType self X;
+        expectedError = refused "nodesByType" "a kind name";
+      };
+      test-mintStrata-refuses-a-record-identifier = {
+        expr = builtins.attrNames (mint X "pewter").nodes;
+        expectedError = refused "mintStrata: an emitter's identifier" "a node identifier";
+      };
+      test-mintStrata-refuses-a-record-relatum = {
+        expr = builtins.attrNames (mint "b1" { name = "pewter"; }).nodes;
+        expectedError = refused "mintStrata: relatum 'warp' of 'b1'" "a node identifier";
+      };
+    };
 }

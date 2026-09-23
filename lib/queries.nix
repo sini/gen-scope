@@ -8,6 +8,11 @@
 # set than the evaluator materializes.
 { prelude }:
 let
+  # Every query reaches `self.node` or `self.get`, which refuse a non-string id by name. The three
+  # below also hold a name they only COMPARE, and a comparison answers `false` about a record rather
+  # than refusing it, so each refuses that argument itself, ahead of the walk.
+  string = import ./string-argument.nix;
+
   parent = self: id: (self.node id).parent;
 
   children = self: id: self._childRecords id;
@@ -58,46 +63,50 @@ let
   # Early-return walk: O(depth) best case instead of always building full list.
   isAncestor =
     self: ancestorId: id:
-    let
-      go =
-        visited: nid:
-        let
-          p = (self.node nid).parent;
-        in
-        if p == null then
-          false
-        else if p == ancestorId then
-          true
-        else if visited ? ${p} then
-          false
-        else
-          go (visited // { ${p} = true; }) p;
-    in
-    go { ${id} = true; } id;
+    builtins.seq (string "isAncestor" "a node identifier" ancestorId) (
+      let
+        go =
+          visited: nid:
+          let
+            p = (self.node nid).parent;
+          in
+          if p == null then
+            false
+          else if p == ancestorId then
+            true
+          else if visited ? ${p} then
+            false
+          else
+            go (visited // { ${p} = true; }) p;
+      in
+      go { ${id} = true; } id
+    );
 
   # DFS with early termination: avoids building full descendant list.
   isDescendant =
     self: descendantId: id:
-    let
-      go =
-        visited: nid:
-        let
-          cids = builtins.attrNames (self._childRecords nid);
-        in
-        builtins.any (
-          cid:
-          if visited ? ${cid} then
-            false
-          else if cid == descendantId then
-            true
-          else
-            go (visited // { ${cid} = true; }) cid
-        ) cids;
-    in
-    go { ${id} = true; } id;
+    builtins.seq (string "isDescendant" "a node identifier" descendantId) (
+      let
+        go =
+          visited: nid:
+          let
+            cids = builtins.attrNames (self._childRecords nid);
+          in
+          builtins.any (
+            cid:
+            if visited ? ${cid} then
+              false
+            else if cid == descendantId then
+              true
+            else
+              go (visited // { ${cid} = true; }) cid
+          ) cids;
+      in
+      go { ${id} = true; } id
+    );
 
   # Delegates to eval's nodesOfType (selective walk) instead of forcing allNodes.
-  nodesByType = self: type: self.nodesOfType type;
+  nodesByType = self: type: self.nodesOfType (string "nodesByType" "a kind name" type);
 in
 {
   inherit

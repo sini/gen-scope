@@ -26,6 +26,10 @@ let
   # carrier decides it of a `leq` exactly as the kind registry decides it of a `resolve`.
   callable = import ./callable.nix;
 
+  # The accessors' identifier arguments are node identifiers; anything else is refused by the
+  # accessor's name before it reaches an attribute lookup.
+  identifier = who: import ./string-argument.nix who "a node identifier";
+
   # The round loop's forcing discipline, taken from where it is defined rather than written a
   # seventh time (the same import `lib/mint.nix` takes): the shared round is `forceFields`'
   # sixth consumer, not the second implementation.
@@ -1353,26 +1357,29 @@ let
             walkEntries = prelude.concatMap self._walkFrom checked.nodeOrder;
           in
           {
-            node = resolveNode;
+            node = id: resolveNode (identifier "self.node" id);
 
+            # The refusal sits OUTSIDE the error context, because that context renders the id.
             get =
               id: attrName:
-              builtins.addErrorContext "evaluating '${attrName}' on '${id}'" (
-                if !(runAttributes ? ${attrName}) then
-                  throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
-                else if rootEval ? ${id} then
-                  rootEval.${id}.${attrName}
-                else
-                  let
-                    n = self.node id;
-                  in
-                  # While a round is open the co-located cache is not consulted — its fields refuse
-                  # by construction (the lifetime rule at `wrapChild`) — and the demand routes
-                  # through the guarded per-attribute evaluator instead.
-                  if !round.open && n ? _eval then
-                    n._eval.${attrName}
+              builtins.seq (identifier "self.get" id) (
+                builtins.addErrorContext "evaluating '${attrName}' on '${id}'" (
+                  if !(runAttributes ? ${attrName}) then
+                    throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
+                  else if rootEval ? ${id} then
+                    rootEval.${id}.${attrName}
                   else
-                    evalAttr id attrName runAttributes.${attrName}
+                    let
+                      n = self.node id;
+                    in
+                    # While a round is open the co-located cache is not consulted — its fields refuse
+                    # by construction (the lifetime rule at `wrapChild`) — and the demand routes
+                    # through the guarded per-attribute evaluator instead.
+                    if !round.open && n ? _eval then
+                      n._eval.${attrName}
+                    else
+                      evalAttr id attrName runAttributes.${attrName}
+                )
               );
 
             # --- Tier 2: Materialization (forces evaluation, memoized) ---
@@ -1649,33 +1656,35 @@ let
           # read set back up.
           getTraced =
             id: attrName:
-            let
-              traceEntry = "${id}.${attrName}";
-              path = traceList ++ [ traceEntry ];
-            in
-            {
-              trace = path;
-              value =
-                if !(runAttributes ? ${attrName}) then
-                  throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
-                else if visited ? ${traceEntry} then
-                  throw "gen-scope: cycle detected: ${builtins.concatStringsSep " -> " path}"
-                else
-                  let
-                    fn = runAttributes.${attrName};
-                    s = mkSelf (visited // { ${traceEntry} = true; }) path;
-                  in
-                  # The debug evaluator's production reading of a circular declaration is the
-                  # per-instance ascent: its fresh-self-per-get shadow stack already detects the
-                  # cross-instance re-entry a shared round exists to drive, and driving one here
-                  # would defeat the tracing the evaluator exists for.
-                  if isCircularDecl fn then
-                    debugCircular id fn s
-                  else if builtins.isAttrs fn then
-                    throw "gen-scope: attribute '${attrName}' on '${id}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
+            builtins.seq (identifier "self.getTraced" id) (
+              let
+                traceEntry = "${id}.${attrName}";
+                path = traceList ++ [ traceEntry ];
+              in
+              {
+                trace = path;
+                value =
+                  if !(runAttributes ? ${attrName}) then
+                    throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
+                  else if visited ? ${traceEntry} then
+                    throw "gen-scope: cycle detected: ${builtins.concatStringsSep " -> " path}"
                   else
-                    fn s id;
-            };
+                    let
+                      fn = runAttributes.${attrName};
+                      s = mkSelf (visited // { ${traceEntry} = true; }) path;
+                    in
+                    # The debug evaluator's production reading of a circular declaration is the
+                    # per-instance ascent: its fresh-self-per-get shadow stack already detects the
+                    # cross-instance re-entry a shared round exists to drive, and driving one here
+                    # would defeat the tracing the evaluator exists for.
+                    if isCircularDecl fn then
+                      debugCircular id fn s
+                    else if builtins.isAttrs fn then
+                      throw "gen-scope: attribute '${attrName}' on '${id}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
+                    else
+                      fn s id;
+              }
+            );
           debugCircular =
             id: decl: s:
             let
@@ -1718,7 +1727,7 @@ let
 
           node =
             id:
-            if roots ? ${id} then
+            if roots ? ${identifier "self.node" id} then
               roots.${id}
             else if parseParent != null then
               let
@@ -1736,7 +1745,7 @@ let
             else
               throw "gen-scope: evalDebug requires parseParent for non-root nodes";
 
-          get = id: attrName: (getTraced id attrName).value;
+          get = id: attrName: builtins.seq (identifier "self.get" id) (getTraced id attrName).value;
 
           # Internal: the composed child-record read, mirroring the production accessor's
           # `_childRecords` so the query surface answers against either evaluator. Its argument is

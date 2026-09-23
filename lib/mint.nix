@@ -187,6 +187,26 @@ let
   # own formals are the specified surface — there is no parameter through which this could arrive.
   inherit (import ./least-model.nix { inherit prelude; }) forceFields;
 
+  # An emitter's identifier and each of its relata name a node, and both are used as attribute
+  # names — the identifier in the grouping, a relatum in the frozen-set lookup — so a record in
+  # either place used to abort past `tryEval` there, or earlier in the schedule's ordering.
+  identifier = who: import ./string-argument.nix who "a node identifier";
+  #
+  # A MISSING field is not read here: `mintOne`'s closed pattern refuses it, and a lookup here would
+  # pre-empt that refusal with a vaguer one.
+  identifiersOf = builtins.all (
+    e:
+    !(e ? identifier)
+    || builtins.seq (identifier "mintStrata: an emitter's identifier" e.identifier) (
+      builtins.all (
+        label:
+        builtins.isString (
+          identifier "mintStrata: relatum '${label}' of '${e.identifier}'" e.relata.${label}
+        )
+      ) (attrNames (e.relata or { }))
+    )
+  );
+
   ascending = a: b: a < b;
 
   # The reserved identity key carrying the node's own identifier, named once so the collision a
@@ -472,5 +492,8 @@ in
     # not a refused contribution but an expression with nowhere to attach. Deepening the forcing
     # would buy a different property — that the caller's options are total — which is the caller's
     # own and is not what the argument boundary is for.
-    builtins.seq kinds (builtins.deepSeq result result);
+    #
+    # The emitters' names are checked after `kinds` and before anything is scheduled, because the
+    # schedule's own ordering compares identifiers and would abort on a record first.
+    builtins.seq kinds (builtins.seq (identifiersOf emitters) (builtins.deepSeq result result));
 }

@@ -150,7 +150,7 @@ let
     );
 
   # A genuinely patched COPY of `eval.nix`, built the way the round-1 gate built its
-  # (`reports/den-hoag-u1sf-gate-v1.md`, C-5): the source is read, its four sibling imports are
+  # (`reports/den-hoag-u1sf-gate-v1.md`, C-5): the source is read, its five sibling imports are
   # pointed at a store copy of `lib/` so the patched file resolves outside `lib/`, an optional
   # `rootOrder` formal is threaded through, and it is consumed at EXACTLY ONE site —
   # genericResolve's fold over `attrNames roots` — never at `allNodesWhere`, which §2.5 excludes
@@ -164,7 +164,7 @@ let
   # tree that path is never materialised, so importing the patched file dies `access to absolute
   # path … is forbidden in pure evaluation mode` — a death only the hosted check sees, since a Nix
   # that has already copied the source to the store reads the bare path anyway. The WHOLE directory
-  # is copied rather than the four files, because two of them import siblings of their own
+  # is copied rather than the five files, because two of them import siblings of their own
   # (`structural.nix` → `traversal-names.nix`, `interface.nix` → `structural.nix`) that resolve
   # only beside them. A derivation writing the patched file beside real siblings would need no
   # rewrite, but `flake.tests` is system-agnostic — there is no `pkgs` in this module to build one
@@ -189,12 +189,14 @@ let
         "import ./interface.nix"
         "import ./callable.nix"
         "import ./least-model.nix"
+        "import ./string-argument.nix"
       ]
       [
         "import ${o10Abs "structural.nix"}"
         "import ${o10Abs "interface.nix"}"
         "import ${o10Abs "callable.nix"}"
         "import ${o10Abs "least-model.nix"}"
+        "import ${o10Abs "string-argument.nix"}"
       ]
       o10EvalSrc;
   o10FormalAnchor = "declaredDependencies ? null,\n    }:";

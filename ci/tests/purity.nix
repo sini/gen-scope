@@ -218,6 +218,7 @@ in
       "lib/require-scope.nix"
       "lib/resolve.nix"
       "lib/stratify.nix"
+      "lib/string-argument.nix"
       "lib/structural.nix"
       "lib/traversal-names.nix"
       "lib/well-founded.nix"
