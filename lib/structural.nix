@@ -56,6 +56,7 @@ let
     name:
     name == "children"
     || name == "derived-children"
+    || name == "nta-children"
     || prelude.hasPrefix edgePrefix name
     # The relations the resolver traverses, read as a SET. This clause holds no relation name of
     # its own, which is what makes the classifier and the resolver one fact rather than two that
@@ -72,16 +73,57 @@ let
   # rejected it, but because there is nothing for it to intersect with.
   resolutionalNames = names: builtins.filter (name: !(structural name)) names;
 
-  # The two attributes whose values are child-node records: the evaluator materializes their
-  # children rather than returning the raw value. A materialization concern, not a partition
-  # concern — both are structural, and so is every other member of the partition.
-  childBearing = name: name == "children" || name == "derived-children";
+  # The attributes whose values are child-node records: the evaluator materializes their children
+  # rather than returning the raw value. A materialization concern, not a partition concern — all
+  # three are structural, and so is every other member of the partition.
+  #
+  # ★ ONE FACT, AND IT IS A DEPTH. `children` and `derived-children` carry records one level down
+  # (id → record); `nta-children` carries them three levels down (NTA name → group → key → record),
+  # because an `nta` group's key set is forced alone and a flat map would force every group at once.
+  # The evaluator WRAPS at this depth and every one-level READ receives the flattened form, so the
+  # predicate that decides what to materialize and the one that decides how to read are this one
+  # binding seen from two sides.
+  childDepth =
+    name:
+    if name == "children" || name == "derived-children" then
+      1
+    else if name == "nta-children" then
+      3
+    else
+      0;
+
+  childBearing = name: childDepth name > 0;
+
+  # A child-bearing value at its depth, as the one-level map (child id → record) every read takes.
+  # Below depth one the innermost keys are coordinates, not identifiers, so each record is re-keyed
+  # by its own stamped `id` — a minted identifier, injective in the coordinates, so no two records
+  # share a key. It forces every group's key set and each record to weak head normal form (its id),
+  # never a record's fields beyond that: that is what an enumeration means.
+  flattenChildren =
+    name: value:
+    let
+      depth = childDepth name;
+      go =
+        d: v:
+        if d == 1 then
+          builtins.listToAttrs (
+            map (k: {
+              name = v.${k}.id;
+              value = v.${k};
+            }) (builtins.attrNames v)
+          )
+        else
+          builtins.foldl' (acc: k: acc // go (d - 1) v.${k}) { } (builtins.attrNames v);
+    in
+    if depth <= 1 then value else go depth value;
 in
 {
   inherit
     edgePrefix
     structural
     resolutionalNames
+    childDepth
     childBearing
+    flattenChildren
     ;
 }

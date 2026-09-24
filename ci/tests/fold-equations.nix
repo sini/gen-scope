@@ -338,10 +338,11 @@ in
     # surface and re-derives whenever that surface grows. 91 rather than 90: `cascade.nix` now
     # publishes `isKindSet` beside `mkKinds`, the discriminator the two entry guards bind as a
     # formal, and `merge-surface` folds every module's exports into one flat surface. 93 rather
-    # than 91: `build-nodes.nix` now also publishes `mintAttachmentId`/`parseParent`.
+    # than 91: `build-nodes.nix` now also publishes `mintAttachmentId`/`parseParent`. 97 rather than
+    # 93: the `nta` channel publishes `mintNtaId`/`decodeNta` and `childDepth`/`flattenChildren`.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 93;
+      expected = 97;
     };
     # One: the fold's entry, and nothing else. This cell is the module's inventory, and an export it
     # does not list is an export nothing measured.

@@ -2,8 +2,10 @@
 # OWN evaluator process and asserts on the EXIT STATUS and the printed value.
 #
 # ★ WHY A CHECK DERIVATION AND NOT A THIRD nix-unit OUTPUT. Every cell here observes an abort
-# `tryEval` does not catch — an uncatchable death takes a whole evaluation down, so any suite
-# hosting one of these cells would lose every other cell in the same process. The runner invokes
+# `tryEval` does not catch. nix-unit catches such an abort per cell in its own C++ loop and a sibling
+# cell survives it (measured: den-hoag-n6dh7 fix round), so the reason is not that a hosting suite
+# would lose its other cells; it is the verdict's SHAPE — an exit status, a Nix channel on stderr and
+# the ABSENCE of a named refusal, which is a process predicate and this runner's own. The runner invokes
 # `nix-instantiate --eval` once per arm inside the build sandbox (pure evaluation needs no store
 # access; sources arrive as derivation inputs), so the isolation is per-process by construction
 # and the whole thing rides `nix flake check` — the same gate CI already runs — rather than a
@@ -76,6 +78,19 @@
               grep -q 'division by zero' "$TMPDIR/err" || die "$1" "death is not the division-by-zero channel"
               grep -Fq "gen-scope: the outer seat is re-applying the walked member's step on '$3'" "$TMPDIR/err" || die "$1" "death does not carry the outer seat's context naming '$3'"
             }
+            # <arm> <libdir>: the `nta` cycle price — non-zero exit, one of Nix's two anonymous
+            # aborts, and ZERO lines anchored `error: gen-scope[.:]` (which covers the
+            # `gen-scope.<entry>:` family). No `--show-trace`, per diesNamed's note: a full trace
+            # prints source frames that can carry a throw text.
+            diesOnNixAbort() {
+              evalArm "$1" "$2"
+              [ "$rc" -ne 0 ] || die "$1" "expected a death, got exit 0 with '$val'"
+              grep -Eq 'max-call-depth exceeded|infinite recursion encountered' "$TMPDIR/err" || die "$1" "death is neither Nix abort channel"
+              if grep -Eq 'error: gen-scope[.:]' "$TMPDIR/err"; then
+                die "$1" "death is NOT anonymous — a named refusal fired"
+              fi
+              grep -Eo 'max-call-depth exceeded|infinite recursion encountered' "$TMPDIR/err" | head -n 1 > "$TMPDIR/channel-$1"
+            }
             traceCount() { # <arm> <n>: the F1 probe fired exactly n times
               n=$(grep -c 'trace: F1-PROBE' "$TMPDIR/err" || true)
               [ "$n" = "$2" ] || die "$1" "expected $2 F1-PROBE firing(s), saw $n"
@@ -140,9 +155,22 @@
             [ "$rc" -ne 0 ] || die hctl2 "mis-seeded ladder answered '$val' — the seed level is not load-bearing"
             grep -q 'infinite recursion' "$TMPDIR/err" || die hctl2 "death is not the infinite-recursion channel"
 
+            # U1-h — the `nta` cycle pays the stated price (den-hoag-n6dh7 item 8): anonymous and
+            # uncatchable in the production evaluator; refused BY NAME in the debug evaluator on
+            # the same fixture (the absence clause's live control); and the constant-keyed twin
+            # answers 1, which proves the `nta` path is reached and grows.
+            diesOnNixAbort nta-cyc "$libSrc"
+            evalArm nta-cyc-dbg "$libSrc"
+            [ "$rc" -ne 0 ] || die nta-cyc-dbg "expected a by-name refusal, got exit 0 with '$val'"
+            grep -q 'error: gen-scope: cycle detected' "$TMPDIR/err" || die nta-cyc-dbg "refusal is not the debug evaluator's named cycle"
+            answers nta-cyc-ctl "$libSrc" 1
+            # U1-i — one memo per `nta` child attribute: four reads, one application.
+            answers nta-memo "$libSrc" 1
+            traceCount nta-memo 1
+
             # 0/0 is a false pass: the runner must have executed every cell above.
-            [ "$ran" = "13" ] || die runner "expected 13 evaluations, ran $ran"
-            echo "tests-process: 13 cells, every exit read unpiped, every death on its named channel" > $out
+            [ "$ran" = "17" ] || die runner "expected 17 evaluations, ran $ran"
+            echo "tests-process: 17 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
           '';
     };
 }

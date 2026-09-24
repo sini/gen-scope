@@ -30,6 +30,86 @@ let
   # accessor's name before it reaches an attribute lookup.
   identifier = who: import ./string-argument.nix who "a node identifier";
 
+  # THE `nta` CHILD IDENTIFIER — an injective encoding of (host id, NTA name, group, key), and its
+  # total decoder.
+  #
+  # The identifier is a function of the child's coordinates and never of its seed: a child's seed
+  # may change while the child stays the same child, and an identifier read off content would make
+  # every such change a different node. This is an IDENTIFIER in ADR-0016 ruling 5's sense (taken by
+  # declaration), not an identity; nothing here reaches the minting authority.
+  #
+  # THE ENCODING IS LENGTH-PREFIXED, not escaped. The host coordinate of a nested child is itself an
+  # `nta` identifier, so an escaping scheme would compound its escapes once per level, and a
+  # separator-splitting decoder over such strings needs a regular expression whose backtracking
+  # depth grows with the input. A length prefix is read with bounded string operations alone:
+  #
+  #   nta:<len host>:<host><len name>:<name><len group>:<group><len key>:<key>
+  #
+  # `decodeNta` answers the four coordinates for every string this encoder produces and `null` for
+  # every other string, including a registered-shape id and a string whose length fields are
+  # written with a leading zero (the encoder never writes one), so `decodeNta (mintNtaId t) == t`
+  # and the decoder is a recognizer of the encoder's image. It forces no record.
+  #
+  # Disjointness from REGISTERED identifiers is not claimed here: a caller may register any string.
+  # That collision is refused by name where an `nta` group's key set is forced (`ntaFrom` below).
+  ntaIdPrefix = "nta:";
+  ntaIdField = s: "${toString (builtins.stringLength s)}:${s}";
+
+  mintNtaId =
+    host: name: group: key:
+    ntaIdPrefix + ntaIdField host + ntaIdField name + ntaIdField group + ntaIdField key;
+
+  # Reads one `<len>:<text>` field at offset `at` of `s`, or null. The length is at most the
+  # string's own length, so its digit run is bounded by the digit count of that length.
+  readNtaIdField =
+    s: at:
+    let
+      total = builtins.stringLength s;
+      maxDigits = builtins.stringLength (toString total);
+      colonAt =
+        i:
+        if i > maxDigits || at + i >= total then
+          null
+        else if builtins.substring (at + i) 1 s == ":" then
+          i
+        else
+          colonAt (i + 1);
+      c = colonAt 1;
+      digits = if c == null then "" else builtins.substring at c s;
+      ok = c != null && builtins.match "0|[1-9][0-9]*" digits != null;
+      len = if ok then builtins.fromJSON digits else 0;
+      start = at + c + 1;
+    in
+    if !ok || start + len > total then
+      null
+    else
+      {
+        value = builtins.substring start len s;
+        next = start + len;
+      };
+
+  decodeNta =
+    id:
+    let
+      total = builtins.stringLength id;
+      plen = builtins.stringLength ntaIdPrefix;
+      h = readNtaIdField id plen;
+      n = if h == null then null else readNtaIdField id h.next;
+      g = if n == null then null else readNtaIdField id n.next;
+      k = if g == null then null else readNtaIdField id g.next;
+    in
+    if
+      !builtins.isString id || builtins.substring 0 plen id != ntaIdPrefix || k == null || k.next != total
+    then
+      null
+    else
+      {
+        host = h.value;
+        name = n.value;
+        group = g.value;
+        key = k.value;
+      };
+
   # The round loop's forcing discipline, taken from where it is defined rather than written a
   # seventh time (the same import `lib/mint.nix` takes): the shared round is `forceFields`'
   # sixth consumer, not the second implementation.
@@ -283,8 +363,23 @@ let
         else
           throw "gen-scope: cannot descend from '${id}': this evaluation declares no `${selectionChannel}` attribute, so there is no containment relation to walk and a materialization would answer the entry points alone — a partial tree with nothing marking it partial. A node that genuinely has no children is a declared `${selectionChannel}` answering `{ }`, which is a different answer and stays available. Declare `${selectionChannel}`, or read the node set through `scope.nodeOrder`, which needs no descent.";
       derived = if attributes ? ${spawnChannel} then ev.get id spawnChannel else { };
+      # The `nta` half, flattened from its three-level carriage to the one-level map this binding
+      # returns (`structural.flattenChildren`). The records are the carriage's own, so enumeration
+      # and resolution hand out ONE record per child, carrying ONE memo.
+      nta =
+        if attributes ? ${ntaChannel} then
+          structural.flattenChildren ntaChannel (ev.get id ntaChannel)
+        else
+          { };
+      base = children // derived;
+      crossing = builtins.filter (k: base ? ${k}) (builtins.attrNames nta);
     in
-    children // derived;
+    if nta == { } then
+      base
+    else if crossing != [ ] then
+      throw "gen-scope.nta: node '${id}' carries an `nta` child '${builtins.head crossing}' under a key its `children` or `derived-children` also carries. The three halves compose into one child map, and a shared key would discard one record silently. An `nta` identifier is minted by the substrate, so the other half chose it: choose a key that is not an `nta` identifier."
+    else
+      base // nta;
 
   # ── THE SPAWN CHANNEL ──
   # This attribute is the one that grows the NODE SET, and it is where the domain half of
@@ -417,6 +512,214 @@ let
         acc // next
     ) { } (builtins.attrNames spawns);
 
+  # ── THE `nta` CHANNEL — Vogt, Swierstra & Kuiper 1989 Def. 3.14's recursive form, beside `spawns` ──
+  #
+  # THEORY. An NTA is a nonterminal "as well as" an attribute "defined by a semantic function"; the
+  # tree is "expanded with" the value it receives and "attribute evaluation continues" (Vogt,
+  # Swierstra & Kuiper 1989 §3). The hosting node "becomes the parent of the NTA" (Söderberg & Hedin
+  # 2013 §2.3), and the semantic function has "the HostType node as its implicit argument, and via
+  # this node, other attributes can be accessed" (§4.1). Under Vogt, `spawns` is an NTA too: it is
+  # the non-recursive fragment Lemma 3.2 / Söderberg §7 make finite by kind order. `nta` is the
+  # recursive `F → F̄` form Def. 3.14 admits, whose children are of the host's OWN kind and whose
+  # builder reads any evaluated attribute through the ordinary accessor. The two channels differ in
+  # what they READ, what they PRODUCE and how they TERMINATE, so they are two constructs, and every
+  # refusal of this one carries the `nta:` token.
+  #
+  # THE CONTRACT. `builder : self -> id -> { <group> = { <key> = <seed>; }; }`. Group names must not
+  # read attribute values and only key sets may, so resolving one child forces its own group's key
+  # set alone (a flat group/key map diverges on interleaved families). A seed is a LIST OF ADDRESSES,
+  # never a value: `[ { attr; def; at; } … ]` names definition `def` of the host attribute `attr` (an
+  # evaluated attribute of the host whose value is a list of definitions) and a non-empty path `at`
+  # of attribute names and list indices inside it. The substrate reads the addressed sub-value; a
+  # builder can only point into its host's definitions, so a constant-seed builder is inexpressible.
+  # The child record is STAMPED: `{ id; parent = host; type = <host's kind>; decls.seed = [ {
+  # address; value; } … ]; }` — `decls` stays an attribute set as every node's does, and each seed
+  # element keeps its address beside its value, so the definition it came from stays reachable from
+  # the host. The identifier is minted from (host, NTA name, group, key), never from the seed.
+  #
+  # ★ THE TERMINATION CLAIM, SCOPED TO ONE STEP. What the substrate constructs: every seed element is
+  # a STRICT sub-value of ONE of the host's evaluated definitions (one `def`, a non-empty `at`), taken
+  # into that definition and not directly into the list that carries them. So WITHIN ONE STEP the
+  # seed descends the host's definition value, and a seed of several elements descends in the
+  # multiset extension of the sub-value order (Dershowitz & Manna 1979). ACROSS LEVELS NO DESCENT IS
+  # CLAIMED: a child's definitions are RECOMPUTED from its seed by the kind's own attributes, not
+  # inherited, so a finite, well-founded definition at every level does not bound the expansion — a
+  # definitions attribute answering constant data, one wrapping its seed, or one carrying a counter
+  # that never repeats each re-grows at every level. The expansion is finite when every child's
+  # definition value is a sub-value of its seed and the root's definition data is well-founded: each
+  # branch then descends, and König's lemma closes it. A definition that back-references the list
+  # carrying it (`config.t.s = config`) reaches that list through the address anyway; that is
+  # cyclic data, priced below.
+  #
+  # ★ THE STATED PRICE. Termination is a theorem over well-founded definition data under that
+  # hypothesis. Non-well-founded lazy data (cyclic, or unboundedly generated, for example a function
+  # module `m = n: { ... }: { config.s = m (n + 1); }`, whose source is finite and whose value is
+  # not), and definitions recomputed without descent, diverge into Nix's uncatchable abort. That is
+  # Vogt, Swierstra & Kuiper 1989 Def. 3.14's unguaranteed expansion ("finite expansion of the
+  # structure tree, however, is no longer guaranteed"), a stated price (ADR-0033). Refusing by name
+  # through the mint's walk bounds, the deferred guarantee (β), can reach only the CYCLIC and
+  # WALK-GROWING subclasses: the recomputed-without-descent class is not refusable by name short of
+  # a depth bound, which ruling Q1 excludes, so it stays a price and is no deferred refusal's.
+  # A CYCLE through an attribute read with no `circular` member is not detected here either: it
+  # reaches Nix's abort, uncatchable and naming nothing of gen's — the price ADR-0008 §3 records for
+  # every non-`circular` attribute cycle (ADR-0033 as corrected). A named, memoization-safe `nta`
+  # re-entry guard is the deferred target; the debug evaluator's shadow stack refuses the same cycle
+  # by name today.
+  ntaChannel = "nta-children";
+
+  # One step of an address path: an attribute name, or a list index ≥ 0.
+  isStep = k: builtins.isString k || (builtins.isInt k && k >= 0);
+
+  # The addressed sub-value of `v` along `steps`, as `{ found; value; }`. PRESENCE is decided by
+  # `?` and by the list's length, never by a sentinel value, so a present path whose value is
+  # `null` is found and answers `null`.
+  walkAddress =
+    v: steps:
+    if steps == [ ] then
+      {
+        found = true;
+        value = v;
+      }
+    else
+      let
+        s = builtins.head steps;
+        rest = builtins.tail steps;
+      in
+      if builtins.isString s then
+        (if builtins.isAttrs v && v ? ${s} then walkAddress v.${s} rest else { found = false; })
+      else if builtins.isList v && s < builtins.length v then
+        walkAddress (builtins.elemAt v s) rest
+      else
+        { found = false; };
+
+  ntaFrom =
+    kinds: nodes: declared: ev: id:
+    let
+      hostKind = (ev.node id).type or null;
+      ntas =
+        if hostKind == null then
+          { }
+        else if kinds.kinds ? ${hostKind} then
+          kinds.kinds.${hostKind}.nta or { }
+        else
+          throw "gen-scope.nta: node '${id}' carries kind '${toString hostKind}', which the supplied registry does not carry. A node's kind is a name in a registered vocabulary — register it with `mkKinds`, or build the scope through `buildRoots`, which refuses an unregistered kind at the door.";
+      at = name: "gen-scope.nta: kind '${hostKind}' NTA '${name}' on host '${id}'";
+
+      readAddress =
+        name: group: key: i: a:
+        let
+          here = "${at name}, child '${group}'/'${key}', seed element ${toString i}";
+        in
+        if
+          !(
+            builtins.isAttrs a
+            &&
+              builtins.attrNames a == [
+                "at"
+                "attr"
+                "def"
+              ]
+            && builtins.isString a.attr
+            && builtins.isInt a.def
+            && a.def >= 0
+            && builtins.isList a.at
+            && builtins.all isStep a.at
+          )
+        then
+          throw "${here}: a seed element is not an address { attr : string; def : int >= 0; at : [ name | index >= 0 ]; }"
+        else if a.at == [ ] then
+          throw "${here}: an address with an empty path re-addresses a whole definition, which is not a strict sub-value of it. Name at least one step inside the definition."
+        else if !(declared ? ${a.attr}) then
+          throw "${here}: address does not resolve: the evaluation declares no attribute '${a.attr}' to carry the host's definitions"
+        else
+          let
+            defs = ev.get id a.attr;
+            r = walkAddress (builtins.elemAt defs a.def) a.at;
+          in
+          if !builtins.isList defs then
+            throw "${here}: address does not resolve: '${a.attr}' on the host is a ${builtins.typeOf defs}, not a list of definitions"
+          else if a.def >= builtins.length defs then
+            throw "${here}: address does not resolve: '${a.attr}' on the host holds ${toString (builtins.length defs)} definition(s), and the address names definition ${toString a.def}"
+          else if !r.found then
+            throw "${here}: address does not resolve: the path ${builtins.toJSON a.at} is absent from definition ${toString a.def} of '${a.attr}'"
+          else
+            {
+              address = a;
+              inherit (r) value;
+            };
+
+      seedOf =
+        name: group: key: seed:
+        if !builtins.isList seed then
+          throw "${at name}, child '${group}'/'${key}': a seed is a list of addresses into the host's evaluated definitions, and this builder returned a ${builtins.typeOf seed}. A builder points into its host's definitions and never supplies its child's definitions as a value, which is what makes a constant seed inexpressible."
+        else
+          prelude.imap0 (readAddress name group key) seed;
+
+      groupOf =
+        name: group: members:
+        let
+          # Checked on the group's own KEYS, eager the moment the group is forced: a minted id that
+          # is a registered node's is one `resolveNode` answers from its roots-first arm, so a check
+          # inside the lazy per-record thunk would never fire for exactly the case it exists for.
+          colliding = builtins.filter (key: nodes ? ${mintNtaId id name group key}) (
+            builtins.attrNames members
+          );
+        in
+        if !builtins.isAttrs members then
+          throw "${at name}: the builder's group '${group}' is a ${builtins.typeOf members} rather than an attribute set of seeds keyed by child key"
+        else if colliding != [ ] then
+          throw "${at name}: group '${group}' key '${builtins.head colliding}' mints the identifier '${
+            mintNtaId id name group (builtins.head colliding)
+          }', which is already a registered node's. A registered id is answered from the scope's roots, so this child would be discarded silently. Register the node under another id."
+        else
+          builtins.mapAttrs (key: seed: {
+            id = mintNtaId id name group key;
+            parent = id;
+            type = hostKind;
+            decls.seed = seedOf name group key seed;
+          }) members;
+
+      productOf =
+        name:
+        let
+          raw = ntas.${name} ev id;
+        in
+        if !builtins.isAttrs raw then
+          throw "${at name}: the builder returned a ${builtins.typeOf raw} rather than an attribute set of groups { <group> = { <key> = <seed>; }; }"
+        else
+          builtins.mapAttrs (groupOf name) raw;
+    in
+    builtins.mapAttrs (name: _: productOf name) ntas;
+
+  # The `nta` arm both evaluators' `node` take BEFORE any `parseParent` arm: the decoded host's
+  # memoized product, one group's key set forced and nothing else. `null` when the id is not an
+  # `nta` identifier of this evaluation — no decode, no channel, or a host whose kind declares no NTA
+  # of that name — so a caller-chosen id that merely decodes falls through to the other arms.
+  ntaTarget =
+    kinds: declared: ev: id:
+    let
+      t = decodeNta id;
+      hostType = (ev.node t.host).type or null;
+    in
+    if t == null || !(declared ? ${ntaChannel}) || kinds == null then
+      null
+    else if hostType != null && ((kinds.kinds.${hostType} or { }).nta or { }) ? ${t.name} then
+      t
+    else
+      null;
+
+  ntaLookup =
+    ev: id: t:
+    let
+      groups = (ev.get t.host ntaChannel).${t.name};
+    in
+    if !(groups ? ${t.group}) then
+      throw "gen-scope.nta: node '${id}' not reachable: NTA '${t.name}' on host '${t.host}' yields no group '${t.group}'"
+    else if !(groups.${t.group} ? ${t.key}) then
+      throw "gen-scope.nta: node '${id}' not reachable: NTA '${t.name}' on host '${t.host}' yields group '${t.group}' with no key '${t.key}'"
+    else
+      groups.${t.group}.${t.key};
+
   # The attribute set the evaluators actually run: the caller's, with the selection channel guarded
   # and the spawn channel the registry declares added. Writing the spawn channel by hand is refused —
   # it is the one surface on which an expansion could still be declared outside the kind order, and
@@ -430,6 +733,15 @@ let
     entry: checked: attributes:
     let
       kinds = checked.kinds or null;
+      # The `nta` channel runs only where some registered kind declares an NTA: a registry that
+      # declares none has no `nta` child to carry, and its attribute set stays what it was.
+      declaresNta = builtins.any (k: (k.nta or { }) != { }) (builtins.attrValues kinds.kinds);
+      run =
+        selected
+        // {
+          ${spawnChannel} = spawnFrom kinds checked.nodes;
+        }
+        // (if declaresNta then { ${ntaChannel} = ntaFrom kinds checked.nodes run; } else { });
       selected =
         if attributes ? ${selectionChannel} then
           attributes
@@ -443,13 +755,12 @@ let
       throw "gen-scope.${entry}: `${selectionChannel}` is declared circular, and a child-bearing attribute cannot be. The ground is bootstrap, not growth: a shared round's universe is derived from the materialized node set, the materialization walk reads the child-bearing attributes, and a circular one there would need a round whose bound needs the walk — measured as an uncatchable infinite recursion with this refusal removed. Every other structural attribute may be circular; this one selects the node set the universe is derived from."
     else if attributes ? ${spawnChannel} then
       throw "gen-scope.${entry}: `attributes` declares `${spawnChannel}` directly. A node expansion is declared on the KIND it expands FROM — `mkKind { spawns = { <produced-kind> = builder; }; }` — so that the produced kind is a registered name below its host's own and the descent is settled before anything fires. Written as a bare attribute the produced kind is whatever the body returns, which is a choice made at firing time and one nothing can check. Move the builder onto its host kind's `spawns`."
+    else if attributes ? ${ntaChannel} then
+      throw "gen-scope.${entry}: nta: `attributes` declares `${ntaChannel}` directly. An `nta` is declared on the KIND it grows from — `mkKind { nta = { <name> = builder; }; }` — so its children are stamped with the host's kind and minted from the host's coordinates. Move the builder onto its host kind's `nta`."
     else if kinds == null then
       selected
     else
-      selected
-      // {
-        ${spawnChannel} = spawnFrom kinds checked.nodes;
-      };
+      run;
 
   eval =
     {
@@ -624,7 +935,7 @@ let
                 let
                   raw = applyAttr nodeId attrName fn;
                 in
-                if structural.childBearing attrName then builtins.mapAttrs (_: wrapChild) raw else raw
+                if structural.childBearing attrName then wrapAt (structural.childDepth attrName) raw else raw
               else if !round.open && decision.isClean nodeId && builtins.elem attrName (servedAt nodeId) then
                 servePrior nodeId attrName
               else
@@ -1277,6 +1588,11 @@ let
                   else
                     builtins.mapAttrs (attrName: fn: evalAttr childNode.id attrName fn) runAttributes;
               };
+            # A child-bearing value wrapped at its depth: `mapAttrs` is lazy in values, so an `nta`
+            # group's key set is still forced alone.
+            wrapAt =
+              d: v:
+              if d <= 1 then builtins.mapAttrs (_: wrapChild) v else builtins.mapAttrs (_: wrapAt (d - 1)) v;
             rootEval = prelude.mapAttrs (
               id: _: builtins.mapAttrs (attrName: fn: evalAttr id attrName fn) runAttributes
             ) roots;
@@ -1308,8 +1624,13 @@ let
             # Roots: direct lookup. Non-roots: via parseParent or generic walk.
             resolveNode =
               id:
+              let
+                nta = ntaTarget (checked.kinds or null) runAttributes self id;
+              in
               if roots ? ${id} then
                 roots.${id}
+              else if nta != null then
+                ntaLookup self id nta
               else if parseParent != null then
                 let
                   parentId = parseParent id;
@@ -1547,7 +1868,10 @@ let
             # It is an attribute-name-indexed RECORD and not a relation — `id -> {name -> value}`,
             # which is not even the arity of an edge set. Naming it for the attributes it partitions
             # is what keeps it distinct from the node-level dependency relation the seal publishes.
-            structuralAttributes = id: prelude.genAttrs structuralNamesAll (name: self.get id name);
+            # A child-bearing attribute is presented at depth one (`structural.flattenChildren`), the
+            # shape the projection below reads; the others pass through unchanged.
+            structuralAttributes =
+              id: prelude.genAttrs structuralNamesAll (name: structural.flattenChildren name (self.get id name));
 
             # THE SAME PARTITION AS A RELATION — `id -> [id]`, which is the arity the record above is
             # not. The projection itself is gen-graph's: it is edge vocabulary, it belongs beside the
@@ -1727,8 +2051,13 @@ let
 
           node =
             id:
+            let
+              nta = ntaTarget (checked.kinds or null) runAttributes (mkSelf visited traceList) id;
+            in
             if roots ? ${identifier "self.node" id} then
               roots.${id}
+            else if nta != null then
+              ntaLookup (mkSelf visited traceList) id nta
             else if parseParent != null then
               let
                 parentId = parseParent id;
@@ -1816,6 +2145,11 @@ in
     eval
     evalDebug
     evalWarm
+    # The `nta` child identifier and its total decoder, published so a caller can predict the
+    # identifier a child is minted under and read one back; the evaluator mints and decodes with
+    # these same bindings, so the two cannot disagree.
+    mintNtaId
+    decodeNta
     # The seam guard's reason, published so a cell can assert the MESSAGE rather than the fact of a
     # refusal. `tryEval` catches the throw and discards its text, so the validator is the only
     # CI-testable form of a guard whose message names the reader, the target and the relation.

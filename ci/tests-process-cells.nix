@@ -28,7 +28,7 @@ let
   # readable inside the build sandbox.
   graph = import "${genGraphSrc}" { inherit prelude; };
   # The registry discriminator ships with `mkKinds`; the two guards below take it as a formal.
-  inherit (import "${libSrc}/cascade.nix" { inherit prelude graph; }) isKindSet;
+  inherit (import "${libSrc}/cascade.nix" { inherit prelude graph; }) isKindSet mkKind mkKinds;
   inherit (import "${libSrc}/require-scope.nix" { inherit prelude isKindSet; }) requireScope;
   # The declared relation's input type. The evaluator takes it as a formal like `requireScope`, so
   # this wiring binds it the same way; none of the arms below supplies a relation, so every one of
@@ -295,6 +295,75 @@ let
       );
     }
   ) "t2";
+
+  # ── U1-h · an `nta` cycle pays the stated price (den-hoag-n6dh7 spec item 8) ──
+  # A `tree` host whose one NTA's key set reads `n`, and `n` counts the host's children through the
+  # published composed read — which includes the `nta` ones. The key set therefore depends on a value
+  # that depends on the children the key set decides. Unit 1 adds no re-entry guard: the production
+  # evaluator dies anonymously on Nix's own abort, the debug evaluator refuses the same cycle BY NAME
+  # (the absence clause's live control), and the same fixture keyed on a constant answers 1.
+  ntaCyc =
+    keyed: evaluator:
+    let
+      kinds = mkKinds [
+        (mkKind {
+          name = "tree";
+          nta.sub = self: id: {
+            g =
+              if keyed self id > 99 then
+                { }
+              else
+                {
+                  k = [
+                    {
+                      attr = "defs";
+                      def = 0;
+                      at = [ "s" ];
+                    }
+                  ];
+                };
+          };
+        })
+      ];
+    in
+    (evaluator {
+      scope = {
+        nodes.h = {
+          id = "h";
+          type = "tree";
+          parent = null;
+          decls = { };
+        };
+        nodeOrder = [ "h" ];
+        inherit kinds;
+      };
+      attributes = {
+        children = _: _: { };
+        defs = _: id: if id == "h" then [ { s = { }; } ] else [ ];
+        n = self: id: builtins.length (builtins.attrNames (self._childRecords id));
+        # U1-i's memo probe: one trace per APPLICATION of the attribute body.
+        probe = _: _: builtins.trace "F1-PROBE" 1;
+      };
+    });
+  ntaByN = self: id: self.get id "n";
+  ntaConst = _: _: 0;
+  ntaChild = evalLib.mintNtaId "h" "sub" "g" "k";
+
+  # U1-i · one memo: the child's attribute read through `get` twice, through `_eval` once and reached
+  # once through enumeration, and its body applies ONCE.
+  ntaMemo =
+    let
+      ev = ntaCyc ntaConst evalLib.eval;
+    in
+    builtins.seq (ev.get ntaChild "probe") (
+      builtins.seq (ev.get ntaChild "probe") (
+        builtins.seq (ev.node ntaChild)._eval.probe (
+          builtins.seq (builtins.length (builtins.attrNames (ev._childRecords "h"))) (
+            (ev._childRecords "h").${ntaChild}._eval.probe
+          )
+        )
+      )
+    );
 in
 if arm == "lrp2" then
   lrp2 (builtins.div 1 0)
@@ -327,5 +396,13 @@ else if arm == "egb-ctl-plain" then
   egbCtlPlain
 else if arm == "egb-mask" then
   egbMask
+else if arm == "nta-cyc" then
+  (ntaCyc ntaByN evalLib.eval).get "h" "n"
+else if arm == "nta-cyc-dbg" then
+  (ntaCyc ntaByN evalLib.evalDebug).get "h" "n"
+else if arm == "nta-cyc-ctl" then
+  (ntaCyc ntaConst evalLib.eval).get "h" "n"
+else if arm == "nta-memo" then
+  ntaMemo
 else
   throw "tests-process-cells: unknown arm '${arm}'"

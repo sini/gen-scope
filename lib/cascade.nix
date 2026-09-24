@@ -306,6 +306,7 @@ let
     ;
   inherit (prelude)
     all
+    any
     attrValues
     concatLists
     concatMap
@@ -368,6 +369,7 @@ let
       below ? [ ],
       resolve ? null,
       spawns ? { },
+      nta ? { },
       dedupKey ? null,
       fold ? null,
     }:
@@ -391,6 +393,19 @@ let
       spawnKinds = if isAttrs spawns then attrNames spawns else [ ];
       undeclaredSpawn = filter (k: !(elem k below)) spawnKinds;
       unbuildableSpawn = filter (k: !(callable spawns.${k})) spawnKinds;
+      # ── THE `nta` DECLARATION: the recursive NTA form, beside `spawns` and not inside it ──
+      # `nta` is Vogt, Swierstra & Kuiper 1989 Def. 3.14's recursive `F → F̄` form, whose children
+      # are of the HOST's own kind; `spawns` above is the non-recursive fragment Lemma 3.2 / Söderberg
+      # §7 make finite by kind order. So `nta` adds NO `below` entry and needs none, and the
+      # self-`below` refusal in `mkKinds` is untouched. Its admission rule and its stated price live
+      # at its channel in `lib/eval.nix`. Every refusal here carries the `nta:` token, so a reader
+      # tells the two rules apart by the token rather than by the builder's shape.
+      #
+      # The circular arm is ordered BEFORE the applicability arm on purpose: a circular declaration
+      # is not `callable`, so under the opposite order its message could never fire.
+      ntaNames = if isAttrs nta then attrNames nta else [ ];
+      circularNta = filter (k: isCircularDecl nta.${k}) ntaNames;
+      unbuildableNta = filter (k: !(callable nta.${k})) ntaNames;
     in
     if !isString name then
       throw "gen-scope.mkKind: `name` must be a string"
@@ -406,6 +421,12 @@ let
       throw "gen-scope.mkKind: kind '${name}' declares a spawn producing kind(s) ${toJSON undeclaredSpawn} that its `below` set ${toJSON below} does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there."
     else if unbuildableSpawn != [ ] then
       throw "gen-scope.mkKind: kind '${name}' declares a spawn for kind(s) ${toJSON unbuildableSpawn} whose builder cannot be applied"
+    else if !isAttrs nta then
+      throw "gen-scope.mkKind: nta: kind '${name}' declares an `nta` that is a ${typeOf nta} rather than an attribute set of builders keyed by NTA name"
+    else if circularNta != [ ] then
+      throw "gen-scope.mkKind: nta: kind '${name}' declares NTA(s) ${toJSON circularNta} whose builder is a circular declaration. An `nta` builder computes the NODE SET, and a node set that is a fixed point of its own iterate is the per-step growth the spawn-read restriction refuses. A child's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function."
+    else if unbuildableNta != [ ] then
+      throw "gen-scope.mkKind: nta: kind '${name}' declares NTA(s) ${toJSON unbuildableNta} whose builder cannot be applied"
     else if hasDedup && !hasFold then
       throw "gen-scope.mkKind: kind '${name}' declares `dedupKey` without `fold` (a fold is required to merge grouped fragments)"
     else if hasFold && !hasDedup then
@@ -418,6 +439,7 @@ let
           below
           resolve
           spawns
+          nta
           dedupKey
           fold
           ;
@@ -428,6 +450,11 @@ let
   # only for as long as someone keeps them in step. The argument for the approximation, and for
   # what it costs, is stated at its module.
   callable = import ./callable.nix;
+
+  # The circular-declaration classifier, the evaluator's own (`lib/eval.nix`), repeated as the one
+  # line it is because `mkKind` refuses a circular `nta` builder before any evaluator exists. The
+  # declaration shape is `circular`'s record (`lib/resolve.nix`), tagged `kind = "circular"`.
+  isCircularDecl = v: isAttrs v && (v.kind or null) == "circular";
 
   # The reason an entry is not a kind, or null. Total on any value: each arm establishes what the
   # next one needs, so nothing here reads a field it has not already found. The reason names the
@@ -465,6 +492,14 @@ let
       "declares a spawn outside its own `below` set"
     else if !(all (p: callable k.spawns.${p}) (attrNames k.spawns)) then
       "carries a spawn builder that cannot be applied"
+    else if !(k ? nta) then
+      "nta: carries no `nta` field"
+    else if !isAttrs k.nta then
+      "nta: carries an `nta` that is not an attribute set"
+    else if any (p: isCircularDecl k.nta.${p}) (attrNames k.nta) then
+      "nta: carries an `nta` builder that is a circular declaration"
+    else if !(all (p: callable k.nta.${p}) (attrNames k.nta)) then
+      "nta: carries an `nta` builder that cannot be applied"
     else if k.dedupKey != null && !(callable k.dedupKey) then
       "carries a `dedupKey` that is neither null nor applicable"
     else if k.fold != null && !(callable k.fold) then

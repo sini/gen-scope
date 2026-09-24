@@ -621,6 +621,7 @@ let
   wellFormedForged = {
     resolve = ghostResolve;
     spawns = { };
+    nta = { };
     dedupKey = null;
     fold = null;
   };
@@ -720,6 +721,7 @@ let
     below = [ ];
     resolve = ghostResolve;
     spawns = { };
+    nta = { };
     dedupKey = null;
     fold = null;
   };
@@ -2041,10 +2043,12 @@ in
     # which is exactly what an incumbent is. The figure is a baseline over the library's export
     # surface and re-derives whenever that surface grows. 89 rather than 87: `build-nodes.nix` now
     # also publishes `mintAttachmentId`/`parseParent`, the multi-parent attachment convention
-    # `buildRoots`' own partial-function refusal recommends but did not, until now, ship.
+    # `buildRoots`' own partial-function refusal recommends but did not, until now, ship. 93 rather
+    # than 89: the `nta` channel publishes `mintNtaId`/`decodeNta` from `eval.nix` and
+    # `childDepth`/`flattenChildren` from `structural.nix`.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 89;
+      expected = 93;
     };
     # Four doors and one predicate. The doors are the registration and run entries and nothing else
     # — the consumer accessors that used to sit beside them reconstructed a list the run already

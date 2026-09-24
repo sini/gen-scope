@@ -3122,4 +3122,201 @@ in
         expectedError = refused "mintStrata: relatum 'warp' of 'b1'" "a node identifier";
       };
     };
+
+  # ── THE `nta` CHANNEL'S REFUSALS (den-hoag-n6dh7 U1-e, U1-j, U1-l, U1-m, P-f) ──
+  # Every refusal of the recursive NTA form carries the `nta:` token, so a reader tells its rule
+  # apart from `spawns`' by the token and never by the builder's shape. The fixture is shared with
+  # `tests/nta.nix`, whose value cells are the clean path over the same graph.
+  config.flake.testsError.nta-refusals =
+    let
+      fx = import ./tests/_fixtures/nta.nix { inherit genScope; };
+      inherit (genScope) mintNtaId;
+      k = mkKind { name = "t"; };
+      loop =
+        circular
+          {
+            carrier = {
+              bottom = 0;
+              leq = a: b: a <= b;
+              height = 1;
+              quotient = false;
+            };
+          }
+          (
+            _: _: _:
+            { }
+          );
+      forced = v: builtins.deepSeq v v;
+      seedRefusal = seed: forced (map (e: e.value) (fx.seedOfChild (fx.seeded seed)));
+      at = "gen-scope.nta: kind 'raw' NTA 'x' on host 'r'";
+      el = "${at}, child 'g'/'k', seed element 0";
+      c = fx.child;
+      err = msg: {
+        type = "ThrownError";
+        msg = exactly msg;
+      };
+    in
+    {
+      # ── item 1 · the declaration ladder, in order ──
+      test-an-nta-that-is-not-an-attribute-set-is-refused = {
+        expr = mkKind {
+          name = "t";
+          nta = 3;
+        };
+        expectedError = err "gen-scope.mkKind: nta: kind 't' declares an `nta` that is a int rather than an attribute set of builders keyed by NTA name";
+      };
+      # The circular arm precedes the applicability arm: a circular declaration is not `callable`,
+      # so under `spawns`' order this message could never fire.
+      test-a-circular-nta-builder-is-refused-as-circular = {
+        expr = mkKind {
+          name = "t";
+          nta.c = loop;
+        };
+        expectedError = err "gen-scope.mkKind: nta: kind 't' declares NTA(s) [\"c\"] whose builder is a circular declaration. An `nta` builder computes the NODE SET, and a node set that is a fixed point of its own iterate is the per-step growth the spawn-read restriction refuses. A child's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function.";
+      };
+      test-an-nta-builder-that-cannot-be-applied-is-refused = {
+        expr = mkKind {
+          name = "t";
+          nta.c = 3;
+        };
+        expectedError = err "gen-scope.mkKind: nta: kind 't' declares NTA(s) [\"c\"] whose builder cannot be applied";
+      };
+
+      # ── `notAKind`'s four arms ──
+      test-registry-a-record-with-no-nta-field-is-refused = {
+        expr = mkKinds [ (builtins.removeAttrs k [ "nta" ]) ];
+        expectedError = err ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 nta: carries no `nta` field"]'';
+      };
+      test-registry-an-nta-that-is-not-an-attribute-set-is-refused = {
+        expr = mkKinds [ (k // { nta = 3; }) ];
+        expectedError = err ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 nta: carries an `nta` that is not an attribute set"]'';
+      };
+      test-registry-a-circular-nta-builder-is-refused = {
+        expr = mkKinds [ (k // { nta.c = loop; }) ];
+        expectedError = err ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 nta: carries an `nta` builder that is a circular declaration"]'';
+      };
+      test-registry-an-nta-builder-that-cannot-be-applied-is-refused = {
+        expr = mkKinds [ (k // { nta.c = 3; }) ];
+        expectedError = err ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 nta: carries an `nta` builder that cannot be applied"]'';
+      };
+
+      # ── item 2 · the seed is a list of addresses (U1-l, U1-m, P-f) ──
+      test-U1l-a-constant-seed-is-refused = {
+        expr = seedRefusal { x = 7; };
+        expectedError = err "${at}, child 'g'/'k': a seed is a list of addresses into the host's evaluated definitions, and this builder returned a set. A builder points into its host's definitions and never supplies its child's definitions as a value, which is what makes a constant seed inexpressible.";
+      };
+      test-U1l-a-value-inside-the-list-is-not-an-address = {
+        expr = seedRefusal [ { x = 7; } ];
+        expectedError = err "${el}: a seed element is not an address { attr : string; def : int >= 0; at : [ name | index >= 0 ]; }";
+      };
+      test-U1l-an-ill-typed-address-is-not-an-address = {
+        expr = seedRefusal [
+          {
+            attr = "defs";
+            def = "0";
+            at = [ "s" ];
+          }
+        ];
+        expectedError = err "${el}: a seed element is not an address { attr : string; def : int >= 0; at : [ name | index >= 0 ]; }";
+      };
+      test-U1m-an-empty-path-is-refused = {
+        expr = seedRefusal [ (fx.addr 0 [ ]) ];
+        expectedError = err "${el}: an address with an empty path re-addresses a whole definition, which is not a strict sub-value of it. Name at least one step inside the definition.";
+      };
+      test-U1l-an-absent-path-does-not-resolve = {
+        expr = seedRefusal [ (fx.addr 0 [ "absent" ]) ];
+        expectedError = err "${el}: address does not resolve: the path [\"absent\"] is absent from definition 0 of 'defs'";
+      };
+      test-Pf-an-attribute-the-evaluation-does-not-declare-does-not-resolve = {
+        expr = seedRefusal [
+          {
+            attr = "nosuch";
+            def = 0;
+            at = [ "s" ];
+          }
+        ];
+        expectedError = err "${el}: address does not resolve: the evaluation declares no attribute 'nosuch' to carry the host's definitions";
+      };
+      test-an-attribute-that-is-not-a-list-does-not-resolve = {
+        expr = seedRefusal [
+          {
+            attr = "notAList";
+            def = 0;
+            at = [ "s" ];
+          }
+        ];
+        expectedError = err "${el}: address does not resolve: 'notAList' on the host is a set, not a list of definitions";
+      };
+      test-a-definition-out-of-range-does-not-resolve = {
+        expr = seedRefusal [ (fx.addr 5 [ "s" ]) ];
+        expectedError = err "${el}: address does not resolve: 'defs' on the host holds 1 definition(s), and the address names definition 5";
+      };
+
+      # ── item 3 · the firing-time shapes and the registered collision (U1-j) ──
+      test-a-builder-output-that-is-not-an-attribute-set-is-refused = {
+        expr = builtins.attrNames ((fx.rawRun (_: _: [ ])).get "r" "nta-children").x;
+        expectedError = err "${at}: the builder returned a list rather than an attribute set of groups { <group> = { <key> = <seed>; }; }";
+      };
+      test-a-group-that-is-not-an-attribute-set-is-refused = {
+        expr = builtins.attrNames ((fx.rawRun (_: _: { g = [ ]; })).get "r" "nta-children").x.g;
+        expectedError = err "${at}: the builder's group 'g' is a list rather than an attribute set of seeds keyed by child key";
+      };
+      test-U1j-a-minted-id-a-registered-node-carries-is-refused = {
+        expr =
+          (fx.rawNodes (_: _: { g.k = [ (fx.addr 0 [ "s" ]) ]; }) {
+            ${c} = {
+              id = c;
+              type = "raw";
+              parent = null;
+              decls = { };
+            };
+          }).allNodeIds;
+        expectedError = err "${at}: group 'g' key 'k' mints the identifier '${c}', which is already a registered node's. A registered id is answered from the scope's roots, so this child would be discarded silently. Register the node under another id.";
+      };
+
+      # ── item 5 · an identifier the product does not carry ──
+      test-an-absent-group-is-not-reachable = {
+        expr = (fx.seeded [ (fx.addr 0 [ "s" ]) ]).node (mintNtaId "r" "x" "nog" "k");
+        expectedError = err "gen-scope.nta: node '${mintNtaId "r" "x" "nog" "k"}' not reachable: NTA 'x' on host 'r' yields no group 'nog'";
+      };
+      test-an-absent-key-is-not-reachable = {
+        expr = (fx.seeded [ (fx.addr 0 [ "s" ]) ]).node (mintNtaId "r" "x" "g" "nokey");
+        expectedError = err "gen-scope.nta: node '${mintNtaId "r" "x" "g" "nokey"}' not reachable: NTA 'x' on host 'r' yields group 'g' with no key 'nokey'";
+      };
+
+      # ── item 6 · the carriage ──
+      test-a-key-shared-across-the-halves-is-refused-at-enumeration = {
+        expr =
+          (genScope.eval {
+            scope = fx.scopeOf (mkKinds [
+              (mkKind { name = "leaf"; })
+              (mkKind {
+                name = "raw";
+                below = [ "leaf" ];
+                spawns.leaf = _: _: {
+                  ${c} = {
+                    id = c;
+                    decls = { };
+                  };
+                };
+                nta.x = _: id: if id == "r" then { g.k = [ (fx.addr 0 [ "s" ]) ]; } else { };
+              })
+            ]) (fx.root "raw" { defs = [ { s = { }; } ]; });
+            inherit (fx) attributes;
+          }).allNodeIds;
+        expectedError = err "gen-scope.nta: node 'r' carries an `nta` child '${c}' under a key its `children` or `derived-children` also carries. The three halves compose into one child map, and a shared key would discard one record silently. An `nta` identifier is minted by the substrate, so the other half chose it: choose a key that is not an `nta` identifier.";
+      };
+      test-a-hand-written-nta-children-is-refused = {
+        expr =
+          (genScope.eval {
+            scope = fx.scopeOf (mkKinds [ fx.tree ]) (fx.root "tree" { defs = [ { } ]; });
+            attributes = fx.attributes // {
+              nta-children = _: _: { };
+            };
+          }).get
+            "r"
+            "defs";
+        expectedError = err "gen-scope.eval: nta: `attributes` declares `nta-children` directly. An `nta` is declared on the KIND it grows from — `mkKind { nta = { <name> = builder; }; }` — so its children are stamped with the host's kind and minted from the host's coordinates. Move the builder onto its host kind's `nta`.";
+      };
+    };
 }
