@@ -720,7 +720,7 @@ What the door is handed is the **unsigned** dependency accessor (`program.depend
 
 **The engine constrains nothing on cost.** It accepts any program the semantics does not refuse and costs what it costs: no depth, size or shape makes a program inadmissible. `verifiedDepth` is an **acceptance** bound — what has been verified, never what the engine permits — and past it the engine **warns**; it does not refuse. A runtime refusal past a stated depth would make cost into correctness.
 
-**The depth is paid only if the warning is read.** Measured on one 2049-atom chain: forcing `solve`'s `trueAtoms` costs 679 ms, forcing its `provenance` costs 2765 ms. The difference is the condensation, and it is demand-driven like everything else in this substrate — the field is on the result and cannot be dropped, but nothing computes it until something reads it.
+**The depth is paid only if the warning is read.** Measured on one 2049-atom chain: forcing `solve`'s `trueAtoms` costs about 470 ms, forcing its `provenance` about 1000 ms. The difference is the condensation, and it is demand-driven like everything else in this substrate — the field is on the result and cannot be dropped, but nothing computes it until something reads it.
 
 **The warning rides the result.** It is a value the caller receives, never a side channel: a printed warning goes to stderr, which the evaluation cache swallows after the first run, and a debug-only field is invisible in ordinary use. A field that *is* the result survives caching because it is what was cached. It is plain data, so it crosses an evaluation boundary as itself. It is **not** the semantics' third value — `UNDEFINED` is a verdict on an atom inside the model; this accompanies a successful operation.
 
@@ -738,12 +738,12 @@ engine.verifiedDepth
 
 | rung `d` | chain | blocks | deepContested | layers | greatest condensation depth |
 | -------- | ----- | ------ | ------------- | ------ | --------------------------- |
-| 128      | 430   | 432    | 503           | 641    | 129                         |
-| 512      | 569   | 589    | 1524          | 3643   | 513                         |
-| 1024     | 1014  | 1144   | 5020          | 13807  | 1025                        |
-| 2048     | 2740  | 3152   | 20335         | 58590  | **2049**                    |
+| 128      | 789   | 805    | 852           | 971    | 129                         |
+| 512      | 833   | 817    | 1825          | 3396   | 513                         |
+| 1024     | 864   | 849    | 4636          | 10776  | 1025                        |
+| 2048     | 916   | 907    | 18867         | 43771  | **2049**                    |
 
-Each cell is a separate `nix-instantiate`, so every figure carries the evaluator's startup — around 250 ms, which is most of the 128 rung and none of the 2048 one. The ladder is read for **what completed**, not as a cost model. The `model` arm is the engine's own cost; the `depth` arm is the model **plus** the door, so the door's price is the difference between them and never the `depth` reading.
+Each cell is a separate `nix-instantiate`, so every figure carries the evaluator's startup — around 440 ms on the `model` arm and around 780 ms on the arms that load the door, read at the 8 rung. That is nearly all of every `chain` and `blocks` cell, at every rung, and little of the `deepContested` and `layers` cells at 2048. The ladder is read for **what completed**, not as a cost model. The `model` arm is the engine's own cost; the `depth` arm is the model **plus** the door, so the door's price is the difference between them and never the `depth` reading.
 
 No figure here is a budget and none is offered as one. Whether a curve is adequate for the fleet the engine is for is a judgement, made by a person reading it, and no threshold is manufactured to make it runnable.
 
