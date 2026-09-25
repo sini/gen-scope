@@ -62,7 +62,8 @@
       extraModules = [
         ./tests-error.nix
         # The per-process cells: verdicts that are PROCESS EXITS (uncatchable aborts), one
-        # fixture per evaluator process, run as a check so `nix flake check` carries them.
+        # fixture per evaluator process. Exposed as `apps.<system>.tests-process` and run by
+        # `ci --tests-process` under the column's evaluator, never as a sandboxed check.
         ./tests-process.nix
       ];
     };

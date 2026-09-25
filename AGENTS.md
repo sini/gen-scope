@@ -455,6 +455,7 @@ Current output (verbatim):
 ```sh
 nix develop ./ci --command ci                # the suites, guarded
 nix develop ./ci --command ci --tests-error  # the error-plane cells, guarded
+nix develop ./ci --command ci --tests-process  # the per-process cells, under the nix on PATH
 nix flake check ./ci                         # what CI runs; unguarded
 ```
 

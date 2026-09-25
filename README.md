@@ -1032,6 +1032,7 @@ A stratum's items are selected from everything seen so far — the seed plus wha
 nix develop ./ci --command ci              # run all tests, guarded
 nix develop ./ci --command ci eval         # run one suite
 nix develop ./ci --command ci eval.test-basic-root-attribute  # run one test
+nix develop ./ci --command ci --tests-process  # the per-process cells, under the nix on PATH
 nix flake check ./ci                       # build + run the full suite; unguarded
 ```
 
