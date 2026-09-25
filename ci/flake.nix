@@ -65,6 +65,13 @@
         # fixture per evaluator process. Exposed as `apps.<system>.tests-process` and run by
         # `ci --tests-process` under the column's evaluator, never as a sandboxed check.
         ./tests-process.nix
+        # `buildNodes` is a TOMBSTONE (lib/build-nodes.nix): `checks.root-surface` excludes it from
+        # the walk, and the generated `root-surface-retired.test-retired-buildNodes` cell pins this
+        # exact message at the root seam, so a resurrected or reworded tombstone reds.
+        {
+          gen.ci.rootSurface.retired.buildNodes =
+            "gen-scope: `buildNodes` is retired. Use `buildRoots`, which returns `{ nodes, nodeOrder }` — the node set together with its declared vertex order. Renaming the call is NOT sufficient: the evaluators take that whole record as `scope`, not a bare node map as `roots`, so `eval { roots = buildRoots {…}; }` is refused too.";
+        }
       ];
     };
 }
