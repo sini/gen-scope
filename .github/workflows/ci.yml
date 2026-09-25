@@ -4,22 +4,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # A negative test runs on a scratch branch with no pull request: `gh workflow run ci.yml --ref <branch>`.
+  workflow_dispatch:
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ci
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-      - uses: DeterminateSystems/magic-nix-cache-action@main
-      - run: nix flake check
-      # `nix flake check` covers the `tests` output ONLY — the batch asserter behind
-      # `checks.default` quantifies over `flake.tests` and nothing else. The
-      # error-assertion cells live on `testsError` (`ci/tests-error.nix`), so without this
-      # step they never run here. nix-unit comes from the devshell, which is the flake's
-      # own LOCKED one rather than a floating ref.
-      - run: nix develop --command nix-unit --flake .#testsError
-      - run: nix fmt -- --ci
+  # The three-evaluator matrix (upstream Nix, Determinate, Lix) from gen-harness. The ref is the
+  # gen-harness rev locked in ci/flake.lock, so one harness identity governs the run; `relock`
+  # rewrites it when that lock moves.
+  evaluators:
+    uses: sini/gen-harness/.github/workflows/evaluators.yml@7a1e718c4652bfedd707c9a261fa03ee7e002195
