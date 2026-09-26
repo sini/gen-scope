@@ -311,5 +311,5 @@ examples/sql-schema/
 - [gen-select](https://github.com/sini/gen-select) -- compositional selector algebra
 - [gen-dispatch](https://github.com/sini/gen-dispatch) -- rule dispatch step, paired with gen-scope.circular for convergence
 - [gen-bind](https://github.com/sini/gen-bind) -- module binding with contracts and provenance
-- [gen-algebra](https://github.com/sini/gen-algebra) -- search monad, intensional functions, record algebra
+- [gen-algebra](https://github.com/sini/gen-algebra) -- intensional functions, record algebra
 - [nest-traits](../nest-traits/) -- the CSS selector equivalent of this SQL demo
