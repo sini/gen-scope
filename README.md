@@ -498,7 +498,7 @@ What the declaration buys:
 
 **Quotient carriers are admissible.** `leq` may order a quotient of the value space — key-set inclusion, a projection's order — because the theorem constrains the *declared* carrier and never requires it be the raw value's equality. What converges is then the class: raw values may still churn inside one, and a consumer needing finer stability declares a finer carrier. The price a quotient pays is stating its height, which is where an unbounded coarsening is refused by name instead of running to a cap.
 
-**A quotient's answer says what it is.** Since what converged is a class representative and not a fixed point of the step, the value leaves the substrate marked (ADR-0020's never-silence, ADR-0008 §3), and the evaluator splits its demand in two, decided by the declaration's `quotient` term and never by inspecting a value (ADR-0034):
+**A quotient's answer says what it is.** Since what converged is a class representative and not a fixed point of the step, the value leaves the substrate marked, never silenced, and the evaluator splits its demand in two, decided by the declaration's `quotient` term and never by inspecting a value:
 
 - `get` is the **raw** demand. On a `quotient = true` instance it refuses by name, catchably, before evaluating anything.
 - `getRepresentative` is the **named** demand. It answers `{ _type = "gen-scope/quotient-representative"; representative; }`, and refuses by name on an instance that is not a quotient carrier.
