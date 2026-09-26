@@ -519,7 +519,7 @@ in
     test-registry-names-the-entry-and-the-missing-field = {
       expr = mkKinds [
         {
-          _type = "gen-scope/kind";
+          _type = "gen-scope/kind-declaration";
           name = "ghost";
           below = [ ];
           dedupKey = null;
@@ -528,38 +528,35 @@ in
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries no `resolve` field"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries no `resolve` field"]'';
       };
     };
 
     # ── THE PASS-THROUGH DOOR NAMES THE ENTRY'S KEY, WHICH IS HOW THE RUN INDEXES IT ──
-    # A kind-set record handed over whole never met the registration checks, so the run asks the
-    # same question of its entries. The key is what the message carries — not the record's own
+    # A registry handed over whole may hold kinds no fold minted, so the run asks the same question
+    # of its entries. The key is what the message carries — not the record's own
     # `name` field — because the key is what a claim's `kind` resolves through, and on a forged
     # record the two need not agree.
     test-pass-through-door-names-the-entry-key-and-the-missing-field = {
       expr = resolveClaims {
         kinds = {
-          _type = "gen-scope/kind-set";
           kinds = {
             l = {
               _type = "gen-scope/kind";
               name = "l";
               below = [ ];
+              depth = 0;
+              belowKinds = { };
               dedupKey = null;
               fold = null;
             };
           };
-          depth = {
-            l = 0;
-          };
-          maxDepth = 0;
         };
         claims = [ ];
       };
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.resolveClaims: the kind set holds entries that are not kind records: ["`l` carries no `resolve` field"]'';
+        msg = exactly ''gen-scope.resolveClaims: the kind set holds entries that are not minted kinds: ["`l` carries no `resolve` field"]'';
       };
     };
 
@@ -569,7 +566,7 @@ in
     test-a-resolve-that-cannot-be-applied-says-so = {
       expr = mkKinds [
         {
-          _type = "gen-scope/kind";
+          _type = "gen-scope/kind-declaration";
           name = "l";
           below = [ ];
           resolve = 42;
@@ -580,7 +577,7 @@ in
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `resolve` that cannot be applied"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `resolve` that cannot be applied"]'';
       };
     };
     # ── THE OTHER NINE REASONS THE REGISTRY CAN GIVE, EACH BY ITS OWN TEXT ──
@@ -593,7 +590,7 @@ in
       expr = mkKinds [ 42 ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 is a int rather than a kind record"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 is a int rather than a kind declaration"]'';
       };
     };
     # A record that could be a kind but never met the constructor, which is a different repair
@@ -602,19 +599,19 @@ in
       expr = mkKinds [ { } ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 was not built by `mkKind`"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 was not built by `mkKind`"]'';
       };
     };
     test-a-name-that-is-not-a-string-is-named-as-such = {
       expr = mkKinds [
         {
-          _type = "gen-scope/kind";
+          _type = "gen-scope/kind-declaration";
           name = 42;
         }
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `name` that is not a string"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `name` that is not a string"]'';
       };
     };
     # The container and its elements are two repairs, and the folds' refusals draw the same line
@@ -622,27 +619,27 @@ in
     test-a-below-that-is-not-a-list-names-the-container = {
       expr = mkKinds [
         {
-          _type = "gen-scope/kind";
+          _type = "gen-scope/kind-declaration";
           name = "l";
           below = 42;
         }
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `below` that is not a list"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `below` that is not a list"]'';
       };
     };
     test-a-below-holding-a-non-string-names-the-element = {
       expr = mkKinds [
         {
-          _type = "gen-scope/kind";
+          _type = "gen-scope/kind-declaration";
           name = "l";
           below = [ 42 ];
         }
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `below` holding a name that is not a string"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `below` holding a name that is not a string"]'';
       };
     };
     # The other two missing-field arms. WHICH field is absent is the coordinate the caller acts
@@ -651,7 +648,7 @@ in
     test-a-missing-spawns-names-that-field = {
       expr = mkKinds [
         {
-          _type = "gen-scope/kind";
+          _type = "gen-scope/kind-declaration";
           name = "l";
           below = [ ];
           resolve = _: _: { };
@@ -659,13 +656,13 @@ in
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries no `spawns` field"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries no `spawns` field"]'';
       };
     };
     test-a-missing-dedupkey-names-that-field = {
       expr = mkKinds [
         {
-          _type = "gen-scope/kind";
+          _type = "gen-scope/kind-declaration";
           name = "l";
           below = [ ];
           resolve = _: _: { };
@@ -674,13 +671,13 @@ in
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries no `dedupKey` field"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries no `dedupKey` field"]'';
       };
     };
     test-a-missing-fold-names-that-field = {
       expr = mkKinds [
         {
-          _type = "gen-scope/kind";
+          _type = "gen-scope/kind-declaration";
           name = "l";
           below = [ ];
           resolve = _: _: { };
@@ -690,7 +687,7 @@ in
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries no `fold` field"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries no `fold` field"]'';
       };
     };
     # ── THE APPLICABILITY ARMS, WHOSE RECORDS THE SUPPORTED CONSTRUCTOR ITSELF BUILDS ──
@@ -711,7 +708,7 @@ in
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `dedupKey` that is neither null nor applicable"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `dedupKey` that is neither null nor applicable"]'';
       };
     };
     test-a-fold-that-cannot-be-applied-says-so = {
@@ -725,7 +722,7 @@ in
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 carries a `fold` that is neither null nor applicable"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `fold` that is neither null nor applicable"]'';
       };
     };
 
@@ -1389,9 +1386,9 @@ in
       };
 
       # A kind that spawns its own kind. `mkKind` accepts `spawns.a` when `below` carries `a` —
-      # `elem "a" [ "a" ]` holds — so the refusal is the REGISTRY's, and what it now names is the
-      # descent that is missing rather than the cycle that is present.
-      test-a-self-spawning-kind-names-descent-rather-than-a-cycle = {
+      # `elem "a" [ "a" ]` holds — and what it builds is a declaration. The fold cannot mint it: `a`
+      # is not minted before itself, so the refusal is the unresolved-name one (G1).
+      test-G1-a-self-spawning-declaration-cannot-be-minted = {
         expr = builtins.seq (mkKinds [
           (mkKind {
             name = "a";
@@ -1401,7 +1398,32 @@ in
         ]) null;
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope.mkKinds: kind(s) [\"a\"] name themselves in their own `below` set. `below` is a STRICT descent order — what a kind expands into ranks strictly under it, and that is the decreasing measure the cascade terminates on. A kind cannot rank under itself, so a kind spawning its own kind expands into something no smaller than its host and descends nothing. Give the produced kind its own name and rank that below this one.";
+          msg = exactly "gen-scope.mkKinds: kind 'a' names 'a' in `below`, which no kind registered before it carries. A kind resolves its `below` names against the kinds declared EARLIER in the list, so declare every kind after the kinds its `below` names; a kind naming itself, or a cycle of kinds, has no such order and cannot be declared.";
+        };
+      };
+      # G2: a two-cycle misses at its first member, in the caller's list order.
+      test-G2-a-two-cycle-misses-at-its-first-member = {
+        expr = builtins.seq (mkKinds [
+          (mkKind {
+            name = "a";
+            below = [ "b" ];
+          })
+          (mkKind {
+            name = "b";
+            below = [ "a" ];
+          })
+        ]) null;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.mkKinds: kind 'a' names 'b' in `below`, which no kind registered before it carries. A kind resolves its `below` names against the kinds declared EARLIER in the list, so declare every kind after the kinds its `below` names; a kind naming itself, or a cycle of kinds, has no such order and cannot be declared.";
+        };
+      };
+      # The attribute-set form is retired by name, pointing at the list form.
+      test-the-attribute-set-form-is-refused-by-name = {
+        expr = builtins.seq (mkKinds { a = mkKind { name = "a"; }; }) null;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.mkKinds: expected a LIST of kind declarations, not an attribute set. Kinds are minted in list order, each against the kinds declared before it, and an attribute set has no order to mint in: list the declarations with every kind after the kinds its `below` names.";
         };
       };
     };
@@ -2834,50 +2856,75 @@ in
     };
 
   # ── THE KIND REGISTRY'S ADMISSION, BY MESSAGE ──
-  # The same division as the relation contract above: `mkKinds` decides acyclicity of the whole
-  # `below` relation as it builds and stamps a tag saying so, the discriminator over that tag ships
-  # beside the constructor as `isKindSet`, and each door mints its OWN refusal naming ITSELF. A
-  # message naming the cascade for a defect at `eval`'s door sends a reader to a call they did not
-  # make.
+  # The registry doors decide a TYPE: every entry a kind `mkKinds` minted, filed under its own name,
+  # and coherent with every resolved `below` that reaches it (`cascade.nix`, `kindSetDefect`). Each
+  # door mints its OWN refusal naming ITSELF; a message naming the cascade for a defect at `eval`'s
+  # door sends a reader to a call they did not make.
   #
   # THAT these fire, and that a minted registry and the no-kinds cases still pass, are in
-  # `tests/registry-admission.nix` — whose `tryEval` cells carry the part no message can: the state
-  # this replaced was an UNCATCHABLE stack overflow, so a caller had no value to read the message
-  # off in the first place.
+  # `tests/registry-admission.nix`, whose `tryEval` cells carry the part no message can.
   #
-  # BOTH DETAIL ARMS ARE EXERCISED AT BOTH DOORS, because they are not interchangeable and the
-  # second is the one that matters. A registry is an attrset carrying a `kinds` attrset, so of the
-  # bypass `builtins.typeOf` says `set` and tells the reader nothing — that arm names the
-  # CONSTRUCTOR that was missed. Only where no constructor is plausibly in play does the message
-  # fall back to the type.
-  #
-  # ★ THE NON-ATTRSET ARM IS NOT COSMETIC. Before this guard, `kinds = [ … ]` reached
+  # ★ THE NON-ATTRSET ARM IS NOT COSMETIC. Before the guard, `kinds = [ … ]` reached
   # `unregisteredKinds`, whose `kinds.kinds or { }` falls back to `{ }` on a list — so a
   # mis-TYPED registry was reported as an unregistered KIND, naming the wrong defect at the wrong
-  # argument. The cells below pin the message that replaced it.
+  # argument.
   config.flake.testsError.registry-admission-refusals =
     let
-      spawnOf = _self: id: {
-        "${id}-i" = {
-          id = "${id}-i";
+      spawnOf = suffix: _self: id: {
+        "${id}-${suffix}" = {
+          id = "${id}-${suffix}";
           parent = id;
           decls = { };
         };
       };
 
-      # `mkKind` BUILDS this (the per-record checks are `spawns ⊆ below` and the field shapes);
-      # `mkKinds` is what refuses it, and nothing required `mkKinds` to have run.
+      # G4: `mkKind` BUILDS this, and what it builds is a declaration the fold cannot mint.
       selfNaming = genScope.mkKind {
         name = "k";
         below = [ "k" ];
-        spawns.k = spawnOf;
+        spawns.k = spawnOf "i";
       };
-      forgedRegistry = {
+      declarationRegistry = {
         kinds.k = selfNaming;
       };
 
-      # The hand-built record — the route the constructor does not stand in front of, and the one
-      # this repository's own fixtures use.
+      # G3: two registries built from disagreeing declarations, merged with `//`.
+      okKinds = genScope.mkKinds [
+        (genScope.mkKind { name = "item"; })
+        (genScope.mkKind {
+          name = "k";
+          below = [ "item" ];
+          spawns.item = spawnOf "i";
+        })
+      ];
+      upKinds = genScope.mkKinds [
+        (genScope.mkKind { name = "k"; })
+        (genScope.mkKind {
+          name = "item";
+          below = [ "k" ];
+          spawns.k = spawnOf "i";
+        })
+      ];
+      merged = okKinds // {
+        kinds = okKinds.kinds // {
+          inherit (upKinds.kinds) item;
+        };
+      };
+
+      # C4: a minted host updated with `//`, its `below` and its `spawns` both extended, so the
+      # door admits it and the evaluator finds no resolved record for the new key.
+      edited = okKinds // {
+        kinds = okKinds.kinds // {
+          k = okKinds.kinds.k // {
+            below = okKinds.kinds.k.below ++ [ "extra" ];
+            spawns = okKinds.kinds.k.spawns // {
+              extra = spawnOf "e";
+            };
+          };
+        };
+      };
+
+      # The hand-built record — the route the constructor does not stand in front of.
       handBuilt = kinds: {
         nodes.root = {
           id = "root";
@@ -2899,29 +2946,29 @@ in
           inherit kinds;
         };
 
-      # The invariant frame, with the entry name and the detail left to the cell — which is exactly
-      # what a caller reads to learn WHICH door they are at and WHAT they handed it.
+      # The invariant frame, with the entry name and the detail left to the cell.
       registryRefusal =
         entry: detail:
-        "gen-scope.${entry}: `scope.kinds` must be the registry `mkKinds` returns; ${detail}. Build it with `mkKinds` and pass the result: the `below` relation's acyclicity is decided where the registry is constructed, so a value this entry cannot tell apart from a registered one is one it must refuse.";
+        "gen-scope.${entry}: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it; ${detail}. Mint the kinds with `mkKinds` over their declarations and pass the result.";
 
-      missedConstructor = "received an attrset that `mkKinds` did not build";
+      declarationDetail = ''holds entries that are not minted kinds: ["`k` is a kind declaration built by `mkKind`, not a kind `mkKinds` minted: pass the declarations through `mkKinds`"]'';
+      mergeDetail = "files under 'k' a kind that differs from the kind 'k' that entry 'item' resolved in its `below` (compared on `name`, `below`, `depth` and the `spawns`/`nta` key sets). Two different kinds share one name — a merge of registries built from different declarations";
     in
     {
-      # The EVALUATOR, on a hand-built record. The detail names the constructor, not the type.
-      test-eval-refuses-an-unminted-registry-by-name = {
+      # G4 — the EVALUATOR, on a hand-built registry of declarations: a TYPE refusal naming it.
+      test-G4-eval-refuses-a-registry-of-declarations-by-name = {
         expr =
           (genScope.eval {
-            scope = handBuilt forgedRegistry;
+            scope = handBuilt declarationRegistry;
             inherit attributes;
           }).allNodeIds;
         expectedError = {
           type = "ThrownError";
-          msg = exactly (registryRefusal "eval" missedConstructor);
+          msg = exactly (registryRefusal "eval" declarationDetail);
         };
       };
 
-      # And on a NON-attrset, where no constructor is plausibly in play.
+      # And on a NON-attrset, where the type is all there is to name.
       test-eval-names-the-type-of-a-registry-that-is-not-an-attrset = {
         expr =
           (genScope.eval {
@@ -2934,13 +2981,39 @@ in
         };
       };
 
-      # The CONSTRUCTOR names itself: a record refused before it forms is a defect at a different
-      # call site from one refused as it is read, and a caller fixes them in different places.
-      test-buildRoots-refuses-an-unminted-registry-by-name = {
-        expr = (buildWith forgedRegistry).nodeOrder;
+      # G3 / C1 — the merge, refused by name at the evaluator's door.
+      test-G3-eval-refuses-a-merge-filing-two-kinds-under-one-name = {
+        expr =
+          (genScope.eval {
+            scope = handBuilt merged;
+            inherit attributes;
+          }).allNodeIds;
         expectedError = {
           type = "ThrownError";
-          msg = exactly (registryRefusal "buildRoots" missedConstructor);
+          msg = exactly (registryRefusal "eval" mergeDetail);
+        };
+      };
+
+      # C4 — the evaluator's own refusal of a spawn key with no resolved kind to stamp.
+      test-C4-a-spawn-with-no-resolved-kind-names-host-key-and-kind = {
+        expr =
+          (genScope.eval {
+            scope = handBuilt edited;
+            inherit attributes;
+          }).allNodeIds;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: node 'root' of kind 'k' spawns 'extra', and its kind resolves no kind 'extra' in its `below`: the kind record was updated after `mkKinds` minted it. A spawned node's kind is the minted record its host's kind resolved, so a spawn with none has no kind to stamp. Declare the kinds through `mkKinds` rather than editing a minted kind.";
+        };
+      };
+
+      # The CONSTRUCTOR names itself: a record refused before it forms is a defect at a different
+      # call site from one refused as it is read, and a caller fixes them in different places.
+      test-G4-buildRoots-refuses-a-registry-of-declarations-by-name = {
+        expr = (buildWith declarationRegistry).nodeOrder;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (registryRefusal "buildRoots" declarationDetail);
         };
       };
 
@@ -2952,22 +3025,30 @@ in
         };
       };
 
+      test-G3-buildRoots-refuses-the-same-merge-by-name = {
+        expr = (buildWith merged).nodeOrder;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (registryRefusal "buildRoots" mergeDetail);
+        };
+      };
+
       # The third evaluator entry, which shares the guard and must not borrow another's name.
       # Read through `node`, and the accessor is load-bearing. The guard fires when a field of
       # `requireScope`'s RESULT is selected: `trace` and `getTraced` are assembled without reaching
       # the scope and report "no error was caught" against a live guard, while `allNodes` and
       # `allNodeIds` throw this entry's OWN materialization refusal first and would pin this cell to
       # that message instead. Only a read that reaches a node reaches the registry.
-      test-evalDebug-refuses-an-unminted-registry-under-its-own-name = {
+      test-G4-evalDebug-refuses-a-registry-of-declarations-under-its-own-name = {
         expr =
           (genScope.evalDebug {
-            scope = handBuilt forgedRegistry;
+            scope = handBuilt declarationRegistry;
             inherit attributes;
           }).node
             "root";
         expectedError = {
           type = "ThrownError";
-          msg = exactly (registryRefusal "evalDebug" missedConstructor);
+          msg = exactly (registryRefusal "evalDebug" declarationDetail);
         };
       };
     };
@@ -3185,19 +3266,19 @@ in
       # ── `notAKind`'s four arms ──
       test-registry-a-record-with-no-nta-field-is-refused = {
         expr = mkKinds [ (builtins.removeAttrs k [ "nta" ]) ];
-        expectedError = err ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 nta: carries no `nta` field"]'';
+        expectedError = err ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 nta: carries no `nta` field"]'';
       };
       test-registry-an-nta-that-is-not-an-attribute-set-is-refused = {
         expr = mkKinds [ (k // { nta = 3; }) ];
-        expectedError = err ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 nta: carries an `nta` that is not an attribute set"]'';
+        expectedError = err ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 nta: carries an `nta` that is not an attribute set"]'';
       };
       test-registry-a-circular-nta-builder-is-refused = {
         expr = mkKinds [ (k // { nta.c = loop; }) ];
-        expectedError = err ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 nta: carries an `nta` builder that is a circular declaration"]'';
+        expectedError = err ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 nta: carries an `nta` builder that is a circular declaration"]'';
       };
       test-registry-an-nta-builder-that-cannot-be-applied-is-refused = {
         expr = mkKinds [ (k // { nta.c = 3; }) ];
-        expectedError = err ''gen-scope.mkKinds: not every entry is a kind record: ["entry 0 nta: carries an `nta` builder that cannot be applied"]'';
+        expectedError = err ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 nta: carries an `nta` builder that cannot be applied"]'';
       };
 
       # ── item 2 · the seed is a list of addresses (U1-l, U1-m, P-f) ──

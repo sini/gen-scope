@@ -4,9 +4,9 @@
 # because it is INTERNAL: the assembly point binds it and hands it on, but does not merge it into
 # the published surface. A guard is not a consumer-facing construct.
 #
-# `isKindSet` is `cascade.nix`'s, for the reason `require-declared-dependencies.nix` takes `graph`:
-# the DISCRIMINATOR belongs with the constructor that writes the tag, and the REFUSAL belongs at the
-# door where the defect is. The assembly point binds the two together.
+# `kindSetDefect` is `cascade.nix`'s, for the reason `require-declared-dependencies.nix` takes
+# `graph`: the registry TYPE is decided beside the fold that mints its kinds, and the REFUSAL belongs
+# at the door where the defect is. The assembly point binds the two together.
 # ── THE INPUT TYPE, REFUSED BY NAME ──
 # Every entry taking a materialized node set takes the WHOLE record `buildRoots` returns, not a
 # bare node map. The two are near-indistinguishable to a caller and catastrophically different to
@@ -27,22 +27,22 @@
 # result forces the guard first.
 #
 # ── AND THE REGISTRY THE RECORD CARRIES ──
-# The record's `kinds` field is the second conjunct of the same input type, and it is an ACCEPT-LIST
-# for `require-declared-dependencies.nix`'s reason: the registry `mkKinds` returns is admitted, and
-# everything else is refused rather than a roster of known-bad shapes being enumerated.
+# The record's `kinds` field is the second conjunct of the same input type, and it is a TYPE check,
+# not a provenance one: every entry must be a kind `mkKinds` minted, filed under its own name, and
+# coherent with every resolved `below` that reaches it (`cascade.nix`, `kindSetDefect`). A registry
+# of declarations is refused as one, by name.
 #
-# ★ WHAT THE TAG BUYS IS TERMINATION. `mkKinds` forces `graph.coneRank` over the whole `below`
-# relation as it builds, so a tagged registry's `below` is acyclic; `mkKind` already refuses
-# `spawns ⊄ below`, so every spawn strictly descends an acyclic rank and the spawn expansion in
-# `eval.nix` is bounded. An untagged registry decides none of that, and the evaluator reading it
-# does not diverge politely — it exceeds the call depth, which `tryEval` DOES NOT CONTAIN. So the
-# caller gets no value to act on at all unless this door refuses first.
+# ★ TERMINATION DOES NOT REST ON THIS DOOR. Every minted kind has a finite `depth`, and the spawn
+# channel follows resolved kind records (`eval.nix`, `kindOf`), so any collection of minted kinds,
+# a `//` merge included, expands finitely. What the door refuses is a registry that is not made of
+# kinds at all, and one whose name map disagrees with the kinds its own entries resolved, which a
+# reader looking a kind up by name would silently get wrong.
 #
 # ★ ABSENT AND `null` ARE BOTH THE NO-KINDS CASE AND BOTH PASS, read as `scope.kinds or null`.
 # `buildRoots`' own default is `null`, callers that declare no types pass no registry, and a
 # hand-built record need not carry the field — a node set with no kinds has nothing to spawn and
 # therefore nothing to bound.
-{ prelude, isKindSet }:
+{ prelude, kindSetDefect }:
 {
   requireScope =
     entry: scope:
@@ -52,8 +52,9 @@
       bad = detail: throw "${must}; ${detail}. ${pass}";
 
       kinds = scope.kinds or null;
-      kindsMust = "gen-scope.${entry}: `scope.kinds` must be the registry `mkKinds` returns";
-      kindsPass = "Build it with `mkKinds` and pass the result: the `below` relation's acyclicity is decided where the registry is constructed, so a value this entry cannot tell apart from a registered one is one it must refuse.";
+      kindsDefect = if kinds == null then null else kindSetDefect kinds;
+      kindsMust = "gen-scope.${entry}: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it";
+      kindsPass = "Mint the kinds with `mkKinds` over their declarations and pass the result.";
       badKinds = detail: throw "${kindsMust}; ${detail}. ${kindsPass}";
     in
     if !(builtins.isAttrs scope) then
@@ -66,10 +67,8 @@
       bad "received an attrset with no `nodeOrder`"
     else if !(builtins.isList scope.nodeOrder) then
       bad "received an attrset whose `nodeOrder` is a ${builtins.typeOf scope.nodeOrder}, not a list"
-    else if kinds == null || isKindSet kinds then
+    else if kindsDefect == null then
       scope
-    else if builtins.isAttrs kinds then
-      badKinds "received an attrset that `mkKinds` did not build"
     else
-      badKinds "received a ${builtins.typeOf kinds}";
+      badKinds kindsDefect;
 }

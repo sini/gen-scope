@@ -1,78 +1,193 @@
-# THE REGISTRY ADMISSION DOOR — that the evaluator and the constructor admit only a registry
-# `mkKinds` built, and that refusing it yields a VALUE the caller can act on.
+# THE KIND DOMAIN, BY CONSTRUCTION — that a kind outside the domain cannot be minted, that the
+# evaluator's spawn chain follows minted records, and that the registry doors decide a TYPE.
 #
 # ── WHY THE ASSERTION IS `tryEval` AND NOT A MESSAGE ──
 # What these cells hold is not that a refusal is worded well; `tests-error.nix` holds that. It is
 # that a refusal EXISTS AT ALL where previously there was none — and the state it replaced was not
-# a wrong answer but an UNCATCHABLE ABORT. Handed a registry whose `below` relation names itself,
-# the spawn channel in `eval.nix` expands without bound and the evaluation dies `stack overflow;
-# max-call-depth exceeded`, which `builtins.tryEval` DOES NOT CONTAIN: the whole evaluation goes,
-# and a caller gets no value to act on, not even a `false`.
+# a wrong answer but an UNCATCHABLE ABORT. A spawn chain that does not descend expands without
+# bound and the evaluation dies `stack overflow; max-call-depth exceeded`, which `builtins.tryEval`
+# DOES NOT CONTAIN: the whole evaluation goes, and a caller gets no value to act on, not even a
+# `false`. So `{ success = false; }` here is the entire content of a refusal cell.
 #
-# So `{ success = false; }` here is the entire content of the change. A cell asserting only "the
-# node list is right" would pass over a library that still overflowed on the forged input, and a
-# cell asserting only a message would pass over one that printed the right words on its way down.
+# ── THE TWO WITNESSES, AND WHY NEITHER IS A KIND ──
+# W1 names ITSELF in its own `below` set. W2 is a two-cycle in which NEITHER record names itself.
+# `mkKind` builds both, and what it builds is a DECLARATION: the fold in `mkKinds` is the sole
+# producer of a kind, and it resolves each `below` name against the kinds minted strictly earlier,
+# so neither witness can be minted in any order. There is no cycle check to meet or miss.
 #
-# ── THE TWO WITNESSES, AND WHY BOTH ──
-# W1 names ITSELF in its own `below` set. W2 is a two-cycle in which NEITHER record names itself,
-# and it is the one that settles the design: the strongest refusal a single kind record could carry
-# — `mkKind` rejecting `name ∈ below` — leaves W2 untouched, because acyclicity is a property of
-# the SET and no member can see the set. That is why the verdict lives at `mkKinds` and why
-# admission is a question about PROVENANCE, answered by a tag at a door.
-#
-# ── AND WHY BOTH DOORS ──
-# `buildRoots` refuses at CONSTRUCTION, so the malformed scope record never forms. `requireScope`
-# refuses at the EVALUATOR, covering the one route that skips the constructor — a hand-built record,
-# which this suite itself uses and the published surface permits. Neither subsumes the other.
+# ── THE MERGE, AND WHY TERMINATION DOES NOT REST ON THE DOOR ──
+# Two registries `mkKinds` built from declarations that disagree — `host` above `item` in one,
+# `item` above `host` in the other — merged with `//`. Looked up by name, a spawned node's kind
+# re-routes through the other registry and the chain cycles. The evaluator follows the RECORDS each
+# kind resolved when it was minted, so the chain descends a `depth` fixed at minting whatever the
+# registry value; the door refuses the merge anyway, by name, because it files two different kinds
+# under one name and a reader looking a kind up by name would silently get the other one.
 { genScope, ... }:
 let
-  # One spawn per host, keyed by the produced id so each level mints a fresh node. Under a
-  # descending registry this fires once; under W1 or W2 it is what expands without bound.
-  spawnOf = _self: id: {
-    "${id}-i" = {
-      id = "${id}-i";
+  inherit (genScope) mkKind mkKinds;
+
+  # One spawn per host, keyed by the produced id so each level mints a fresh node.
+  spawnOf = suffix: _self: id: {
+    "${id}-${suffix}" = {
+      id = "${id}-${suffix}";
       parent = id;
       decls = { };
     };
   };
 
-  # ── W1 — self-naming. `mkKind` BUILDS this record (rc 0): the per-record checks are
-  # `spawns ⊆ below` and the field shapes, and `spawns.k` with `below = [ "k" ]` satisfies both.
-  # `mkKinds` is what refuses it, and nothing required `mkKinds` to have run.
-  w1 = {
-    kinds.k = genScope.mkKind {
-      name = "k";
-      below = [ "k" ];
-      spawns.k = spawnOf;
-    };
+  # ── W1 — self-naming. A declaration; `mkKinds` cannot mint it.
+  w1 = mkKind {
+    name = "k";
+    below = [ "k" ];
+    spawns.k = spawnOf "k";
   };
 
-  # ── W2 — a two-cycle. BOTH records build and NEITHER names itself.
-  w2 = {
-    kinds = {
-      a = genScope.mkKind {
-        name = "a";
-        below = [ "b" ];
-        spawns.b = spawnOf;
-      };
-      b = genScope.mkKind {
-        name = "b";
-        below = [ "a" ];
-        spawns.a = spawnOf;
-      };
-    };
+  # ── W2 — a two-cycle. Both halves are declarations and NEITHER names itself.
+  w2a = mkKind {
+    name = "a";
+    below = [ "b" ];
+    spawns.b = spawnOf "i";
+  };
+  w2b = mkKind {
+    name = "b";
+    below = [ "a" ];
+    spawns.a = spawnOf "i";
   };
 
-  # ── THE CONTROL REGISTRY — the same shape, through `mkKinds`, descending.
-  # `host` ranks above `item` and `item` spawns nothing, so the expansion is one level deep.
-  okKinds = genScope.mkKinds [
-    (genScope.mkKind {
-      name = "host";
-      below = [ "item" ];
-      spawns.item = spawnOf;
-    })
-    (genScope.mkKind { name = "item"; })
+  # ── THE CONTROL REGISTRY — `host` ranks above `item` and `item` spawns nothing, so the
+  # expansion is one level deep. Declared leaf first: a kind follows the kinds its `below` names.
+  itemDecl = mkKind { name = "item"; };
+  hostDecl = mkKind {
+    name = "host";
+    below = [ "item" ];
+    spawns.item = spawnOf "i";
+  };
+  okKinds = mkKinds [
+    itemDecl
+    hostDecl
   ];
+
+  # ── G3 — two honest registries whose declarations disagree, merged with `//`.
+  upKinds = mkKinds [
+    (mkKind { name = "host"; })
+    (mkKind {
+      name = "item";
+      below = [ "host" ];
+      spawns.host = spawnOf "i";
+    })
+  ];
+  merged = okKinds // {
+    kinds = okKinds.kinds // {
+      inherit (upKinds.kinds) item;
+    };
+  };
+
+  # ── C1's admitted arm — two registries sharing an IDENTICAL leaf, merged. Every name maps to
+  # one kind, so the merge is coherent and admitted.
+  leafDecl = mkKind { name = "leaf"; };
+  leftKinds = mkKinds [
+    leafDecl
+    (mkKind {
+      name = "left";
+      below = [ "leaf" ];
+      spawns.leaf = spawnOf "l";
+    })
+  ];
+  rightKinds = mkKinds [
+    leafDecl
+    (mkKind {
+      name = "right";
+      below = [ "leaf" ];
+      spawns.leaf = spawnOf "r";
+    })
+  ];
+  sharedLeaf = leftKinds // {
+    kinds = leftKinds.kinds // rightKinds.kinds;
+  };
+
+  # ── C5 — which record the evaluator follows, made observable. The door compares two kinds on
+  # `name`, `below`, `depth` and their key sets, and NOT on builder bodies, so two registries whose
+  # `mid` differs only in its builder merge coherently. A spawned `mid` node then spawns through the
+  # builder of the `mid` record its host resolved — `-x` — and a by-name read would give `-y`.
+  midDecl =
+    suffix:
+    mkKind {
+      name = "mid";
+      below = [ "leaf" ];
+      spawns.leaf = spawnOf suffix;
+    };
+  topKinds = mkKinds [
+    leafDecl
+    (midDecl "x")
+    (mkKind {
+      name = "top";
+      below = [ "mid" ];
+      spawns.mid = spawnOf "m";
+    })
+  ];
+  otherMid = mkKinds [
+    leafDecl
+    (midDecl "y")
+  ];
+  builderSplit = topKinds // {
+    kinds = topKinds.kinds // {
+      inherit (otherMid.kinds) mid;
+    };
+  };
+
+  # ── C4 — a minted host updated with `//`. The gate's literal edit adds a spawn key alone; the
+  # second also extends `below`, which is the edit that passes the door's per-entry type check and
+  # reaches the evaluator, where the key has no resolved record to stamp.
+  editedSpawnOnly = okKinds // {
+    kinds = okKinds.kinds // {
+      host = okKinds.kinds.host // {
+        spawns = okKinds.kinds.host.spawns // {
+          extra = spawnOf "e";
+        };
+      };
+    };
+  };
+  editedBelowAndSpawn = okKinds // {
+    kinds = okKinds.kinds // {
+      host = okKinds.kinds.host // {
+        below = okKinds.kinds.host.below ++ [ "extra" ];
+        spawns = okKinds.kinds.host.spawns // {
+          extra = spawnOf "e";
+        };
+      };
+    };
+  };
+
+  # ── C3 — one declaration set in two admissible orders, and reversed.
+  diamondA = [
+    (mkKind { name = "leaf"; })
+    (mkKind {
+      name = "a";
+      below = [ "leaf" ];
+    })
+    (mkKind {
+      name = "b";
+      below = [ "leaf" ];
+    })
+    (mkKind {
+      name = "top";
+      below = [
+        "a"
+        "b"
+      ];
+    })
+  ];
+  diamondB = [
+    (builtins.elemAt diamondA 0)
+    (builtins.elemAt diamondA 2)
+    (builtins.elemAt diamondA 1)
+    (builtins.elemAt diamondA 3)
+  ];
+  measured = ks: {
+    inherit (ks) maxDepth;
+    depth = builtins.mapAttrs (_: k: k.depth) ks.kinds;
+    below = builtins.mapAttrs (_: k: k.below) ks.kinds;
+  };
 
   buildScope =
     kinds: rootKind:
@@ -98,55 +213,181 @@ let
   attributes.children = _self: _id: { };
   runEval = scope: (genScope.eval { inherit scope attributes; }).allNodeIds;
 
-  # Forced, because a refusal on the far side of a lazy field is a refusal nothing reached: an
-  # `attrNames` read of a record the constructor refuses can return before the guard runs.
+  # Forced, because a refusal on the far side of a lazy field is a refusal nothing reached.
   caught = e: builtins.tryEval (builtins.deepSeq e "ADMITTED");
+  refused = {
+    success = false;
+    value = false;
+  };
 in
 {
   flake.tests.registry-admission = {
-    # ── (a) THE EVALUATOR'S DOOR — what `requireScope`'s fifth conjunct buys ──
-    # Before it, each of these exited `stack overflow; max-call-depth exceeded` THROUGH this
-    # `tryEval`, which is what makes `success = false` the measurement rather than the formality.
-    test-eval-refuses-a-self-naming-registry-catchably = {
-      expr = caught (runEval (handBuilt w1 "k"));
+    # ── G1 / G2 — NO KIND OUTSIDE THE DOMAIN EXISTS ──
+    # `mkKind` returns a declaration, and the fold cannot mint either witness.
+    test-G1-a-self-naming-declaration-is-not-a-kind = {
+      expr = w1._type;
+      expected = "gen-scope/kind-declaration";
+    };
+    test-G1-mkKinds-refuses-a-self-naming-declaration-catchably = {
+      expr = caught (mkKinds [ w1 ]);
+      expected = refused;
+    };
+    test-G2-neither-half-of-a-two-cycle-is-a-kind = {
+      expr = [
+        w2a._type
+        w2b._type
+      ];
+      expected = [
+        "gen-scope/kind-declaration"
+        "gen-scope/kind-declaration"
+      ];
+    };
+    test-G2-mkKinds-refuses-a-two-cycle-in-either-order-catchably = {
+      expr = [
+        (caught (mkKinds [
+          w2a
+          w2b
+        ]))
+        (caught (mkKinds [
+          w2b
+          w2a
+        ]))
+      ];
+      expected = [
+        refused
+        refused
+      ];
+    };
+
+    # ── G3 / C1 — THE MERGE IS REFUSED AT BOTH DOORS, BY NAME AND CATCHABLY ──
+    test-G3-eval-refuses-a-merge-that-files-two-kinds-under-one-name = {
+      expr = caught (runEval (handBuilt merged "host"));
+      expected = refused;
+    };
+    test-G3-buildRoots-refuses-the-same-merge = {
+      expr = caught (buildScope merged "host");
+      expected = refused;
+    };
+    # C1's admitted arm: a merge in which every name denotes one kind evaluates, both spawns firing.
+    test-C1-a-coherent-shared-leaf-merge-is-admitted = {
+      expr = [
+        (runEval (buildScope sharedLeaf "left"))
+        (runEval (buildScope sharedLeaf "right"))
+      ];
+      expected = [
+        [
+          "root"
+          "root-l"
+        ]
+        [
+          "root"
+          "root-r"
+        ]
+      ];
+    };
+
+    # ── C5 — A SPAWNED NODE'S KIND IS THE STAMPED RECORD ──
+    # The `mid` node is spawned from `top`, and its own spawn runs the builder of the `mid` record
+    # `top` resolved (`-x`), not the one the registry files under `mid` (`-y`).
+    test-C5-a-spawned-node-spawns-through-the-record-its-host-resolved = {
+      expr = runEval (buildScope builderSplit "top");
+      expected = [
+        "root"
+        "root-m"
+        "root-m-x"
+      ];
+    };
+    test-C5-the-stamped-kind-is-the-spawn-keys-record = {
+      expr =
+        let
+          ev = genScope.eval {
+            scope = buildScope topKinds "top";
+            inherit attributes;
+          };
+        in
+        {
+          inherit ((ev.node "root-m")._kind) name depth below;
+        };
       expected = {
-        success = false;
-        value = false;
+        name = "mid";
+        depth = 1;
+        below = [ "leaf" ];
       };
     };
 
-    # The witness no record-level check could reach.
-    test-eval-refuses-a-two-cycle-registry-catchably = {
-      expr = caught (runEval (handBuilt w2 "a"));
-      expected = {
-        success = false;
-        value = false;
-      };
+    # ── G4 — A HAND-BUILT REGISTRY OF DECLARATIONS IS A TYPE REFUSAL ──
+    test-G4-eval-refuses-a-registry-of-declarations-catchably = {
+      expr = caught (runEval (handBuilt { kinds.k = w1; } "k"));
+      expected = refused;
+    };
+    test-G4-buildRoots-refuses-a-registry-of-declarations-catchably = {
+      expr = caught (buildScope { kinds.k = w1; } "k");
+      expected = refused;
+    };
+    # A hand-built registry of MINTED kinds is admitted: every minted kind is in the domain.
+    test-G4-a-hand-built-registry-of-minted-kinds-is-admitted = {
+      expr = runEval (handBuilt { inherit (okKinds) kinds; } "host");
+      expected = [
+        "root"
+        "root-i"
+      ];
     };
 
-    # ── (b) THE CONSTRUCTOR'S DOOR — the record never forms ──
-    # The arm DOMINATES the unregistered-kind arm beside it, and the order is load-bearing:
-    # `unregisteredKinds` reads `kinds.kinds or { }`, and that read IS the unvalidated read.
-    test-buildRoots-refuses-a-self-naming-registry-at-construction = {
-      expr = caught (buildScope w1 "k");
-      expected = {
-        success = false;
-        value = false;
-      };
+    # ── C2 — A DUPLICATE NAME IS REFUSED BEFORE THE FOLD ──
+    test-C2-two-same-name-declarations-are-refused = {
+      expr = caught (mkKinds [
+        itemDecl
+        itemDecl
+      ]);
+      expected = refused;
     };
 
-    test-buildRoots-refuses-a-two-cycle-registry-at-construction = {
-      expr = caught (buildScope w2 "a");
+    # ── C3 — ADR-0016 RULING 7: THE MINTED REGISTRY IS INVARIANT UNDER ADMISSIBLE ORDER ──
+    test-C3-two-admissible-orders-mint-the-same-registry = {
+      expr = measured (mkKinds diamondA) == measured (mkKinds diamondB);
+      expected = true;
+    };
+    test-C3-the-control-measure = {
+      expr = measured (mkKinds diamondA);
       expected = {
-        success = false;
-        value = false;
+        maxDepth = 2;
+        depth = {
+          leaf = 0;
+          a = 1;
+          b = 1;
+          top = 2;
+        };
+        below = {
+          leaf = [ ];
+          a = [ "leaf" ];
+          b = [ "leaf" ];
+          top = [
+            "a"
+            "b"
+          ];
+        };
       };
     };
+    # Admissibility is NOT invariant: the same set reversed is refused, by name.
+    test-C3-the-reversed-order-is-refused = {
+      expr = caught (mkKinds (builtins.genList (i: builtins.elemAt diamondA (3 - i)) 4));
+      expected = refused;
+    };
 
-    # ── (c) THE CONTROLS — that the doors are not refusing everything ──
-    # A registry that DID pass `mkKinds`, through the constructor and then the evaluator, spawn and
-    # all. Without this the four cells above are equally satisfied by a library that refuses every
-    # registry there is.
+    # ── C4 — A `//`-EDITED MINTED HOST IS REFUSED BY NAME, CATCHABLY ──
+    # The spawn key alone: refused at the door, a spawn outside the entry's own `below`.
+    test-C4-an-extra-spawn-key-is-refused-at-the-door = {
+      expr = caught (runEval (handBuilt editedSpawnOnly "host"));
+      expected = refused;
+    };
+    # The key with its `below` name: the door admits the entry, and the evaluator finds no resolved
+    # record to stamp for the key.
+    test-C4-an-extra-spawn-with-no-resolved-kind-is-refused-at-the-spawn = {
+      expr = caught (runEval (handBuilt editedBelowAndSpawn "host"));
+      expected = refused;
+    };
+
+    # ── THE CONTROLS — that the doors are not refusing everything ──
     test-control-a-minted-registry-builds-and-evaluates = {
       expr = runEval (buildScope okKinds "host");
       expected = [
@@ -154,9 +395,6 @@ in
         "root-i"
       ];
     };
-
-    # The same registry on the hand-built route, so the evaluator's guard is shown to ADMIT on the
-    # very path the two cells in (a) refuse on. Same door, same shape, opposite verdict.
     test-control-a-minted-registry-passes-the-hand-built-route = {
       expr = runEval (handBuilt okKinds "host");
       expected = [
@@ -165,15 +403,13 @@ in
       ];
     };
 
-    # ── (d) THE NO-KINDS CASES, WHICH ARE NOT A DEGENERATE CORNER ──
-    # `buildRoots`' own default is `null` and `gen-link` calls it with no `kinds` at all, so an
-    # admit-set reading "require `isKindSet`" would break most callers in the ecosystem. Absent and
+    # ── THE NO-KINDS CASES, WHICH ARE NOT A DEGENERATE CORNER ──
+    # `buildRoots`' own default is `null` and `gen-link` calls it with no `kinds` at all. Absent and
     # `null` are the same case and both pass.
     test-control-an-explicitly-null-registry-passes = {
       expr = runEval (handBuilt null null);
       expected = [ "root" ];
     };
-
     test-control-a-record-with-no-kinds-field-passes = {
       expr = runEval {
         nodes.root = {
@@ -186,7 +422,6 @@ in
       };
       expected = [ "root" ];
     };
-
     test-control-buildRoots-with-no-registry-still-builds = {
       expr = runEval (
         genScope.buildRoots {
@@ -197,41 +432,11 @@ in
       expected = [ "root" ];
     };
 
-    # ── (e) THE DISCRIMINATOR ITSELF ──
-    # Both arms, so the predicate is shown to separate rather than to answer one way. This is the
-    # whole of what the two doors ask, and publishing it is what keeps ONE spelling of the tag: a
-    # second copy inlined at a door is the drift `require-declared-dependencies.nix` exists to
-    # prevent.
-    test-isKindSet-admits-what-mkKinds-built = {
-      expr = genScope.isKindSet okKinds;
-      expected = true;
-    };
-
-    test-isKindSet-refuses-a-record-that-merely-has-kinds = {
-      expr = genScope.isKindSet w1;
+    # ── THE RETIRED PREDICATE ──
+    # `isKindSet` answered provenance by a tag `//` preserves; it left the surface.
+    test-isKindSet-is-not-published = {
+      expr = genScope ? isKindSet;
       expected = false;
-    };
-
-    # It is NOMINAL, which is the point: a forged record carrying the tag is admitted, and nothing
-    # at a door can check that the `below` relation behind the tag was ever ranked. That is the
-    # cooperative-caller bargain `kindMarker` and `claimMarker` already make, stated here so it is
-    # measured rather than assumed unbroken.
-    test-isKindSet-is-nominal-not-structural = {
-      expr = genScope.isKindSet (w1 // { _type = "gen-scope/kind-set"; });
-      expected = true;
-    };
-
-    test-isKindSet-refuses-a-non-attrset = {
-      expr = [
-        (genScope.isKindSet null)
-        (genScope.isKindSet [ ])
-        (genScope.isKindSet "kinds")
-      ];
-      expected = [
-        false
-        false
-        false
-      ];
     };
   };
 }

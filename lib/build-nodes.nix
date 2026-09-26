@@ -23,10 +23,10 @@
 # except `P` and `I`, which are this constructor's names for the containment and import relations
 # and are refused by name at the entry — see the reservation below.
 #
-# `isKindSet` is `cascade.nix`'s discriminator over the tag `mkKinds` writes, taken as a formal for
-# `require-scope.nix`'s reason: the test belongs with the constructor and the refusal belongs at the
-# door. This constructor owns the door the malformed record would otherwise be BUILT at.
-{ prelude, isKindSet }:
+# `kindSetDefect` is `cascade.nix`'s registry type check, taken as a formal for `require-scope.nix`'s
+# reason: the test belongs with the fold and the refusal belongs at the door. This constructor owns
+# the door the malformed record would otherwise be BUILT at.
+{ prelude, kindSetDefect }:
 let
   graph = import ./graph.nix;
 
@@ -120,19 +120,12 @@ let
       #
       # ★ `null` PASSES AND SO DOES AN ABSENT `kinds`. The formal's own default is `null`, and
       # `gen-link` calls `buildRoots { importGraph; decls; }` with no registry at all — reading this
-      # arm as "require `isKindSet`" breaks every kindless caller, which is most of them.
-      registryRefusal =
-        detail:
-        throw "gen-scope.buildRoots: `scope.kinds` must be the registry `mkKinds` returns; ${detail}. Build it with `mkKinds` and pass the result: the `below` relation's acyclicity is decided where the registry is constructed, so a value this entry cannot tell apart from a registered one is one it must refuse.";
+      # arm as "require a registry" breaks every kindless caller, which is most of them.
+      registryDefect = if kinds == null then null else kindSetDefect kinds;
 
       contributions =
-        if !(kinds == null || isKindSet kinds) then
-          registryRefusal (
-            if builtins.isAttrs kinds then
-              "received an attrset that `mkKinds` did not build"
-            else
-              "received a ${builtins.typeOf kinds}"
-          )
+        if registryDefect != null then
+          throw "gen-scope.buildRoots: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it; ${registryDefect}. Mint the kinds with `mkKinds` over their declarations and pass the result."
         else if kinds == null && declaredTypes != [ ] then
           throw "gen-scope.buildRoots: `types` declares kind(s) ${builtins.toJSON (prelude.unique declaredTypes)} but no `kinds` registry was supplied. A kind is a name in a registered vocabulary, not a free string: without the registry there is no order for the kinds to be ranked in, so nothing can say that an expansion descends and every spelling is its own kind. Register them with `mkKinds` and pass the result as `kinds`, or declare no types."
         else if unregistered != [ ] then

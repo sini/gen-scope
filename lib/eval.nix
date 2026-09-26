@@ -393,8 +393,8 @@ let
   # Vogt's formalism an expansion produces a symbol the GRAMMAR declares: the produced symbol is
   # never a runtime choice. Both put the expansion on the node TYPE, which is why the declaration
   # lives on the kind record and not here, and why what arrives here is already known to descend —
-  # `mkKind` refuses a `spawns` key outside its own `below` set, and a registered `below` edge
-  # strictly decreases the rank `graph.coneRank` publishes.
+  # `mkKind` refuses a `spawns` key outside its own `below` set, and `mkKinds` resolves each `below`
+  # name to a kind minted strictly earlier, whose `depth` is strictly smaller.
   #
   # WHAT REMAINS FOR THIS BINDING is to make the produced kind the DECLARATION'S rather than the
   # body's: the builder is written under the key naming what it produces, and the kind is stamped
@@ -405,6 +405,36 @@ let
   # compares two ranks; the comparison happened at registration and cannot be reached from a
   # grammar. What this does is a lookup and a stamp.
   spawnChannel = "derived-children";
+
+  # ── A NODE'S KIND, READ THROUGH ONE BINDING THAT FOLLOWS RECORDS ──
+  # A REGISTERED node's kind is the registry entry its `type` names. A SPAWNED node's kind is the
+  # record its host's kind resolved in `belowKinds` under the spawn key, and an `nta` child's is its
+  # host's kind; both are stamped onto the child under `kindField` by the channel that makes it, in
+  # the same act that stamps `type`, so this read is one attribute lookup for every node — O(1),
+  # with no walk up the parent chain.
+  #
+  # ★ WHY RECORDS AND NOT NAMES. Looked up by name, a spawned node's kind is whatever the registry
+  # files under its `type`, so a registry that files a different kind there — a `//` merge of two
+  # registries — re-routes the spawn chain, and a chain re-routed into a cycle diverges uncatchably.
+  # Followed as records, every spawn descends a `depth` fixed when the kind was minted, whatever
+  # registry value the evaluation started from: the expansion is finite by construction and does
+  # not rest on the registry door.
+  kindField = "_kind";
+
+  kindOf =
+    kinds: nodes: ev: id:
+    let
+      n = ev.node id;
+      t = n.type or null;
+    in
+    if t == null then
+      null
+    else if !(nodes ? ${id}) then
+      n.${kindField}
+    else if kinds.kinds ? ${t} then
+      kinds.kinds.${t}
+    else
+      throw "gen-scope: node '${id}' carries kind '${toString t}', which the supplied registry does not carry. A node's kind is a name in a registered vocabulary — register it with `mkKinds`, or build the scope through `buildRoots`, which refuses an unregistered kind at the door.";
 
   # ── THE SELECTION CHANNEL ──
   # `children` names WHICH of the scope's nodes stand below this one. It does not make them. A
@@ -454,22 +484,22 @@ let
   spawnFrom =
     kinds: nodes: ev: id:
     let
-      hostKind = (ev.node id).type or null;
       # A node of NO kind spawns nothing, and that is the honest reading rather than a hole: an
       # expansion descends a rank, and a node outside the kind vocabulary has no rank to descend
-      # from. A node carrying a kind the registry does not know is refused by name — `buildRoots`
-      # already refuses that at the door, so what this arm covers is a scope record assembled by
-      # hand, which is the one route that skips the door.
-      spawns =
-        if hostKind == null then
-          { }
-        else if kinds.kinds ? ${hostKind} then
-          kinds.kinds.${hostKind}.spawns
-        else
-          throw "gen-scope: node '${id}' carries kind '${toString hostKind}', which the supplied registry does not carry. A node's kind is a name in a registered vocabulary — register it with `mkKinds`, or build the scope through `buildRoots`, which refuses an unregistered kind at the door.";
+      # from. A registered node carrying a kind the registry does not know is refused by name in
+      # `kindOf`, for a hand-built scope record and a `buildRoots` one alike.
+      host = kindOf kinds nodes ev id;
+      hostKind = (ev.node id).type or null;
+      spawns = if host == null then { } else host.spawns;
       stamped =
         produced:
         let
+          # The produced kind is the record the host's kind resolved under the key. A key with no
+          # resolved record is a kind record updated with `//` after `mkKinds` minted it, and it is
+          # refused here, where the host and the key can both be named, before anything is stamped.
+          producedKind =
+            host.belowKinds.${produced}
+              or (throw "gen-scope: node '${id}' of kind '${hostKind}' spawns '${produced}', and its kind resolves no kind '${produced}' in its `below`: the kind record was updated after `mkKinds` minted it. A spawned node's kind is the minted record its host's kind resolved, so a spawn with none has no kind to stamp. Declare the kinds through `mkKinds` rather than editing a minted kind.");
           builder = spawns.${produced};
           raw =
             if isCircularDecl builder then
@@ -483,22 +513,25 @@ let
           # exactly the case it exists to catch.
           collidingWithRegistered = builtins.filter (childId: nodes ? ${childId}) (builtins.attrNames raw);
         in
-        if collidingWithRegistered != [ ] then
-          throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${builtins.head collidingWithRegistered}', which is already a registered node's id. A spawned key mints an identity nothing declared; colliding with a key the scope already carries discards whichever record materializes second, silently. Choose a key no registered node already carries."
-        else
-          builtins.mapAttrs (
-            childId: record:
-            if record ? type then
-              throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
-            else if (record.parent or id) != id then
-              throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
-            else
-              record
-              // {
-                type = produced;
-                parent = id;
-              }
-          ) raw;
+        builtins.seq producedKind (
+          if collidingWithRegistered != [ ] then
+            throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${builtins.head collidingWithRegistered}', which is already a registered node's id. A spawned key mints an identity nothing declared; colliding with a key the scope already carries discards whichever record materializes second, silently. Choose a key no registered node already carries."
+          else
+            builtins.mapAttrs (
+              childId: record:
+              if record ? type then
+                throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
+              else if (record.parent or id) != id then
+                throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
+              else
+                record
+                // {
+                  type = produced;
+                  parent = id;
+                  ${kindField} = producedKind;
+                }
+            ) raw
+        );
     in
     prelude.foldl' (
       acc: produced:
@@ -595,14 +628,9 @@ let
   ntaFrom =
     kinds: nodes: declared: ev: id:
     let
+      host = kindOf kinds nodes ev id;
       hostKind = (ev.node id).type or null;
-      ntas =
-        if hostKind == null then
-          { }
-        else if kinds.kinds ? ${hostKind} then
-          kinds.kinds.${hostKind}.nta or { }
-        else
-          throw "gen-scope.nta: node '${id}' carries kind '${toString hostKind}', which the supplied registry does not carry. A node's kind is a name in a registered vocabulary — register it with `mkKinds`, or build the scope through `buildRoots`, which refuses an unregistered kind at the door.";
+      ntas = if host == null then { } else host.nta;
       at = name: "gen-scope.nta: kind '${hostKind}' NTA '${name}' on host '${id}'";
 
       readAddress =
@@ -676,6 +704,7 @@ let
             id = mintNtaId id name group key;
             parent = id;
             type = hostKind;
+            ${kindField} = host;
             decls.seed = seedOf name group key seed;
           }) members;
 
@@ -696,14 +725,14 @@ let
   # `nta` identifier of this evaluation — no decode, no channel, or a host whose kind declares no NTA
   # of that name — so a caller-chosen id that merely decodes falls through to the other arms.
   ntaTarget =
-    kinds: declared: ev: id:
+    kinds: nodes: declared: ev: id:
     let
       t = decodeNta id;
-      hostType = (ev.node t.host).type or null;
+      host = kindOf kinds nodes ev t.host;
     in
     if t == null || !(declared ? ${ntaChannel}) || kinds == null then
       null
-    else if hostType != null && ((kinds.kinds.${hostType} or { }).nta or { }) ? ${t.name} then
+    else if host != null && host.nta ? ${t.name} then
       t
     else
       null;
@@ -1625,7 +1654,7 @@ let
             resolveNode =
               id:
               let
-                nta = ntaTarget (checked.kinds or null) runAttributes self id;
+                nta = ntaTarget (checked.kinds or null) checked.nodes runAttributes self id;
               in
               if roots ? ${id} then
                 roots.${id}
@@ -2052,7 +2081,7 @@ let
           node =
             id:
             let
-              nta = ntaTarget (checked.kinds or null) runAttributes (mkSelf visited traceList) id;
+              nta = ntaTarget (checked.kinds or null) checked.nodes runAttributes (mkSelf visited traceList) id;
             in
             if roots ? ${identifier "self.node" id} then
               roots.${id}

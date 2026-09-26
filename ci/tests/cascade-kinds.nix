@@ -8,7 +8,7 @@
 # about a fifth shape, so the strict-decrease cells further down are quantified over the registry
 # and over generated lattices instead.
 #
-# ★★ THE REFUSAL CELLS CARRY ARMED NEGATIVE CONTROLS, because two of them are about ORDER and an
+# ★★ THE REFUSAL CELLS CARRY ARMED NEGATIVE CONTROLS, because one of them is about ORDER and an
 # order cannot be observed from a cell that exercises one check on its own. The graph library's
 # rank surface drops an edge leaving its cone silently, so a registry that checks unregistered
 # names beside the measure rather than ahead of it answers depth 0 with no diagnostic — and an
@@ -17,7 +17,6 @@
 {
   genScope,
   genGraph,
-  genPreludeLib,
   lib,
   ...
 }:
@@ -116,11 +115,12 @@ let
   #
   # The marker is written as a LITERAL rather than read off the library. A forgery that imported
   # the constant it forges would agree with the library by construction and could not detect a
-  # record the library refuses to recognise.
+  # record the library refuses to recognise. It is the DECLARATION marker: the fold's intake admits
+  # declarations, and a record carrying the minted-kind marker is refused ahead of every field arm.
   forgedKind =
     fields:
     {
-      _type = "gen-scope/kind";
+      _type = "gen-scope/kind-declaration";
       name = "ghost";
       below = [ ];
       resolve = _: _: { };
@@ -196,56 +196,6 @@ let
   registeredNames = kindList: builtins.attrNames (lib.genAttrs (map (k: k.name) kindList) (_: null));
   namesOf = kindList: builtins.attrNames (mkKinds kindList).depth;
 
-  # ── THE POISONED RANK SURFACE ──
-  # A source scan cannot decide consumption: it needs a case per syntactic form, and a form it has
-  # no case for reads as absence. This is the semantic instrument instead. The depth map is the
-  # real one; the linearisation throws on contact. The library is instantiated against it, so the
-  # cell goes red if ANY path reads that field, by projection, by `inherit`, by `getAttr`, or by
-  # a form nobody thought to write a case for.
-  poisoned = genGraph // {
-    coneRank =
-      accessor: cone:
-      genGraph.coneRank accessor cone // { order = throw "the rank linearisation was consumed"; };
-  };
-  # The graph surface is the ONLY substituted one: the cascade takes the prelude and this, so a
-  # reading here cannot be a second injection's doing.
-  cascadeUnderPoison = import ../../lib/cascade.nix {
-    prelude = genPreludeLib;
-    graph = poisoned;
-  };
-
-  # The same substitution aimed at the field the registry DOES read. Without this arm the cell
-  # above would pass just as happily against an instantiation that never consulted the injected
-  # surface at all, which is the one way a substitution oracle goes quietly vacuous.
-  depthPoisoned = genGraph // {
-    coneRank =
-      accessor: cone:
-      genGraph.coneRank accessor cone // { depth = throw "the rank measure was consumed"; };
-  };
-  cascadeUnderDepthPoison = import ../../lib/cascade.nix {
-    prelude = genPreludeLib;
-    graph = depthPoisoned;
-  };
-
-  # The accessor the registry builds, rebuilt here so the poison can be aimed at the surface
-  # directly and shown to fire.
-  accessorFor = kindList: {
-    nodes = map (k: k.name) kindList;
-    edges =
-      n:
-      (builtins.listToAttrs (
-        map (k: {
-          inherit (k) name;
-          value = k;
-        }) kindList
-      )).${n}.below;
-  };
-  rankOf = graph: kindList: graph.coneRank (accessorFor kindList) (map (k: k.name) kindList);
-
-  # ARMED: a registry that DOES consume the linearisation, written in the `inherit`-from form a
-  # substring scan for a dotted projection is blind to. Under the poison it must fail the cell the
-  # real construction passes.
-  consumingRegistry = graph: kindList: { inherit (rankOf graph kindList) depth order; };
 in
 {
   flake.tests.cascade-kinds = {
@@ -270,18 +220,16 @@ in
       expected = "{\"n0_0\":0,\"n0_1\":0,\"n0_2\":0,\"n1_0\":1,\"n1_1\":1,\"n1_2\":1,\"n2_0\":2,\"n2_1\":2,\"n2_2\":2,\"n3_0\":3,\"n3_1\":3,\"n3_2\":3}";
     };
 
-    # ── (b) ACYCLICITY IS REACHABLE, WITH A LIVE ACYCLIC CONTROL ──
-    # A general cycle's MESSAGE belongs to the graph library, and the sweep that reads its text is
-    # an exit-code run; what these cells pin is that the refusal is reached at all, and that the
-    # instrument is not one that refuses everything.
+    # ── (b) A CYCLE CANNOT BE MINTED, WITH A LIVE ACYCLIC CONTROL ──
+    # The fold resolves each `below` name against the kinds minted before it, so every cycle misses
+    # at its first member and is refused by the unresolved-name message (pinned in
+    # `ci/tests-error.nix`). What these cells pin is that the refusal is reached at all, and that
+    # the instrument is not one that refuses everything.
     test-two-cycle-refused = {
       expr = didThrow (mkKinds twoCycle);
       expected = true;
     };
-    # The SELF-LOOP is refused by this library, ahead of the acyclicity verdict, so that the
-    # message names DESCENT rather than a cycle — the concept a caller writing `spawns.k` on kind
-    # `k` actually violated. The refusal is unchanged, which is what this cell still pins; the
-    # text is pinned in `ci/tests-error.nix`.
+    # The SELF-LOOP misses for the same reason: a kind is not minted before itself.
     test-self-loop-refused = {
       expr = didThrow (mkKinds selfLoop);
       expected = true;
@@ -340,48 +288,6 @@ in
     # not about it being broken.
     test-armed-variant-agrees-on-a-well-formed-registry = {
       expr = (nonDominating diamond).depth;
-      expected = {
-        leaf = 0;
-        a = 1;
-        b = 1;
-        top = 2;
-      };
-    };
-
-    # ── (e) THE RANK SURFACE'S LINEARISATION IS NOT CONSUMED ──
-    # Two topological linearisations of one relation can differ element for element and both be
-    # correct; the depth map admits no such freedom. The positive control is in the same run and
-    # over the same stripped source, so a scan that could not see either token fails visibly.
-    test-rank-linearisation-not-consumed = {
-      expr = succeeds (cascadeUnderPoison.mkKinds diamond);
-      expected = true;
-    };
-    # The poisoned instantiation is the same library doing the same work, so the cell above is not
-    # passing against something that quietly did nothing.
-    test-control-poisoned-instantiation-still-computes-the-measure = {
-      expr = (cascadeUnderPoison.mkKinds diamond).depth == (mkKinds diamond).depth;
-      expected = true;
-    };
-    # ARMED, three ways. The poison fires on contact; it fires through the `inherit`-from form;
-    # and the field is otherwise perfectly readable, so the throw is the poison and not an absence.
-    test-armed-the-poisoned-linearisation-throws-on-contact = {
-      expr = didThrow (rankOf poisoned diamond).order;
-      expected = true;
-    };
-    test-armed-a-registry-consuming-the-linearisation-fails-the-cell = {
-      expr = succeeds (consumingRegistry poisoned diamond);
-      expected = false;
-    };
-    test-armed-the-same-consuming-registry-passes-against-the-real-surface = {
-      expr = succeeds (consumingRegistry genGraph diamond);
-      expected = true;
-    };
-    test-armed-the-injected-surface-is-the-one-the-registry-reads = {
-      expr = didThrow (cascadeUnderDepthPoison.mkKinds diamond);
-      expected = true;
-    };
-    test-control-the-poison-leaves-the-measure-alone = {
-      expr = (rankOf poisoned diamond).depth;
       expected = {
         leaf = 0;
         a = 1;
@@ -450,7 +356,7 @@ in
       expr = didThrow (mkKinds ghost);
       expected = true;
     };
-    # Item 3 — acyclicity: the cells above.
+    # Item 3 — acyclicity: unmintable, the cells above.
     # Item 4 — the per-kind measure: the byte-equalities above, and the registry field is present
     # and typed.
     test-registry-publishes-a-per-kind-depth-map = {
@@ -528,8 +434,9 @@ in
       });
       expected = true;
     };
-    test-attrset-input-form-accepted = {
-      expr = succeeds (mkKinds {
+    # The attribute-set form is retired: an attribute set has no order for the fold to mint in.
+    test-attrset-input-form-refused = {
+      expr = didThrow (mkKinds {
         b = leaf "b";
         a = node "a" [ "b" ];
       });
@@ -636,7 +543,7 @@ in
     # node kind order: a structural kind has no demand semantics to supply. These cells are the
     # generalization from the other side — a kind with NO resolver registers, ranks and orders
     # exactly like one that carries it, so the two vocabularies really do share one relation and one
-    # acyclicity verdict. What such a kind cannot do is answer a demand, and `../tests-error.nix`
+    # fold. What such a kind cannot do is answer a demand, and `../tests-error.nix`
     # asserts that refusal by its text.
     test-a-kind-with-no-resolver-registers = {
       expr =

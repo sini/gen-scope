@@ -232,11 +232,10 @@ let
     ];
   };
 
-  # ── (e) THE ARMED SCHEDULE VARIANT ──
-  # A registry record whose declared maximum does not cover its own measure. The registry passes
-  # through the run's intake verbatim — that is what the marker is for — so this is the real loop
-  # running a schedule with one stratum missing off the top, and not a second implementation of
-  # it written here.
+  # ── (e) A STALE REGISTRY MAXIMUM ──
+  # A registry record whose declared `maxDepth` does not cover its own measure. The run reads the
+  # maximum off the kinds it holds and never off this field, so a schedule with a stratum missing
+  # off the top is no longer constructible from a registry value, and this run is whole.
   truncatedKinds = cascadeKinds // {
     maxDepth = 1;
   };
@@ -448,20 +447,18 @@ let
   };
 
   # ── A REGISTRY WHOSE MEASURE IS NOT ITS RELATION'S RANK ──
-  # The marker vouches for provenance and not for agreement between `kinds`, `depth` and
-  # `maxDepth`. Flattened to one stratum, `top` runs and its emissions are created after that
-  # round selected its items — so they are never resolved, while every stratum they carry IS in
-  # the schedule. A run that derived "not run" from stratum membership would call them scheduled
+  # The run reads each kind's own `depth`, and a minted kind updated with `//` keeps its tag, so a
+  # `depth` written by hand is admitted where no resolved `below` compares it (nothing resolves
+  # `top`). Flattened to the bottom stratum, `top` runs last and its emissions are created after
+  # that round selected its items — so they are never resolved, while every stratum they carry IS
+  # in the schedule. A run that derived "not run" from stratum membership would call them scheduled
   # and report their kinds as empty, which is byte-identical to a kind nobody claimed.
   flattenedKinds = cascadeKinds // {
-    depth = {
-      leaf = 0;
-      a = 0;
-      b = 0;
-      top = 0;
-      unused = 0;
+    kinds = cascadeKinds.kinds // {
+      top = cascadeKinds.kinds.top // {
+        depth = 0;
+      };
     };
-    maxDepth = 0;
   };
 
   flattenedRun = resolveClaims {
@@ -474,18 +471,20 @@ let
     ];
   };
 
-  # A registry that registers a kind the measure has no entry for. Read where no refusal can
-  # follow it — `depth.<kind>` while a child is being built — so it must be decided as data.
+  # A registry holding a kind with no measure. Read where no refusal can follow it — a kind's
+  # `depth` while a child is being built — so it must be decided as data.
   undepthedKinds = cascadeKinds // {
-    depth = {
-      top = 2;
-      a = 1;
-      b = 1;
+    kinds = cascadeKinds.kinds // {
+      top = removeAttrs cascadeKinds.kinds.top [ "depth" ];
     };
   };
 
-  nonIntegerMaxDepth = cascadeKinds // {
-    maxDepth = "two";
+  nonIntegerDepth = cascadeKinds // {
+    kinds = cascadeKinds.kinds // {
+      top = cascadeKinds.kinds.top // {
+        depth = "two";
+      };
+    };
   };
 
   # ── TWO GROUPS, ONE RESOURCE KEY ──
@@ -560,7 +559,7 @@ let
   forgedKind =
     fields:
     {
-      _type = "gen-scope/kind";
+      _type = "gen-scope/kind-declaration";
       name = "ghost";
       below = [ ];
     }
@@ -646,17 +645,23 @@ let
   forgedEntry =
     fields:
     {
-      _type = "gen-scope/kind";
+      _type = "gen-scope/kind-declaration";
       name = "unused";
     }
     // fields;
 
+  # The same entry as a MINTED kind, which is what the pass-through door admits: the minted marker,
+  # and the `depth` and `belowKinds` the fold writes, so the field arms are what answers.
   kindSetWithForged =
     fields:
     cascadeKinds
     // {
       kinds = cascadeKinds.kinds // {
-        unused = forgedEntry fields;
+        unused = forgedEntry fields // {
+          _type = "gen-scope/kind";
+          depth = 0;
+          belowKinds = { };
+        };
       };
     };
 
@@ -920,11 +925,9 @@ let
   observedSchedule = run: lib.unique (map (c: c.stratum) run.trace.claims);
 
   # ── (g) THE COLLISION SET ──
+  # `kindSetDefect` is the module's internal export, removed before the surface merge.
   cascadeNames = builtins.attrNames (
-    import ../../lib/cascade.nix {
-      prelude = genPreludeLib;
-      graph = genGraph;
-    }
+    removeAttrs (import ../../lib/cascade.nix { prelude = genPreludeLib; }) [ "kindSetDefect" ]
   );
   incumbentNames = builtins.filter (n: !(builtins.elem n cascadeNames)) (builtins.attrNames genScope);
   collidesWith = names: builtins.filter (n: builtins.elem n incumbentNames) names;
@@ -1197,7 +1200,7 @@ in
       });
       expected = true;
     };
-    test-registry-registering-a-kind-with-no-depth-entry-refused = {
+    test-registry-holding-a-kind-with-no-depth-refused = {
       expr = didThrow (resolveClaims {
         kinds = undepthedKinds;
         claims = [
@@ -1209,9 +1212,9 @@ in
       });
       expected = true;
     };
-    test-registry-with-a-non-integer-maxdepth-refused = {
+    test-registry-holding-a-kind-with-a-non-integer-depth-refused = {
       expr = didThrow (resolveClaims {
-        kinds = nonIntegerMaxDepth;
+        kinds = nonIntegerDepth;
         claims = [
           (mkClaim {
             kind = "top";
@@ -1864,29 +1867,26 @@ in
       expr = soloRun.unrun;
       expected = [ ];
     };
-    # ARMED: one stratum off the top of the schedule. The claim it would have run is REPORTED,
-    # and the run returns — a refusal here would destroy the only record of what was missed.
-    test-armed-truncated-schedule-reports-the-unreached-claim = {
-      expr = map (i: {
-        inherit (i) kind stratum;
-      }) truncatedRun.unrun;
-      expected = [
-        {
-          kind = "top";
-          stratum = 2;
-        }
-      ];
+    # A registry `maxDepth` that does not cover the measure is not read: the schedule comes off
+    # the kinds, so nothing is stranded.
+    test-a-stale-registry-maxdepth-strands-nothing = {
+      expr = truncatedRun.unrun;
+      expected = [ ];
     };
     test-armed-truncated-schedule-does-not-throw = {
       expr = succeeds truncatedRun;
       expected = true;
     };
-    # And it is not merely dead: the strata the schedule does cover still run, so the cell above
-    # reports a claim the loop skipped rather than a loop that did nothing.
-    test-armed-truncated-schedule-still-runs-its-scheduled-strata = {
+    # And every stratum ran, the top one included.
+    test-a-stale-registry-maxdepth-still-runs-every-stratum = {
       expr = map (c: c.kind) truncatedRun.trace.claims;
       expected = [
+        "top"
         "a"
+        "b"
+        "a"
+        "leaf"
+        "leaf"
         "leaf"
       ];
     };
@@ -2050,18 +2050,15 @@ in
       expr = builtins.length incumbentNames;
       expected = 93;
     };
-    # Four doors and one predicate. The doors are the registration and run entries and nothing else
-    # — the consumer accessors that used to sit beside them reconstructed a list the run already
-    # computed, and the run publishes it now, so reading one subject's wiring is an attribute lookup
-    # with no surface of its own. `isKindSet` is the fifth name and is not a door: it is the
-    # discriminator over the tag `mkKinds` writes, exported because the two entry guards
-    # (`require-scope.nix`, `build-nodes.nix`) bind it as a formal and a consumer cannot re-derive
-    # provenance from the value. This cell is the module's inventory, and an export it does not list
-    # is an export nothing measured.
-    test-this-module-exports-exactly-its-five-names = {
+    # Four doors. The doors are the registration and run entries and nothing else — the consumer
+    # accessors that used to sit beside them reconstructed a list the run already computed, and the
+    # run publishes it now, so reading one subject's wiring is an attribute lookup with no surface of
+    # its own. `isKindSet` is retired: the entry guards decide the registry as a TYPE
+    # (`kindSetDefect`), which stays internal. This cell is the module's inventory, and an export it
+    # does not list is an export nothing measured.
+    test-this-module-exports-exactly-its-four-names = {
       expr = cascadeNames;
       expected = [
-        "isKindSet"
         "mkClaim"
         "mkKind"
         "mkKinds"

@@ -216,7 +216,7 @@ let
   o10RequireScope =
     (import (libDir + "/require-scope.nix") {
       prelude = genPreludeLib;
-      inherit (genScope) isKindSet;
+      inherit (import (libDir + "/cascade.nix") { prelude = genPreludeLib; }) kindSetDefect;
     }).requireScope;
   o10RequireDeclaredDependencies =
     (import (libDir + "/require-declared-dependencies.nix") { graph = genGraph; })

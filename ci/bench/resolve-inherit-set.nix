@@ -67,8 +67,8 @@ let
   # formal gained downstream is defaulted downstream instead of re-tracked here by hand.
   graph = import "${fetch "gen-graph"}" { inherit prelude; };
   # The registry discriminator ships with `mkKinds`; the two guards below take it as a formal.
-  inherit (import ../../lib/cascade.nix { inherit prelude graph; }) isKindSet;
-  inherit (import ../../lib/require-scope.nix { inherit prelude isKindSet; }) requireScope;
+  inherit (import ../../lib/cascade.nix { inherit prelude; }) kindSetDefect;
+  inherit (import ../../lib/require-scope.nix { inherit prelude kindSetDefect; }) requireScope;
   inherit (import ../../lib/require-declared-dependencies.nix { inherit graph; })
     requireDeclaredDependencies
     ;
@@ -80,7 +80,7 @@ let
       graph
       ;
   };
-  inherit (import ../../lib/build-nodes.nix { inherit prelude isKindSet; }) buildRoots;
+  inherit (import ../../lib/build-nodes.nix { inherit prelude kindSetDefect; }) buildRoots;
   resolveLib = import ../../lib/resolve.nix { inherit prelude; };
   ag = import ../../lib/graph.nix;
 

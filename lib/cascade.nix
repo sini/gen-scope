@@ -6,18 +6,18 @@
 # satisfies — and it is named for what it is rather than for the evaluation strategy that happens
 # to drive it.
 #
-# `mkKind` builds one kind record and refuses a `dedupKey` without a `fold` and a `fold` without a
-# `dedupKey`: grouping and merging are only meaningful together, so the pairing is a
+# `mkKind` builds one kind DECLARATION and refuses a `dedupKey` without a `fold` and a `fold`
+# without a `dedupKey`: grouping and merging are only meaningful together, so the pairing is a
 # registration-time error rather than a resolution-time surprise. It also refuses a `spawns` entry
-# whose produced kind is outside the host's own `below` set, which is what makes a non-descending
-# node expansion inexpressible rather than detectable. `mkKinds` validates the whole set — name
-# uniqueness, `below`-name resolution, acyclicity — and publishes the per-kind `depth` measure with
-# its maximum.
+# whose produced kind is outside the host's own `below` set. A declaration is not a kind. `mkKinds`
+# is the one producer of kind records: a left fold over an ORDERED list of declarations that
+# resolves each `below` name against the frozen set of kinds minted strictly earlier, so a
+# self-naming or cyclic `below` cannot be named at all, rather than being named and then detected.
 #
 # ★ THIS REGISTRY IS THE SUBSTRATE'S, NOT THE CASCADE'S. It began as the demand vocabulary and now
 # carries the kind order every node kind is ranked in, so the two things a kind can be — something
-# a demand resolves against, and something a node IS — register once, in one relation, with one
-# acyclicity verdict. `resolve` marks the demand subset; `spawns` marks the expanding subset; a
+# a demand resolves against, and something a node IS — register once, in one relation, minted by
+# one fold. `resolve` marks the demand subset; `spawns` marks the expanding subset; a
 # kind may be in either, both or neither.
 #
 # ── WHAT THIS FILE STANDS ON, AND THE THREE ANSWERS ARE DIFFERENT IN KIND ──
@@ -26,7 +26,7 @@
 # COMPLETENESS is a published result and carries its citation: Apt, Blair & Walker (1988), quoted
 # below against the printed pages named there. What is this library's OWN is neither — it is the
 # CONSTRUCTION that makes them apply here, and it is stated as original rather than left to read as
-# borrowed: a depth measure taken off the graph library's rank surface rather than recomputed, and
+# borrowed: a depth measure minted with each kind rather than decided over the finished set, and
 # a schedule that IS that measure rather than a linearisation of it. That novelty is an absence
 # claim, so the search behind it is named. The stratification literature this project holds — Apt,
 # Blair & Walker (1988), Przymusinski (1988), Gelfond & Lifschitz (1988), Van Gelder, Ross &
@@ -34,31 +34,39 @@
 # derives a schedule from a registry's own relation, which is the step taken here. A primary that
 # does would falsify the claim, and this paragraph is where it would land.
 #
-# ── THE DEPTH MEASURE AND THE ACYCLICITY VERDICT ARE ONE READ, AND THE READ IS NOT THIS LIBRARY'S ──
-# Both come from the graph library's cone-rank surface, over the accessor the registry already
-# holds. Nothing here re-implements the recurrence, and the reason is a cost fact rather than a
-# preference: a plain per-node recursion over `below` never consults the map it is building, so a
-# node reachable by several paths is re-expanded once per path and the walk is exponential on a
-# shared producer. The graph library binds its rank map through a fixed point — every node forced
-# at most once — and warms it in a producers-first sequence, so the descent stays flat. A second
-# recurrence here would be a slower copy of a construction that already ships, and it would be a
-# per-node recursive descent, which this engine does not build.
+# ── THE KINDS ARE MINTED BY A STAGED FOLD, AND THE DEPTH IS ITS WITNESS ──
+# THEORY. Krishnan & Van Wyk (2012), Fig. 7 and Theorem 3, make termination follow from the
+# EXISTENCE of a well-founded ordering on the nonterminals; Söderberg & Hedin (2013) §7 restate it
+# as ordering node types so that "each new NTA has a lower order than its host". The fold
+# CONSTRUCTS that ordering's witness instead of deciding a relation for one. It is `mintStrata`'s
+# frozen-set move (`lib/mint.nix`, ADR-0016 ruling 7): a declaration's `below` names resolve only
+# against the kinds minted strictly EARLIER in the list, so a same-position or later name misses
+# for the same reason a nonexistent one does. A self-naming or cyclic `below` is therefore
+# INEXPRESSIBLE, never detected (ADR-0033 clause 3, substrate-constructed stratum closure): no cycle
+# check exists anywhere in this file, and none is needed.
 #
-# The verdict rides the same read. A cyclic `below` relation has no producers-first rank, and the
-# rank surface refuses it BY NAME rather than answering. So acyclicity is not a guard bolted onto
-# the registry — it is what asking for the measure already costs, and the registry forces that
-# answer at the point of registration so a cyclic set is refused where it is DEFINED and not where
-# some later reader happens to touch a field.
+# A minted kind carries its resolved `below` RECORDS as `belowKinds`, beside the declared names, and
+# `depth = 1 + max { depth b : b ∈ belowKinds }` (0 for none). Every record a minted kind reaches was
+# minted before it, so the records form a finite DAG by induction on list position and `depth` is a
+# natural number that strictly decreases along every resolved edge. Each kind's depth is computed
+# once, when it is minted, and read from its `below` records thereafter, so a shared producer is
+# never re-expanded.
 #
-# ── THE UNRESOLVED-NAME REFUSAL DOMINATES THE PATH TO THE MEASURE ──
-# The rank surface restricts each node's producers to the cone it was handed, so an edge naming
-# something unregistered is not an error there — it is ABSENT, and the node reports as a leaf at
-# depth 0 with no diagnostic. That is a silent wrong answer, so the registry must refuse the
-# unregistered name itself, and it is not enough for the check merely to exist: this is a lazy
-# language and sibling bindings have no evaluation order, so a check bound beside the measure is a
-# check a reader can step around. What holds instead is DOMINATION — the record carrying the
-# measure is constructed only inside the branch the refusal falls through to, so no path reaches a
-# depth value without the refusal having been decided.
+# ★ THE UNIVERSAL IS SCOPED TO RECORDS THE FOLD PRODUCED AND NOTHING RECORD-UPDATED. Nix record
+# update keeps the `_type` tag, so a minted kind edited with `//` is still tagged, and a knot tied
+# through `belowKinds` by a recursive `let` is a value no fold produced. Writing that internal field
+# by hand is forging, and it is out of scope; what an ordinary `//` edit can reach is refused by name
+# at the evaluator (`lib/eval.nix`, `kindOf`) or at the registry door (`kindSetDefect` below).
+#
+# ── ADMISSIBILITY DEPENDS ON LIST ORDER; THE MINTED REGISTRY DOES NOT ──
+# ADR-0016 ruling 7 owes the minting spec invariance of pass assignment under presentation order.
+# Here the pass is the list position, and what is invariant is the RESULT: every admissible order
+# of one declaration set mints the same `depth`, `maxDepth` and `below` for every kind, because
+# `depth` is the longest descent through the declared relation and no position enters it. What is
+# NOT invariant is admissibility: a list that declares a host before a kind its `below` names is
+# refused by name, even though another order of the same declarations is admitted. That is
+# user-visible, and it is why the attribute-set form of `mkKinds` is retired: an attribute set has no
+# order to stage over, and ordering it by name would make admissibility a function of spelling.
 #
 # ── THE REGISTRY VALIDATES ITS OWN INTAKE, AND DOES NOT DELEGATE THAT TO THE CONSTRUCTOR ──
 # `mkKind` refuses a `name` that is not a string and a `below` that is not a list of them, at the
@@ -70,8 +78,8 @@
 #
 # What it decides is both halves, and only one of them is a proof.
 #
-# The marker answers PROVENANCE, and it answers it for a COOPERATIVE CALLER: a record that came out
-# of the constructor has been through everything the constructor refuses, while a record that
+# The declaration marker answers PROVENANCE, and it answers it for a COOPERATIVE CALLER: a record
+# that came out of the constructor has been through everything the constructor refuses, while a record that
 # merely writes the token has asserted something about its own origin that nothing here can check.
 # So what the token does NOT establish is WHAT the three fields the constructor writes actually are
 # — whether `resolve` is a function of the right shape, whether `dedupKey` returns a string,
@@ -116,35 +124,6 @@
 # evaluation and no `tryEval` around the call contains it. A caller cannot detect it, cannot
 # recover from it, and gets no name to act on. So the shape is decided while it is still data.
 #
-# ── THE SUBSTRATE'S OWN GUARDS ARE NOT REACHED FOR, AND THE REASON IS RECORDED ──
-# The ordering arm beneath the rank surface publishes refusals for a non-string ordering key, for
-# two nodes sharing one key, and for an edge naming a node outside the set — three checks that
-# overlap this registry's, and called directly it does refuse all three by name and catchably.
-# They are still not consumed, on two grounds.
-#
-# THEY ARE UNREACHABLE THROUGH THE DOOR THE MEASURE COMES FROM. The rank surface sanitises before
-# the arm exists: it builds a membership set out of the cone it was handed and filters every edge
-# against it, so a node key that is not a string dies building that set and an edge target that is
-# not a string dies in the filter — both ahead of the arm, and both UNCATCHABLY. That is measured
-# on this library's own pin, and it is the same shape of defect this substrate has been recorded
-# carrying before: an exported ordering surface whose abort no caller can contain. Reaching the
-# arm's refusals would mean calling the arm instead of the door the measure is taken from, and
-# paying a second ordering pass for verdicts the registry is already holding.
-#
-# AND HALF OF WHAT IS BEING REFUSED IS UPSTREAM OF ANY ACCESSOR AT ALL. An entry that is not an
-# attribute set, or that lacks the fields the node list and the edge function are built out of, is
-# refused before either can be constructed — no graph surface, arm or door, could have seen it. So
-# this check is the registry's whatever the substrate publishes, and what delegation would change
-# is only what the caller is told: a refusal about kind registration, reported in a vocabulary of
-# node indices and ordering keys.
-#
-# ── ONLY THE MEASURE IS CONSUMED ──
-# The rank surface publishes a linearisation beside its depth map, and this construction reads the
-# depth map alone. Two topological linearisations of the same relation can differ element for
-# element and both be correct, so a consumer that reads one has taken on a cross-library contract
-# about which valid answer it gets. The depth map carries no such freedom: it is a function of the
-# relation, identical under any tie-break.
-#
 # ── WHAT THIS REGISTRY DOES NOT ESTABLISH ──
 # Written down rather than left for the next construction to discover, because the next
 # construction is what builds on it.
@@ -184,15 +163,12 @@
 # total on the shapes an ordinary caller can reach; it is not total against a caller who writes the
 # constructor's token by hand, and no check on this page makes it so.
 #
-# THEORY. Acyclicity is the stratifiability condition made a definition-time error. The measure is
-# the longest path to a leaf: `depth k = 0` where `k` has no registered successor, else
-# `1 + max { depth b : b ∈ below(k) registered }`. Every `below` edge to a REGISTERED name
-# therefore strictly decreases it — `b` is in the cone, hence among `k`'s producers, hence
+# THEORY. Acyclicity is the stratifiability condition, made unwritable rather than checked. The
+# measure is the longest path to a leaf: `depth k = 0` where `k` has an empty `below`, else
+# `1 + max { depth b : b ∈ belowKinds(k) }`, so every resolved edge strictly decreases it —
 # `depth k ≥ 1 + depth b > depth b` — and a strictly decreasing natural-number measure is what
 # makes the cascade terminate by Noetherian induction on ℕ, in `maxDepth + 1` strata, as a theorem
-# about the measure rather than an iteration budget. The restriction to registered names costs the
-# theorem nothing: the filter removes only names outside the cone, and an unregistered name is
-# refused above before any measure exists.
+# about the measure rather than an iteration budget.
 #
 # ══ THE RUN ══
 #
@@ -270,27 +246,23 @@
 # would destroy the very information they need.
 #
 # ── `unrun` IS WHAT THE LOOP DID NOT SETTLE, AND THAT IS NOT THE SAME AS AN UNSCHEDULED STRATUM ──
-# The registry the run is handed may be a record it did not build. The kind-set marker answers
-# PROVENANCE for a cooperative caller, exactly as the kind marker does, and what it does NOT
-# establish is that `depth` and `maxDepth` are the measure of the `kinds` beside them: a record can
-# carry the token and a depth map that no `below` relation would produce. Nothing here can check
-# that, and refusing every record that merely writes the token would remove the pass-through the
-# run exists to offer.
+# The run reads `depth` and `maxDepth` off the kinds it is handed, each of which carries the depth it
+# was minted with, and never off a registry field a merged or hand-assembled registry may have left
+# stale. What it still does not establish is that a kind's `depth` is the one the fold minted: a
+# minted record updated with `//` keeps its tag, and a `depth` written by hand is a value no fold
+# produced.
 #
 # What that costs is bounded by where the answer is read from. "Not settled" is a fact about the
 # LOOP — the claims it created minus the claims it resolved — and it is that difference that is
 # reported. Deriving it instead from stratum membership in the schedule would be a PROXY: equivalent
 # to the property only while the depth map really is the rank of the relation, and wrong in exactly
-# the case the paragraph above says cannot be checked. Under such a registry a claim could go
+# the case the paragraph above says is not established. Under such a registry a claim could go
 # unresolved while the proxy called it scheduled, and its kind would report an empty entry —
 # indistinguishable from a kind nobody claimed, which is the one reading the totality rule exists to
 # rule out. The difference has no proxy in it, so the two ways a registry can be wrong — a maximum
 # that does not cover the measure, and a measure that is not the relation's — are both reported and
 # neither is silent.
-{
-  prelude,
-  graph,
-}:
+{ prelude }:
 let
   inherit (builtins)
     attrNames
@@ -335,14 +307,14 @@ let
   inherit (leastModelLib) forceFields;
 
   kindMarker = "gen-scope/kind";
-  kindSetMarker = "gen-scope/kind-set";
+  declarationMarker = "gen-scope/kind-declaration";
 
   # ★★ THIS IS THE SUBSTRATE'S KIND REGISTRY, AND `resolve` IS ONE VOCABULARY INSIDE IT.
   # It was built as the cascade's demand vocabulary and `resolve` was total: a kind that could not
   # answer a demand was not a kind. That reading made the registry unusable as the home of the NODE
   # kind order — a structural node kind has no demand semantics, and requiring it to invent one is
   # imposing a resolution vocabulary on something that has no use for it. The alternative, a second
-  # registry over the same `graph.coneRank` primitive, pays the price this file states twice: two
+  # registry beside this one, pays the price this file states twice: two
   # copies of a discipline agree only for as long as someone keeps them in step.
   #
   # So the registry generalizes and `resolve` becomes a sentinel-guarded OPTION. DEMAND KINDS ARE
@@ -363,6 +335,11 @@ let
   # THE PRESENCE CLAIM THE HEADER MAKES IS PRESERVED: no record this constructor builds can reach
   # the registry with a field MISSING, so the registry's presence arms still cannot fire on its
   # output. What the constructor no longer claims is that the field is non-null.
+  #
+  # ★ WHAT IT RETURNS IS A DECLARATION, NOT A KIND. Its tag is `gen-scope/kind-declaration`, and the
+  # fold in `mkKinds` is the sole producer of a `gen-scope/kind` record. A declaration whose `below`
+  # names itself, or one half of a two-cycle, still builds here, and it is a declaration the fold
+  # cannot mint: no well-typed kind outside the domain exists to be handed to the evaluator.
   mkKind =
     {
       name,
@@ -385,9 +362,9 @@ let
       # reading it off whatever the builder returned.
       #
       # Every declared key must already be a `below` name, so descent is not a separate condition to
-      # check: `below` is the relation `graph.coneRank` ranks, and a registered `below` edge strictly
-      # decreases that rank by construction. A NON-DESCENDING SPAWN IS THEREFORE INEXPRESSIBLE — the
-      # record cannot be built — rather than admitted here and refused when it fires. That is the
+      # check: `mkKinds` resolves each `below` name to a kind minted strictly earlier, whose `depth`
+      # is strictly smaller. A NON-DESCENDING SPAWN IS THEREFORE INEXPRESSIBLE — no kind carrying it
+      # can be minted — rather than admitted and refused when it fires. That is the
       # same shape the emission guard already enforces for CLAIMS, where a sub-claim outside its
       # emitter's `below` set is a topology error; nodes and claims now expand under one rule.
       spawnKinds = if isAttrs spawns then attrNames spawns else [ ];
@@ -396,8 +373,8 @@ let
       # ── THE `nta` DECLARATION: the recursive NTA form, beside `spawns` and not inside it ──
       # `nta` is Vogt, Swierstra & Kuiper 1989 Def. 3.14's recursive `F → F̄` form, whose children
       # are of the HOST's own kind; `spawns` above is the non-recursive fragment Lemma 3.2 / Söderberg
-      # §7 make finite by kind order. So `nta` adds NO `below` entry and needs none, and the
-      # self-`below` refusal in `mkKinds` is untouched. Its admission rule and its stated price live
+      # §7 make finite by kind order. So `nta` adds NO `below` entry and needs none, and a self-`below`
+      # stays unmintable. Its admission rule and its stated price live
       # at its channel in `lib/eval.nix`. Every refusal here carries the `nta:` token, so a reader
       # tells the two rules apart by the token rather than by the builder's shape.
       #
@@ -433,7 +410,7 @@ let
       throw "gen-scope.mkKind: kind '${name}' declares `fold` without `dedupKey` (a fold has nothing to merge without grouping)"
     else
       {
-        _type = kindMarker;
+        _type = declarationMarker;
         inherit
           name
           below
@@ -456,18 +433,44 @@ let
   # declaration shape is `circular`'s record (`lib/resolve.nix`), tagged `kind = "circular"`.
   isCircularDecl = v: isAttrs v && (v.kind or null) == "circular";
 
-  # The reason an entry is not a kind, or null. Total on any value: each arm establishes what the
-  # next one needs, so nothing here reads a field it has not already found. The reason names the
-  # defect and never renders the entry — a kind record holds its resolver, and rendering a
-  # function is itself an abort no caller can catch, which would replace one uncatchable
-  # termination with another while claiming to diagnose it.
+  # The reason an entry is not a well-shaped declaration or kind, or null. Total on any value: each
+  # arm establishes what the next one needs, so nothing here reads a field it has not already found.
+  # The reason names the defect and never renders the entry — a kind record holds its resolver, and
+  # rendering a function is itself an abort no caller can catch, which would replace one
+  # uncatchable termination with another while claiming to diagnose it.
+  #
+  # Split by what is being admitted: `notADeclaration` is the fold's intake, `notAKind` the
+  # evaluator's and the run's. Each tells the other's record apart by its tag, so a declaration
+  # handed to the evaluator is a TYPE refusal naming it as a declaration rather than a domain one.
+  notADeclaration =
+    k:
+    if !isAttrs k then
+      "is a ${typeOf k} rather than a kind declaration"
+    else if (k._type or null) == kindMarker then
+      "is a kind `mkKinds` already minted, not a declaration: pass the declaration `mkKind` built"
+    else if (k._type or null) != declarationMarker then
+      "was not built by `mkKind`"
+    else
+      shapeDefect k;
+
   notAKind =
     k:
     if !isAttrs k then
       "is a ${typeOf k} rather than a kind record"
+    else if (k._type or null) == declarationMarker then
+      "is a kind declaration built by `mkKind`, not a kind `mkKinds` minted: pass the declarations through `mkKinds`"
     else if (k._type or null) != kindMarker then
-      "was not built by `mkKind`"
-    else if !isString (k.name or null) then
+      "was not minted by `mkKinds`"
+    else if !isInt (k.depth or null) then
+      "carries no integer `depth`"
+    else if !isAttrs (k.belowKinds or null) then
+      "carries no `belowKinds` attribute set"
+    else
+      shapeDefect k;
+
+  shapeDefect =
+    k:
+    if !isString (k.name or null) then
       "carries a `name` that is not a string"
     else if !isList (k.below or null) then
       "carries a `below` that is not a list"
@@ -508,117 +511,146 @@ let
       null;
 
   mkKinds =
-    kindsArg:
+    decls:
     let
-      # Labelled at intake so a refusal can point at the entry a caller wrote, in the caller's own
-      # coordinates: a position for the list form, the attribute name for the attribute-set one.
-      labelled =
-        if isList kindsArg then
-          imap0 (i: k: {
-            label = "entry ${toString i}";
-            kind = k;
-          }) kindsArg
-        else
-          map (n: {
-            label = "entry `${n}`";
-            kind = kindsArg.${n};
-          }) (attrNames kindsArg);
-
+      # Labelled at intake so a refusal can point at the entry a caller wrote, by its position.
       malformed = filter (m: m != null) (
-        map (
-          e:
+        imap0 (
+          i: d:
           let
-            reason = notAKind e.kind;
+            reason = notADeclaration d;
           in
-          if reason == null then null else "${e.label} ${reason}"
-        ) labelled
+          if reason == null then null else "entry ${toString i} ${reason}"
+        ) decls
       );
 
-      kindList = map (e: e.kind) labelled;
-      names = map (k: k.name) kindList;
+      names = map (d: d.name) decls;
 
+      # Decided ahead of the fold and not by it: a second declaration of a name would resolve its
+      # `below` against the first, and the frozen map would silently keep whichever came last.
       duplicates = unique (filter (n: length (filter (m: m == n) names) > 1) names);
 
-      kinds = listToAttrs (map (k: nameValuePair k.name k) kindList);
+      # ── THE FOLD ──
+      # One step mints one declaration against `frozen`, the kinds minted strictly earlier. A `below`
+      # name `frozen` does not carry is refused by name, and that is the only refusal the step has:
+      # a name that is later in the list, the declaration's own name, and a name nothing declares all
+      # miss here for the same reason, so no cycle is ever formed to be found.
+      mint =
+        frozen: d:
+        let
+          resolved = map (
+            n:
+            frozen.${n}
+              or (throw "gen-scope.mkKinds: kind '${d.name}' names '${n}' in `below`, which no kind registered before it carries. A kind resolves its `below` names against the kinds declared EARLIER in the list, so declare every kind after the kinds its `below` names; a kind naming itself, or a cycle of kinds, has no such order and cannot be declared.")
+          ) d.below;
+        in
+        frozen
+        // {
+          ${d.name} = d // {
+            _type = kindMarker;
+            belowKinds = listToAttrs (map (k: nameValuePair k.name k) resolved);
+            depth = foldl' (m: k: max m (k.depth + 1)) 0 resolved;
+          };
+        };
 
-      allBelow = unique (concatMap (k: k.below) kindList);
-      unresolved = filter (b: !(kinds ? ${b})) allBelow;
+      kinds = foldl' mint { } decls;
+      depth = mapAttrs (_: k: k.depth) kinds;
+      maxDepth = foldl' max 0 (attrValues depth);
 
-      # ── THE SELF-LOOP IS A DESCENT FAILURE AND NOW SAYS SO ──
-      # A kind naming itself in its own `below` is refused either way: it is a 1-cycle, so the
-      # acyclicity verdict below already rejects it. What it was NOT doing is naming the concept
-      # the author violated — a caller who wrote `spawns.k` on kind `k` got a message about a
-      # CYCLE in a relation they were not thinking of as a graph, when what they had actually
-      # written was an expansion that descends nothing. The verdict is unchanged and this changes
-      # no registry that used to register; it moves the one case whose diagnosis is unambiguous
-      # ahead of the general one so the message can name descent. Every other cycle stays with the
-      # acyclicity verdict, where the offending path is what a caller needs and a single kind name
-      # would not be enough.
-      selfBelow = filter (k: elem k.name k.below) kindList;
-
-      # One read: the measure and the acyclicity verdict come out of the same call, over the
-      # relation the registry already describes.
-      ranked = graph.coneRank {
-        nodes = names;
-        edges = n: kinds.${n}.below;
-      } names;
-
-      # Taken over the published map, which is total on the registered names, so every kind's
-      # depth lies in `[0, maxDepth]` and a schedule enumerating that range reaches all of them.
-      maxDepth = foldl' max 0 (attrValues ranked.depth);
+      # Every kind's depth forced in LIST order, so a registry with a `below` miss is refused as it
+      # is built and the refusal names the first entry, in the caller's own order, that misses.
+      minted = foldl' (acc: n: seq kinds.${n}.depth acc) null names;
     in
-    if !(isList kindsArg || isAttrs kindsArg) then
-      throw "gen-scope.mkKinds: expected a list or attribute set of kinds, not a ${typeOf kindsArg}"
+    if isAttrs decls then
+      throw "gen-scope.mkKinds: expected a LIST of kind declarations, not an attribute set. Kinds are minted in list order, each against the kinds declared before it, and an attribute set has no order to mint in: list the declarations with every kind after the kinds its `below` names."
+    else if !isList decls then
+      throw "gen-scope.mkKinds: expected a list of kind declarations, not a ${typeOf decls}"
     else if malformed != [ ] then
-      throw "gen-scope.mkKinds: not every entry is a kind record: ${toJSON malformed}"
+      throw "gen-scope.mkKinds: not every entry is a kind declaration: ${toJSON malformed}"
     else if duplicates != [ ] then
       throw "gen-scope.mkKinds: duplicate kind name(s): ${toJSON duplicates}"
-    else if unresolved != [ ] then
-      throw "gen-scope.mkKinds: `below` names with no registered kind: ${toJSON unresolved}"
-    else if selfBelow != [ ] then
-      throw "gen-scope.mkKinds: kind(s) ${
-        toJSON (map (k: k.name) selfBelow)
-      } name themselves in their own `below` set. `below` is a STRICT descent order — what a kind expands into ranks strictly under it, and that is the decreasing measure the cascade terminates on. A kind cannot rank under itself, so a kind spawning its own kind expands into something no smaller than its host and descends nothing. Give the produced kind its own name and rank that below this one."
     else
-      # Forcing the ranked record here is what makes a cyclic relation a definition-time refusal:
-      # the verdict is decided as the registry is built, not when a reader first wants a depth.
-      seq ranked {
-        _type = kindSetMarker;
-        inherit kinds maxDepth;
-        inherit (ranked) depth;
-      };
+      seq minted { inherit kinds depth maxDepth; };
 
-  # A registry, or the raw kinds to build one out of. A caller who already registered hands the
-  # record back and pays nothing; one who did not gets registration, with every refusal above.
-  # Internal: the run needs it, and a caller reaching a registry through this instead of through
-  # `mkKinds` would be relying on a shortcut whose whole purpose is that the run does not care
-  # which of the two it was given.
+  # ── THE REGISTRY A CONSUMER HANDS BACK, DECIDED AS A TYPE AND NOT AS A PROVENANCE ──
+  # The reason `reg` is not a kind registry, or null. A registry is an attribute set whose `kinds`
+  # maps each name to the kind `mkKinds` minted under it. It need not be one `mkKinds` returned: a
+  # registry assembled by hand out of minted kinds, a `//` merge of two, is admitted, because every
+  # minted kind is in the domain and so is any collection of them. What the door asks is a TYPE
+  # question per entry, and one COHERENCE question across entries:
   #
-  # THE PASS-THROUGH IS THE SAME COOPERATIVE-CALLER BARGAIN THE KIND MARKER MAKES, AND IT HAS THE
-  # SAME LIMIT. A record that came out of `mkKinds` carries a `depth` that is the rank of its own
-  # `below` relation and a `maxDepth` that covers it; a record that merely writes the token has
-  # asserted that and nothing here can check it. So what the token does NOT establish is the
-  # agreement between `kinds`, `depth` and `maxDepth` — and the run is built so that a disagreement
-  # is REPORTED rather than absorbed: it reads what it settled, never what the record declared.
-  asKindSet = kinds: if isKindSet kinds then kinds else mkKinds kinds;
+  #   · every entry is filed under its own name;
+  #   · every kind an entry's resolved `below` carries is the registry's entry under that name.
+  #
+  # The second is what a merge can break. Termination does not rest on it — the evaluator follows
+  # resolved records (`lib/eval.nix`, `kindOf`), so a merged registry cannot re-route a spawn chain —
+  # but a registry filing two different kinds under one name gives a reader looking a spawned
+  # node's kind up by name a different kind from the one the evaluator follows, and the caller's
+  # declared expansion silently does not happen. So it is refused by name. Two kinds are compared on
+  # `name`, `below`, `depth` and the key sets of `spawns` and `nta`; builders are functions and are
+  # not compared, so two kinds differing only in a builder's body are one kind to this door.
+  #
+  # COST: one pass over the entries and one over each entry's resolved `below`, paid per door
+  # crossing (every `eval` and `buildRoots` handed a registry) and never per node.
+  #
+  # Internal: `default.nix` binds it into the two doors and keeps it off the published surface.
+  sameKind =
+    a: b:
+    a.name == b.name
+    && a.below == b.below
+    && a.depth == b.depth
+    && attrNames a.spawns == attrNames b.spawns
+    && attrNames a.nta == attrNames b.nta;
 
-  # ── THE DISCRIMINATOR, PUBLISHED BESIDE THE CONSTRUCTOR ──
-  # The one question a consumer cannot answer for itself: did this registry come out of `mkKinds`,
-  # and has `graph.coneRank` therefore been forced over the whole of its `below` relation?
-  # Acyclicity is a property of the SET, so no kind record decides it and no reader re-derives it
-  # from the value — only the tag `mkKinds` writes says so. `asKindSet` computed exactly this test
-  # inline and now calls it, so there is ONE definition of what a registry is and one spelling of
-  # the tag.
-  #
-  # ★ THE PREDICATE SHIPS AND THE REFUSAL DOES NOT, which is `gen-graph.isDeclaredEdges`' division
-  # exactly. A consumer entry refusing a forged registry must name ITS OWN door — a refusal minted
-  # here would name the cascade for a defect at `eval`'s or `buildRoots`' — so what travels is the
-  # discriminator and what stays at each door is the message. The consumers are
-  # `require-scope.nix` and `build-nodes.nix`, each of which takes this as a formal.
-  #
-  # It answers PROVENANCE and not agreement: the bargain and its limit are stated above `asKindSet`
-  # and are unchanged by publishing the test.
-  isKindSet = kinds: isAttrs kinds && (kinds._type or null) == kindSetMarker;
+  kindSetDefect =
+    reg:
+    if !isAttrs reg then
+      "received a ${typeOf reg}"
+    else if !isAttrs (reg.kinds or null) then
+      "received an attrset with no `kinds` attribute set"
+    else
+      let
+        ks = reg.kinds;
+        registered = attrNames ks;
+        malformed = filter (m: m != null) (
+          map (
+            n:
+            let
+              reason = notAKind ks.${n};
+            in
+            if reason == null then null else "`${n}` ${reason}"
+          ) registered
+        );
+        misfiled = filter (n: ks.${n}.name != n) registered;
+        edges = concatMap (
+          n:
+          map (b: {
+            host = n;
+            name = b;
+          }) (attrNames ks.${n}.belowKinds)
+        ) registered;
+        absent = filter (e: !(ks ? ${e.name})) edges;
+        split = filter (e: !(sameKind ks.${e.name} ks.${e.host}.belowKinds.${e.name})) edges;
+      in
+      if malformed != [ ] then
+        "holds entries that are not minted kinds: ${toJSON malformed}"
+      else if misfiled != [ ] then
+        "files kind(s) under a name other than their own: ${
+          toJSON (map (n: "`${n}` holds kind '${ks.${n}.name}'") misfiled)
+        }"
+      else if absent != [ ] then
+        "holds kind '${(head absent).host}', whose resolved `below` carries kind '${(head absent).name}', which the registry does not"
+      else if split != [ ] then
+        "files under '${(head split).name}' a kind that differs from the kind '${(head split).name}' that entry '${(head split).host}' resolved in its `below` (compared on `name`, `below`, `depth` and the `spawns`/`nta` key sets). Two different kinds share one name — a merge of registries built from different declarations"
+      else
+        null;
+
+  # A registry, or the declarations to mint one from. A list is declarations and goes through the
+  # fold, with every refusal above; an attribute set without `kinds` is the retired attribute-set
+  # form, and `mkKinds` refuses it by name. Anything else is taken as a registry, and the run's own
+  # door (`registryDefect`) decides it with `kindSetDefect`.
+  asKindSet =
+    kinds: if isList kinds || (isAttrs kinds && !(kinds ? kinds)) then mkKinds kinds else kinds;
 
   claimMarker = "gen-scope/claim";
 
@@ -643,10 +675,21 @@ let
     "_reserved"
   ];
 
-  # The kind NAME a `kind` field denotes: a kind record's own name, or the name itself. Total on
+  # The kind NAME a `kind` field denotes: a kind's or a declaration's own name, or the name itself. Total on
   # any value — anything that is neither yields something that is not a string, which the
   # constructor refuses. There is one decision, and it is made there rather than half here.
-  kindNameOf = k: if isAttrs k && (k._type or null) == kindMarker then k.name or null else k;
+  kindNameOf =
+    k:
+    if
+      isAttrs k
+      && elem (k._type or null) [
+        kindMarker
+        declarationMarker
+      ]
+    then
+      k.name or null
+    else
+      k;
 
   mkClaim =
     args:
@@ -768,57 +811,18 @@ let
     let
       kindSet = asKindSet kinds;
       ks = kindSet.kinds;
-      inherit (kindSet) depth maxDepth;
+      # The measure is read off the kinds themselves, each of which carries the `depth` it was minted
+      # with, and never off a registry field a hand-assembled or merged registry may have left stale.
+      depth = mapAttrs (_: k: k.depth) ks;
+      maxDepth = foldl' max 0 (attrValues depth);
 
-      # ── the registry's SHAPE, which is this run's precondition and not the registry's claim ──
-      # A record the run built satisfies all of this and pays nothing for the check. A record that
-      # merely carries the marker may not, and the three fields below are read where no refusal can
-      # follow: `maxDepth` enters integer arithmetic and a kind's `depth` entry is projected while
-      # a child is being built. Both are TYPE ERRORS if the shape is wrong, and a type error is not
-      # a value — it terminates the evaluation and `tryEval` around the call does not contain it,
-      # so a caller gets no name and no way to recover. Measured on this evaluator: `tryEval` holds
-      # a `throw` and does not hold a missing attribute.
-      #
-      # WHAT THIS DOES NOT CHECK, and the line is deliberate: whether `depth` is the RANK of the
-      # `below` relation. Deciding that means computing the rank, which is what registration is
-      # for, and a run that recomputed it would make the pass-through pointless. A depth map that
-      # is well-shaped and wrong is admitted — and the run reports what it did not settle, so the
-      # claims such a map strands are named rather than dropped.
-      registryDefect =
-        if !isAttrs (kindSet.kinds or null) then
-          "carries no `kinds` attribute set"
-        else if !isAttrs (kindSet.depth or null) then
-          "carries no `depth` attribute set"
-        else if !isInt (kindSet.maxDepth or null) then
-          "carries a `maxDepth` that is not an integer"
-        else
-          let
-            registered = attrNames kindSet.kinds;
-            # The same question the registration door asks, asked again on the door that skips it.
-            # A record carrying the kind-set token was never handed to `mkKinds`, so no entry in it
-            # has met `notAKind` — and this run projects `below`, `resolve`, `dedupKey` and `fold`
-            # off those entries at points where a missing one is a type error rather than a
-            # refusal. Deciding it here and not there would be this run publishing an empty entry
-            # for something it never established was a kind, which is the reading the registration
-            # door exists to prevent; the token cannot vouch for the entries any more than the kind
-            # token vouches for the fields inside one.
-            malformed = filter (m: m != null) (
-              map (
-                n:
-                let
-                  reason = notAKind kindSet.kinds.${n};
-                in
-                if reason == null then null else "`${n}` ${reason}"
-              ) registered
-            );
-            undepthed = filter (n: !(kindSet.depth ? ${n})) registered;
-          in
-          if malformed != [ ] then
-            "holds entries that are not kind records: ${toJSON malformed}"
-          else if undepthed != [ ] then
-            "registers kind(s) ${toJSON undepthed} with no `depth` entry"
-          else
-            null;
+      # ── the registry's TYPE, which is this run's precondition ──
+      # The same question the evaluator's door asks: every entry a minted kind, filed under its own
+      # name, and coherent with every resolved `below` that reaches it. This run projects `below`,
+      # `resolve`, `dedupKey`, `fold` and `depth` off those entries at points where a missing one is
+      # a type error rather than a refusal, and a type error is not a value — `tryEval` does not
+      # contain it — so the type is decided before any of them is read.
+      registryDefect = kindSetDefect kindSet;
 
       # ── the refusal chain, shared by intake and emission ──
       # `chain` names the emitting claim for a sub-claim's errors, and is empty for a root. Each
@@ -1298,11 +1302,8 @@ in
     mkKinds
     mkClaim
     resolveClaims
-    # Not a fifth door but a PREDICATE, and the fifth name this module contributes. `merge-surface`
-    # folds every module's exports into one flat surface, so this reaches consumers as
-    # `genScope.isKindSet` — beside `mkKinds`, which is where `gen-graph` puts `isDeclaredEdges`
-    # beside `mkDeclaredEdges` for the same reason: the test that answers "did this constructor
-    # build it" is public wherever the constructor is.
-    isKindSet
+    # INTERNAL, and removed before the surface merge in `default.nix`: the two doors take it as a
+    # formal, and no consumer needs a predicate the doors already decide.
+    kindSetDefect
     ;
 }

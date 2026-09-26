@@ -17,13 +17,13 @@ let
   # library bound as `graph`: these build a scope graph out of vertices and overlays, that one
   # answers reachability and partition questions about a graph already built.
   algebraicGraph = import ./graph.nix;
-  # `isKindSet` is `cascade.nix`'s, for the reason `requireDeclaredDependencies` takes `graph`
-  # below: the discriminator over a constructor's tag ships WITH that constructor, and the refusal
-  # is minted at the door where the defect is. `cascade.nix` takes `{ prelude, graph }` and reaches
-  # neither of these two modules, so the binding is acyclic.
+  # `kindSetDefect` is `cascade.nix`'s, for the reason `requireDeclaredDependencies` takes `graph`
+  # below: the registry TYPE is decided beside the fold that mints its kinds, and the refusal is
+  # minted at the door where the defect is. `cascade.nix` takes `{ prelude }` and reaches neither of
+  # these two modules, so the binding is acyclic.
   buildRoots = import ./build-nodes.nix {
     inherit prelude;
-    inherit (cascade) isKindSet;
+    inherit (cascadeModule) kindSetDefect;
   };
   queries = import ./queries.nix { inherit prelude; };
   resolve = import ./resolve.nix { inherit prelude; };
@@ -32,7 +32,7 @@ let
   inherit
     (import ./require-scope.nix {
       inherit prelude;
-      inherit (cascade) isKindSet;
+      inherit (cascadeModule) kindSetDefect;
     })
     requireScope
     ;
@@ -87,7 +87,9 @@ let
   # names it nowhere: a kind's resource fold arrives as a FIELD on the kind, so the vocabulary
   # reaches the run as the author's data rather than as an import of this module.
   folds = import ./folds.nix { inherit prelude; };
-  cascade = import ./cascade.nix { inherit prelude graph; };
+  cascadeModule = import ./cascade.nix { inherit prelude; };
+  # The registry door's predicate is the doors' and not the consumer's: it leaves before the merge.
+  cascade = builtins.removeAttrs cascadeModule [ "kindSetDefect" ];
   # The cold fold over a validated schedule, which takes the demand fixpoint from the module next
   # door rather than reaching for a second evaluator: the entry is the evaluator's caller, and the
   # one it calls is this library's own.

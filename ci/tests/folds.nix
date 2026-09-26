@@ -273,17 +273,17 @@ in
     # The same predicate over a module that takes more, in the same run: without it, an empty or
     # constant answer would satisfy the cell above.
     #
-    # ★ AND `folds` IS NOT ONE OF THE TWO, WHICH IS THE STRONGER READING. The cascade names this
-    # vocabulary nowhere. A kind's resource fold arrives as a FIELD on the kind, so the algebra
-    # reaches a run as the author's data rather than as an import — the one place the cascade did
-    # import it was a retired accessor's default combine, and a consumer assembling its own splice
-    # chooses the rule itself. So the arm is a module that takes more, and it takes more without
-    # taking THIS.
-    test-the-cascade-module-takes-more = {
-      expr = builtins.attrNames (builtins.functionArgs (import ../../lib/cascade.nix));
+    # ★ THE CASCADE NAMES THIS VOCABULARY NOWHERE: its only formal is the prelude. A kind's resource
+    # fold arrives as a FIELD on the kind, so the algebra reaches a run as the author's data rather
+    # than as an import, and a consumer assembling its own splice chooses the rule itself. The arm
+    # is therefore the minting module, which takes more and does not take THIS.
+    test-the-minting-module-takes-more = {
+      expr = builtins.attrNames (builtins.functionArgs (import ../../lib/mint.nix));
       expected = [
         "graph"
+        "hashIdentity"
         "prelude"
+        "stratify"
       ];
     };
 
