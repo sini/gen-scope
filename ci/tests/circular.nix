@@ -140,12 +140,14 @@ let
       if n >= 3 then bumped else bumped // { "k${toString n}" = 0; }
     );
   };
+  # A raw `get` on a quotient carrier is refused; the representative is read through the named demand.
+  enrichedRep = (enrichResult.getRepresentative "node" "enriched").representative;
 
   # What the quotient does NOT buy, exhibited rather than described: applying the step to the
   # converged answer moves it. The class is the fixed point; the representative is not one, and a
   # consumer that needs the finer stability asks for the finer carrier instead of reading this
   # value as though the carrier had been the raw one.
-  enrichedOnceMore = builtins.mapAttrs (_: v: v + 1) (enrichResult.get "node" "enriched");
+  enrichedOnceMore = builtins.mapAttrs (_: v: v + 1) enrichedRep;
 in
 {
   flake.tests."circular" = {
@@ -205,26 +207,31 @@ in
     };
 
     # ── THE QUOTIENT CARRIER ──
+    # The value half is the class representative the ascent reached; the `_type` half is the
+    # substrate saying what the carrier decided about it (ADR-0020 never-silence, ADR-0008 §3).
     test-control-quotient-carrier-converges-on-the-class = {
-      expr = enrichResult.get "node" "enriched";
+      expr = enrichResult.getRepresentative "node" "enriched";
       expected = {
-        k0 = 3;
-        k1 = 2;
-        k2 = 1;
+        _type = "gen-scope/quotient-representative";
+        representative = {
+          k0 = 3;
+          k1 = 2;
+          k2 = 1;
+        };
       };
     };
 
     # The residual, pinned as measured fact rather than described in a comment: the answer is a
     # fixed point of the DECLARED order and not of the step.
     test-quotient-answer-is-not-a-raw-fixpoint = {
-      expr = enrichedOnceMore == enrichResult.get "node" "enriched";
+      expr = enrichedOnceMore == enrichedRep;
       expected = false;
     };
 
     # …and the class it belongs to IS fixed, which is what was declared and what converged.
     test-control-quotient-class-is-fixed = {
       expr = builtins.attrNames enrichedOnceMore;
-      expected = builtins.attrNames (enrichResult.get "node" "enriched");
+      expected = builtins.attrNames enrichedRep;
     };
   };
 }

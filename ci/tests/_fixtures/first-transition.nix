@@ -93,7 +93,7 @@ in
     m = circular { carrier = num 0 9; } (
       self: _id: _prev:
       let
-        qv = self.get "n" "q";
+        qv = (self.getRepresentative "n" "q").representative;
       in
       if qv == 8 then
         builtins.seq (self.get "n" "m") (if self.get "n" "da" >= 3 then 1 else 3)

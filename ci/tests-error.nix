@@ -2024,6 +2024,68 @@ in
       };
     };
 
+  # ── THE QUOTIENT ACCESSOR OBLIGATION (ADR-0020 never-silence, ADR-0008 §3) ──
+  # The two demand forms refuse by name on the declarations the other one serves: `get` on a
+  # quotient carrier, `getRepresentative` on anything else. Pinned on every channel that carries
+  # them — top level, a step's own accessor, the reuse path, the debug evaluator — because a
+  # `tryEval` boolean cannot tell this refusal from any other throw on the same path: the warm
+  # fixture's recompute arm throws too, and only the text says which one fired. The answers and the
+  # controls are `tests/quotient-accessor.nix`.
+  config.flake.testsError.quotient-accessor-refusals =
+    let
+      inherit (import ./tests/_fixtures/quotient-accessor.nix { inherit genScope; }) r debug warm;
+      rawOnQuotient = id: attrName: {
+        type = "ThrownError";
+        msg = exactly "gen-scope: self.get '${attrName}' on '${id}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step. Read it with `getRepresentative`, which returns it tagged.";
+      };
+    in
+    {
+      test-a-raw-get-on-a-quotient-instance-is-refused-by-name = {
+        expr = r.get "node" "enriched";
+        expectedError = rawOnQuotient "node" "enriched";
+      };
+
+      test-getRepresentative-on-a-non-quotient-instance-is-refused-by-name = {
+        expr = r.getRepresentative "node" "counter";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: getRepresentative 'counter' on 'node' names an attribute whose declaration is not a quotient carrier — its value is not a class representative. Read it with `get`.";
+        };
+      };
+
+      test-a-steps-raw-get-on-a-quotient-instance-is-refused-by-name = {
+        expr = r.get "node" "reader";
+        expectedError = rawOnQuotient "node" "enriched";
+      };
+
+      test-the-warm-paths-raw-get-is-refused-by-name-not-recomputed = {
+        expr = warm.get "node" "enriched";
+        expectedError = rawOnQuotient "node" "enriched";
+      };
+
+      test-evalDebug-raw-get-on-a-quotient-instance-is-refused-by-name = {
+        expr = debug.get "node" "enriched";
+        expectedError = rawOnQuotient "node" "enriched";
+      };
+
+      # The identifier door names the entry the caller used, on both evaluators.
+      test-getRepresentative-names-itself-at-the-identifier-door = {
+        expr = r.getRepresentative { name = "node"; } "enriched";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.self.getRepresentative: got set, expected a node identifier (a string)";
+        };
+      };
+
+      test-evalDebug-getRepresentative-names-itself-at-the-identifier-door = {
+        expr = debug.getRepresentative { name = "node"; } "enriched";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.self.getRepresentative: got set, expected a node identifier (a string)";
+        };
+      };
+    };
+
   # ── THE SAME TWO REFUSALS, EARNED OVER A SPAWNED SUBTREE ──
   # The cells above run the combinator on a bare integer and settle what each message SAYS. These
   # run the same two failures inside the composed grammar — a lattice indexed by nodes that did not

@@ -141,10 +141,12 @@ let
                   (dispatch (cfg // { context = ctx; })).context
                 );
           };
-        }).get
+        }).getRepresentative
           serverName
           "converged-context";
-      nixosActions = (dispatch (cfg // { context = converged; })).actions.config or [ ];
+      # A quotient carrier converges on a CLASS REPRESENTATIVE, so the evaluator serves it through
+      # the named demand, tagged; the raw `get` refuses it by name.
+      nixosActions = (dispatch (cfg // { context = converged.representative; })).actions.config or [ ];
     in
     lib.foldl' lib.recursiveUpdate { } (map (a: builtins.removeAttrs a [ "__action" ]) nixosActions);
 

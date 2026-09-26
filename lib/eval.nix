@@ -125,6 +125,42 @@ let
   # "which attributes are circular" without forcing any value.
   isCircularDecl = v: builtins.isAttrs v && (v.kind or null) == "circular";
 
+  # THE QUOTIENT ACCESSOR OBLIGATION (ADR-0020 never-silence; ADR-0008 §3). What a quotient carrier
+  # converges on is a CLASS REPRESENTATIVE under the declared order, not a fixed point of the step,
+  # and the value leaves the substrate saying so. The regime is decided by the DECLARATION's
+  # `quotient` term (ADR-0034: by constructor, never by inspecting a value), so a user value can
+  # neither forge the tag nor escape it. A malformed carrier reads false here and falls through to
+  # the demand path's `carrierDefect` refusal.
+  isQuotientDecl =
+    v: isCircularDecl v && builtins.isAttrs (v.carrier or null) && (v.carrier.quotient or null) == true;
+
+  # The tag is constructed at the PRODUCER — every quotient convergence leaves through it — so every
+  # channel that reaches the value without passing an accessor (`rootEval`, a child's co-located
+  # `_eval`, `getTraced`, a warm prior) receives it marked, not only `getRepresentative`.
+  #
+  # THE `seq` IS LOAD-BEARING: it forces the ascent at the demand, so the height, antitone and
+  # closure refusals fire inside the caller's `tryEval` exactly where `get` fired them, rather than
+  # escaping later when `.representative` is forced.
+  #
+  # COST: one two-field record per quotient convergence. The `seq` adds no forcing: the ascent was
+  # already forced at the WHNF of the demand. The accessors' test is an O(1) `?` plus this
+  # declaration read.
+  tagRepresentative =
+    v:
+    builtins.seq v {
+      _type = "gen-scope/quotient-representative";
+      representative = v;
+    };
+
+  # The two demand forms are total over declarations: `get` is the raw demand and refuses on a
+  # quotient carrier, `getRepresentative` is the named demand and refuses on anything else.
+  rawOnQuotient =
+    id: attrName:
+    "gen-scope: self.get '${attrName}' on '${id}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step. Read it with `getRepresentative`, which returns it tagged.";
+  repOnNonQuotient =
+    id: attrName:
+    "gen-scope: getRepresentative '${attrName}' on '${id}' names an attribute whose declaration is not a quotient carrier — its value is not a class representative. Read it with `get`.";
+
   # The reason a carrier is not one, or null. Total on any value: each arm establishes what the
   # next one reads. The reason NEVER RENDERS the carrier — an order is a function, and rendering a
   # function is itself an abort no caller can catch, which would answer an uncatchable termination
@@ -925,6 +961,8 @@ let
               nodeId: attrName:
               if prior == null then
                 throw "gen-scope: the decision reuses '${attrName}' on '${nodeId}' but no prior evaluation was supplied"
+              else if isQuotientDecl runAttributes.${attrName} then
+                prior.getRepresentative nodeId attrName
               else
                 prior.get nodeId attrName;
 
@@ -1130,7 +1168,7 @@ let
                   else
                     continue n prev (decl.step acc nodeId prev);
               in
-              go 0 decl.carrier.bottom;
+              tagRepresentative (go 0 decl.carrier.bottom);
 
             # CASE 1 — a demand from outside any round on a quotient = false instance opens one.
             # The universe is the evaluated node set × the circular attribute names that could be
@@ -1705,14 +1743,18 @@ let
             # `allNodes` and `allNodeIds` are projections of this ONE list, so a consumer that
             # wants the node set AND its order pays for a single walk.
             walkEntries = prelude.concatMap self._walkFrom checked.nodeOrder;
-          in
-          {
-            node = id: resolveNode (identifier "self.node" id);
 
+            # `effectiveAttributes` yields one node-independent attribute set, so this test is total
+            # over every attribute an accessor can name.
+            isQuotientAttr =
+              attrName: (runAttributes ? ${attrName}) && isQuotientDecl runAttributes.${attrName};
+
+            # The demand both accessors delegate to, kept off the record: a third published demand
+            # form would stand outside the two-form contract. `who` names the entry the caller used.
             # The refusal sits OUTSIDE the error context, because that context renders the id.
-            get =
-              id: attrName:
-              builtins.seq (identifier "self.get" id) (
+            demand =
+              who: id: attrName:
+              builtins.seq (identifier who id) (
                 builtins.addErrorContext "evaluating '${attrName}' on '${id}'" (
                   if !(runAttributes ? ${attrName}) then
                     throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
@@ -1731,6 +1773,24 @@ let
                       evalAttr id attrName runAttributes.${attrName}
                 )
               );
+          in
+          {
+            node = id: resolveNode (identifier "self.node" id);
+
+            # The two demand forms over one demand. Each refuses by name, BEFORE evaluating
+            # anything, on the declarations the other one serves.
+            get =
+              id: attrName:
+              if isQuotientAttr attrName then
+                builtins.seq (identifier "self.get" id) (throw (rawOnQuotient id attrName))
+              else
+                demand "self.get" id attrName;
+            getRepresentative =
+              id: attrName:
+              if (runAttributes ? ${attrName}) && !(isQuotientAttr attrName) then
+                builtins.seq (identifier "self.getRepresentative" id) (throw (repOnNonQuotient id attrName))
+              else
+                demand "self.getRepresentative" id attrName;
 
             # --- Tier 2: Materialization (forces evaluation, memoized) ---
 
@@ -2069,8 +2129,12 @@ let
               throw "gen-scope: circular attribute on '${id}' declares ${builtins.toJSON declExtras} beyond the declaration's three fields — `circular { carrier = ...; } step` returns exactly { kind, carrier, step }, and the field set is capped: a term beyond it is a return to the design sitting rather than a refinement"
             else if defect != null then
               throw "gen-scope: circular attribute on '${id}' ${defect}"
+            else if decl.carrier.quotient then
+              tagRepresentative (go 0 decl.carrier.bottom)
             else
               go 0 decl.carrier.bottom;
+          isQuotientAttr =
+            attrName: (runAttributes ? ${attrName}) && isQuotientDecl runAttributes.${attrName};
         in
         {
           inherit getTraced;
@@ -2103,7 +2167,20 @@ let
             else
               throw "gen-scope: evalDebug requires parseParent for non-root nodes";
 
-          get = id: attrName: builtins.seq (identifier "self.get" id) (getTraced id attrName).value;
+          # The production accessor's two demand forms, with the same refusals.
+          get =
+            id: attrName:
+            builtins.seq (identifier "self.get" id) (
+              if isQuotientAttr attrName then throw (rawOnQuotient id attrName) else (getTraced id attrName).value
+            );
+          getRepresentative =
+            id: attrName:
+            builtins.seq (identifier "self.getRepresentative" id) (
+              if (runAttributes ? ${attrName}) && !(isQuotientAttr attrName) then
+                throw (repOnNonQuotient id attrName)
+              else
+                (getTraced id attrName).value
+            );
 
           # Internal: the composed child-record read, mirroring the production accessor's
           # `_childRecords` so the query surface answers against either evaluator. Its argument is

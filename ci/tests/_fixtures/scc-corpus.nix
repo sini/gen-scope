@@ -15,9 +15,11 @@
 # exception to the port provenance — not among the forty — and says so where it stands.
 #
 # ENCODING. The model's programs declare every attribute circular on one node `n`; a member read
-# `a.get("n.x")` and a quotient read `a.getq("n.x")` both port to `self.get "n" "x"` — the real
-# evaluator dispatches on the declaration's own `quotient` term, which is the construction the
-# model's split accessor was standing in for. Carriers port term for term; the two-element order
+# `a.get("n.x")` ports to `self.get "n" "x"` and a quotient read `a.getq("n.x")` ports to
+# `(self.getRepresentative "n" "x").representative` — the real evaluator keeps the model's split
+# accessor: `get` refuses a raw demand on a quotient carrier by name, and `getRepresentative` returns
+# the class representative tagged, so the port unwraps it where the model read the bare value. `run`
+# makes the same split on the target's declaration. Carriers port term for term; the two-element order
 # is EXACTLY {0 < 1} (not `<=` on the integers, whose height would be unbounded and make the
 # declared height a lie rather than the truth under test).
 { genScope }:
@@ -57,16 +59,20 @@ let
   };
   run =
     attrs: target:
-    (genScope.eval {
-      inherit scope;
-      attributes = {
-        children = _self: _id: { };
-        imports = _self: _id: [ ];
-      }
-      // attrs;
-    }).get
-      "n"
-      target;
+    let
+      r = genScope.eval {
+        inherit scope;
+        attributes = {
+          children = _self: _id: { };
+          imports = _self: _id: [ ];
+        }
+        // attrs;
+      };
+    in
+    if (attrs.${target}.carrier.quotient or false) == true then
+      (r.getRepresentative "n" target).representative
+    else
+      r.get "n" target;
 
   # The shared driver `n.c`: caps at 4 over a height-4 chain.
   drv = circular { carrier = num 0 4; } (
@@ -84,7 +90,11 @@ let
       c = drv;
       m = circular { carrier = num 0 3; } (
         self: _id: _prev:
-        if self.get "n" "c" <= 2 then (self.get "n" "q") + (self.get "n" "zr") else 2
+        if self.get "n" "c" <= 2 then
+          ((self.getRepresentative "n" "q").representative)
+          + ((self.getRepresentative "n" "zr").representative)
+        else
+          2
       );
       q = circular { carrier = qnum 0 4; } (
         self: _id: _prev:
@@ -119,7 +129,7 @@ let
           );
           u = circular { carrier = num 0 2; } (
             self: _id: _prev:
-            self.get "n" "uq"
+            (self.getRepresentative "n" "uq").representative
           );
         }
     );
@@ -129,11 +139,11 @@ let
     c = drv;
     m = circular { carrier = num 0 4; } (
       self: _id: _prev:
-      self.get "n" "mq"
+      (self.getRepresentative "n" "mq").representative
     );
     m2 = circular { carrier = num 0 4; } (
       self: _id: _prev:
-      if self.get "n" "lq" == 1 then self.get "n" "m" else 3
+      if (self.getRepresentative "n" "lq").representative == 1 then self.get "n" "m" else 3
     );
     lq = circular { carrier = qnum 0 4; } (
       self: _id: _prev:
@@ -162,7 +172,7 @@ let
     c = drv;
     m = circular { carrier = num 0 4; } (
       self: _id: _prev:
-      self.get "n" "q5"
+      (self.getRepresentative "n" "q5").representative
     );
     m2 = circular { carrier = num 0 4; } (
       self: _id: _prev:
@@ -175,7 +185,7 @@ let
     c = drv;
     m = circular { carrier = num 0 4; } (
       self: _id: _prev:
-      self.get "n" "q5"
+      (self.getRepresentative "n" "q5").representative
     );
     m2 = circular { carrier = num 0 4; } (
       self: _id: _prev:
@@ -200,7 +210,7 @@ let
     c = drv;
     m = circular { carrier = num 0 8; } (
       self: _id: _prev:
-      self.get "n" "qa"
+      (self.getRepresentative "n" "qa").representative
     );
     qa = q5decl;
   };
@@ -230,7 +240,7 @@ let
     c = drv;
     w = circular { carrier = subCarrier 4; } (
       self: _id: _prev:
-      self.get "n" "wq"
+      (self.getRepresentative "n" "wq").representative
     );
     m = circular { carrier = num 0 4; } (
       self: _id: _prev:
@@ -279,7 +289,7 @@ let
     c = drv;
     m = circular { carrier = num 0 4; } (
       self: _id: _prev:
-      self.get "n" "q5"
+      (self.getRepresentative "n" "q5").representative
     );
     m2 =
       circular
@@ -302,14 +312,14 @@ let
     c = drv;
     w = circular { carrier = subCarrier 4; } (
       self: _id: _prev:
-      self.get "n" "wq"
+      (self.getRepresentative "n" "wq").representative
     );
     m = circular { carrier = num 0 4; } (
       self: _id: _prev:
       if self.get "n" "c" > 2 then
-        self.get "n" "mq"
+        (self.getRepresentative "n" "mq").representative
       else
-        self.get "n" "mq2" + (if self.get "n" "w" == [ "b" ] then 9 else 0)
+        (self.getRepresentative "n" "mq2").representative + (if self.get "n" "w" == [ "b" ] then 9 else 0)
     );
     wq =
       circular
@@ -417,7 +427,7 @@ let
     );
     x = circular { carrier = num 0 2; } (
       self: _id: _prev:
-      self.get "n" "xq"
+      (self.getRepresentative "n" "xq").representative
     );
   };
 
@@ -433,7 +443,10 @@ let
     );
     m = circular { carrier = num 0 6; } (
       self: _id: _prev:
-      if self.get "n" "c" >= 4 then 2 else (self.get "n" "u") * 10 + self.get "n" "qu"
+      if self.get "n" "c" >= 4 then
+        2
+      else
+        (self.get "n" "u") * 10 + (self.getRepresentative "n" "qu").representative
     );
     qu = circular { carrier = qnum 0 4; } (
       self: _id: _prev:
@@ -453,7 +466,7 @@ let
     z = zRamp;
     m = circular { carrier = two mheight; } (
       self: _id: _prev:
-      self.get "n" "osc"
+      (self.getRepresentative "n" "osc").representative
     );
     osc = circular { carrier = qnum 0 4; } oscStep;
   };
@@ -479,7 +492,7 @@ let
     z = zRamp;
     m = circular { carrier = two 6; } (
       self: _id: _prev:
-      self.get "n" "osc"
+      (self.getRepresentative "n" "osc").representative
     );
     a = circular { carrier = two 6; } (
       self: _id: _prev:
@@ -500,20 +513,22 @@ let
     );
     u = circular { carrier = num 0 1; } (
       self: _id: _prev:
-      self.get "n" "uq"
+      (self.getRepresentative "n" "uq").representative
     );
     m = circular { carrier = num 0 mheight; } h8Step;
     k = circular { carrier = num 0 4; } (
       self: _id: _prev:
-      self.get "n" "q" + (if self.get "n" "u" >= 0 then 0 else 1) + 0 * self.get "n" "m"
+      (self.getRepresentative "n" "q").representative
+      + (if self.get "n" "u" >= 0 then 0 else 1)
+      + 0 * self.get "n" "m"
     );
     q = circular { carrier = qnum 0 4; } (
       self: _id: _prev:
-      self.get "n" "r"
+      (self.getRepresentative "n" "r").representative
     );
     r = circular { carrier = qnum 0 4; } (
       self: _id: _prev:
-      self.get "n" "q"
+      (self.getRepresentative "n" "q").representative
     );
   };
   triple = tripleWith 1;
@@ -536,13 +551,13 @@ let
       self: _id: _prev:
       let
         z = self.get "n" "z";
-        inc = if self.get "n" "osc" == 1 then 1 else 0;
+        inc = if (self.getRepresentative "n" "osc").representative == 1 then 1 else 0;
       in
       if z + inc >= h then h else z + inc
     );
     m = circular { carrier = two 1; } (
       self: _id: _prev:
-      self.get "n" "osc"
+      (self.getRepresentative "n" "osc").representative
     );
     osc = circular { carrier = qnum 0 4; } (
       self: _id: _prev:

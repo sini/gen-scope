@@ -77,11 +77,11 @@ first line of each):
 
 **Evaluators** — `lib/eval.nix`
 
-| Export      | Signature                                                                                                                                                                                    |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `eval`      | `{ roots, attributes, parseParent ? null, prior ? null, decision ? coldDecision, provenance ? [] } -> accessorRecord`                                                                        |
-| `evalDebug` | `{ roots, attributes, parseParent ? null } -> { node; get; getTraced; trace; allNodes; allNodeIds; }` — shadow-stack cycle tracing; defeats memoization. Both materializers are named throws |
-| `evalWarm`  | `{ roots, attributes, parseParent ? null, prior, decision, provenance ? [] } -> accessorRecord` — thin wrapper over `eval`, same code path; `prior` and `decision` MANDATORY                 |
+| Export      | Signature                                                                                                                                                                                                       |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eval`      | `{ roots, attributes, parseParent ? null, prior ? null, decision ? coldDecision, provenance ? [] } -> accessorRecord`                                                                                           |
+| `evalDebug` | `{ roots, attributes, parseParent ? null } -> { node; get; getRepresentative; getTraced; trace; allNodes; allNodeIds; }` — shadow-stack cycle tracing; defeats memoization. Both materializers are named throws |
+| `evalWarm`  | `{ roots, attributes, parseParent ? null, prior, decision, provenance ? [] } -> accessorRecord` — thin wrapper over `eval`, same code path; `prior` and `decision` MANDATORY                                    |
 
 **The plane interface** — `lib/structural.nix`, `lib/interface.nix`
 

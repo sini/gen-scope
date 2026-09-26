@@ -189,7 +189,7 @@ let
       m = circular { carrier = num 0 9; } (
         self: _id: _prev:
         let
-          qv = self.get "n" "q";
+          qv = (self.getRepresentative "n" "q").representative;
         in
         if qv == 8 then
           builtins.seq (self.get "n" "m") descVal
@@ -257,7 +257,7 @@ let
     self: _id: _prev:
     let
       c = self.get "n" "c";
-      q = self.get "n" "q";
+      q = (self.getRepresentative "n" "q").representative;
     in
     if c == 0 && q == 1 then
       self.get "n" "z"
@@ -271,7 +271,7 @@ let
     self: _id: _prev:
     let
       c = self.get "n" "c";
-      q = self.get "n" "q";
+      q = (self.getRepresentative "n" "q").representative;
     in
     if c == 0 && q == 1 then
       5

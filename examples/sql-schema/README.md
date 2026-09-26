@@ -135,7 +135,7 @@ genDispatch.mkRule {
 
 ### Convergence Loop
 
-Pass 1 enriches web servers with `has-nginx = true`. Pass 2 fires only on enriched context, adding nginx monitoring. `gen-dispatch.dispatch` is a pure step, so `gen-scope.circular` iterates it by threading the plain domain state (the accessor context): each pass is one one-shot dispatch whose output context is the next iterate, converging by Kleene ascent when the server's data row stabilizes. The NixOS actions are then read off the converged context by one post-convergence dispatch — a function of the fixpoint, not the iteration path (recompute-at-fixpoint = confluence).
+Pass 1 enriches web servers with `has-nginx = true`. Pass 2 fires only on enriched context, adding nginx monitoring. `gen-dispatch.dispatch` is a pure step, so `gen-scope.circular` iterates it by threading the plain domain state (the accessor context): each pass is one one-shot dispatch whose output context is the next iterate, converging by Kleene ascent when the server's data row stabilizes. The carrier is a quotient (its order reads only the data row), so the evaluator serves the converged context through `getRepresentative`, tagged as a class representative, and the NixOS actions are read off its `.representative` by one post-convergence dispatch — a function of the fixpoint, not the iteration path (recompute-at-fixpoint = confluence).
 
 ```nix
 # Pass 1: enrichment

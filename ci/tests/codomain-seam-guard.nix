@@ -199,7 +199,7 @@ in
     };
 
     test-O15-the-guard-reaches-a-nested-ascents-step = {
-      expr = (builtins.tryEval (nestedAscentCtx.eval.get "a" "peer-reach")).success;
+      expr = (builtins.tryEval (nestedAscentCtx.eval.getRepresentative "a" "peer-reach")).success;
       expected = false;
     };
 
@@ -212,7 +212,7 @@ in
     };
 
     test-control-a-declared-acquisition-converges-in-a-nested-ascent = {
-      expr = nestedAscentDeclaredCtx.eval.get "a" "peer-reach";
+      expr = (nestedAscentDeclaredCtx.eval.getRepresentative "a" "peer-reach").representative;
       expected = 2;
     };
 
