@@ -118,7 +118,7 @@ let
       builtins.all (s: matchesOne node s ctx) sel
     else if builtins.isString sel then
       matchesOne node (css.parseCssSel sel) ctx
-    else if sel ? __sel then
+    else if sel ? selTag then
       matchesSel node sel ctx
     else if sel ? nodeId || (sel ? name && sel ? needs) then
       builtins.any (t: t.name == sel.name) node.is
@@ -163,7 +163,7 @@ let
           && builtins.any (a: matchesOne a sel.ancestorSel (mkCtx a ctx.allNodes)) ctx.ancestors;
       };
     in
-    handlers.${sel.__sel} or false;
+    handlers.${sel.selTag} or false;
 
   callWithArgs =
     fn: node: ctx:
@@ -175,43 +175,43 @@ let
 
   constructors = {
     star = {
-      __sel = "star";
+      selTag = "star";
     };
     attrs = a: {
-      __sel = "attrs";
+      selTag = "attrs";
       attrs = a;
     };
     or = ss: {
-      __sel = "or";
+      selTag = "or";
       selectors = ss;
     };
     not = s: {
-      __sel = "not";
+      selTag = "not";
       selector = s;
     };
     has = s: {
-      __sel = "has";
+      selTag = "has";
       selector = s;
     };
     within = s: {
-      __sel = "within";
+      selTag = "within";
       selector = s;
     };
     when = f: {
-      __sel = "when";
+      selTag = "when";
       fn = f;
     };
     class = n: {
-      __sel = "class";
+      selTag = "class";
       name = n;
     };
     child = p: c: {
-      __sel = "child";
+      selTag = "child";
       parentSel = p;
       childSel = c;
     };
     descendant = a: d: {
-      __sel = "descendant";
+      selTag = "descendant";
       ancestorSel = a;
       descendantSel = d;
     };

@@ -216,27 +216,27 @@
       test-star = {
         expr = parseCssSel "*";
         expected = {
-          __sel = "star";
+          selTag = "star";
         };
       };
       test-id = {
         expr = parseCssSel "#web-1";
         expected = {
-          __sel = "id";
+          selTag = "id";
           name = "web-1";
         };
       };
       test-class = {
         expr = parseCssSel ".nixos";
         expected = {
-          __sel = "class";
+          selTag = "class";
           name = "nixos";
         };
       };
       test-attr-eq = {
         expr = parseCssSel "[env=prod]";
         expected = {
-          __sel = "attr";
+          selTag = "attr";
           key = "env";
           val = "prod";
         };
@@ -244,14 +244,14 @@
       test-attr-exists = {
         expr = parseCssSel "[system]";
         expected = {
-          __sel = "attrExists";
+          selTag = "attrExists";
           key = "system";
         };
       };
       test-name = {
         expr = parseCssSel "server";
         expected = {
-          __sel = "name";
+          selTag = "name";
           name = "server";
         };
       };
@@ -259,11 +259,11 @@
         expr = parseCssSel "#web-1[env=prod]";
         expected = [
           {
-            __sel = "id";
+            selTag = "id";
             name = "web-1";
           }
           {
-            __sel = "attr";
+            selTag = "attr";
             key = "env";
             val = "prod";
           }
@@ -272,14 +272,14 @@
       test-or = {
         expr = parseCssSel "server,web";
         expected = {
-          __sel = "or";
+          selTag = "or";
           selectors = [
             {
-              __sel = "name";
+              selTag = "name";
               name = "server";
             }
             {
-              __sel = "name";
+              selTag = "name";
               name = "web";
             }
           ];
@@ -288,13 +288,13 @@
       test-child-combinator = {
         expr = parseCssSel "prod > web";
         expected = {
-          __sel = "child";
+          selTag = "child";
           parentSel = {
-            __sel = "name";
+            selTag = "name";
             name = "prod";
           };
           childSel = {
-            __sel = "name";
+            selTag = "name";
             name = "web";
           };
         };
@@ -302,13 +302,13 @@
       test-descendant-combinator = {
         expr = parseCssSel "prod + web";
         expected = {
-          __sel = "descendant";
+          selTag = "descendant";
           ancestorSel = {
-            __sel = "name";
+            selTag = "name";
             name = "prod";
           };
           descendantSel = {
-            __sel = "name";
+            selTag = "name";
             name = "web";
           };
         };
@@ -316,9 +316,9 @@
       test-pseudo-not = {
         expr = parseCssSel ":not(server)";
         expected = {
-          __sel = "not";
+          selTag = "not";
           selector = {
-            __sel = "name";
+            selTag = "name";
             name = "server";
           };
         };
@@ -326,9 +326,9 @@
       test-pseudo-has = {
         expr = parseCssSel ":has(admin)";
         expected = {
-          __sel = "has";
+          selTag = "has";
           selector = {
-            __sel = "name";
+            selTag = "name";
             name = "admin";
           };
         };

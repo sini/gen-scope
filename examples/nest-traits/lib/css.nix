@@ -22,14 +22,14 @@ let
           type: m:
           [
             {
-              __sel = type;
+              selTag = type;
               name = at m 0;
             }
           ]
           ++ parseCompound (at m 1);
       in
       if c == "*" then
-        [ { __sel = "star"; } ] ++ parseCompound rest
+        [ { selTag = "star"; } ] ++ parseCompound rest
       else if c == "#" then
         parseTok "id" (builtins.match "#([a-zA-Z0-9_/-]+)(.*)" str)
       else if c == "." then
@@ -45,7 +45,7 @@ let
           if len eqParts > 1 then
             [
               {
-                __sel = "attr";
+                selTag = "attr";
                 key = at eqParts 0;
                 val = at eqParts 1;
               }
@@ -53,7 +53,7 @@ let
           else
             [
               {
-                __sel = "attrExists";
+                selTag = "attrExists";
                 key = inner;
               }
             ]
@@ -65,7 +65,7 @@ let
         in
         [
           {
-            __sel = at m 0;
+            selTag = at m 0;
             selector = parseCssSel (at m 1);
           }
         ]
@@ -77,7 +77,7 @@ let
         if m != null then
           [
             {
-              __sel = "name";
+              selTag = "name";
               name = at m 0;
             }
           ]
@@ -91,7 +91,7 @@ let
       buildChain =
         type: parentKey: childKey: parts:
         builtins.foldl' (acc: p: {
-          __sel = type;
+          selTag = type;
           ${parentKey} = acc;
           ${childKey} = parseCssSel (trim p);
         }) (parseCssSel (trim (builtins.head parts))) (builtins.tail parts);
@@ -101,7 +101,7 @@ let
           tokens = parseCompound str;
         in
         if len tokens == 0 then
-          { __sel = "star"; }
+          { selTag = "star"; }
         else if len tokens == 1 then
           builtins.head tokens
         else
@@ -113,7 +113,7 @@ let
     in
     if len orParts > 1 then
       {
-        __sel = "or";
+        selTag = "or";
         selectors = map (p: parseCssSel (trim p)) orParts;
       }
     else if len childParts > 1 then

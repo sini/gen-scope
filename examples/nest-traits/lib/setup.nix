@@ -5,7 +5,7 @@
   selectorsLib,
 }:
 let
-  isSelector = val: builtins.isAttrs val && val ? __sel;
+  isSelector = val: builtins.isAttrs val && val ? selTag;
 
   # Known option fields that are never sub-traits. Skipping these avoids
   # forcing needs/neededBy during selector resolution (which would recurse).

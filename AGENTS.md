@@ -67,6 +67,14 @@ Entry: `inputs.gen-scope.lib` (flake). Root `default.nix` is a **function** — 
 
 Vertices are collected from every edge graph plus the `decls` and `types` key sets, then deduplicated. `parentGraph` becomes the `P` label and `importGraph` the `I` label; all edge targets are written into `decls.__edges` as `{ <label> = [id]; }`. Those two labels are RESERVED — an `edgeGraphs` carrying either is refused by name at the entry (see traps).
 
+**`__` keys crossing the boundary** (R12 stated contracts; the census that reads these lines takes the
+first line of each):
+
+- `__edges` — writer `buildRoots` (`lib/build-nodes.nix`), reader the caller's attribute definitions that interpret edges; read by gen-memo (`lib/warm.nix` `edgeKeys`):
+  `{ <label> = [id]; }`, every edge target per label, injected into each node's caller-owned `decls`
+  under `__` so no caller decl can collide with it. gen-memo reads it off plain data, declaring no
+  input on this library, to tell a topology change from a value change.
+
 **Evaluators** — `lib/eval.nix`
 
 | Export      | Signature                                                                                                                                                                                    |
