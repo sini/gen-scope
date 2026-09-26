@@ -5,11 +5,11 @@
         "gen-prelude": "gen-prelude"
       },
       "locked": {
-        "lastModified": 1790419178,
-        "narHash": "sha256-QVN2b+Ml0TpURdIQWxnegheyfiGdum2j4JpsnTI5EsU=",
+        "lastModified": 1790420614,
+        "narHash": "sha256-2CpZbxEJzoxe5KhrCvfVya6VyJQI7rSdADhXBBEeAxU=",
         "owner": "sini",
         "repo": "gen-graph",
-        "rev": "3fcf192a9d7e48118f924a4ba74a3d54f536c268",
+        "rev": "cbdfdf9a524a4d20754fcda70786d4c53f64cf3b",
         "type": "github"
       },
       "original": {
