@@ -32,11 +32,11 @@
     },
     "gen-algebra_3": {
       "locked": {
-        "lastModified": 1782521734,
-        "narHash": "sha256-BU6HndNta7WDB51AKjBFYNOxFhp5rJPOumjMkQVKzSM=",
+        "lastModified": 1790444161,
+        "narHash": "sha256-3a1vOViOzYNW4kswfLly2/iPkPi13tTtmAHaZfmQGVY=",
         "owner": "sini",
         "repo": "gen-algebra",
-        "rev": "aaffd3f073715bd4ac47d3f78123a9882a328bfa",
+        "rev": "e1b722dd7edd260951ead78b8da0331ffebe72f5",
         "type": "github"
       },
       "original": {
@@ -100,7 +100,64 @@
     },
     "gen-graph_2": {
       "inputs": {
+        "gen-prelude": [
+          "gen-schema",
+          "gen-prelude"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790444192,
+        "narHash": "sha256-Dj4Nfp9RfwtTSzwC/g9CAeTd3BfpConcenncN3WTQDI=",
+        "owner": "sini",
+        "repo": "gen-graph",
+        "rev": "903373538dd42b511c227ff2f38cc515d7bccf64",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-graph",
+        "type": "github"
+      }
+    },
+    "gen-graph_3": {
+      "inputs": {
         "gen-prelude": "gen-prelude_9"
+      },
+      "locked": {
+        "lastModified": 1790444192,
+        "narHash": "sha256-Dj4Nfp9RfwtTSzwC/g9CAeTd3BfpConcenncN3WTQDI=",
+        "owner": "sini",
+        "repo": "gen-graph",
+        "rev": "903373538dd42b511c227ff2f38cc515d7bccf64",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-graph",
+        "type": "github"
+      }
+    },
+    "gen-graph_4": {
+      "inputs": {
+        "gen-prelude": "gen-prelude_12"
+      },
+      "locked": {
+        "lastModified": 1790444192,
+        "narHash": "sha256-Dj4Nfp9RfwtTSzwC/g9CAeTd3BfpConcenncN3WTQDI=",
+        "owner": "sini",
+        "repo": "gen-graph",
+        "rev": "903373538dd42b511c227ff2f38cc515d7bccf64",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-graph",
+        "type": "github"
+      }
+    },
+    "gen-graph_5": {
+      "inputs": {
+        "gen-prelude": "gen-prelude_16"
       },
       "locked": {
         "lastModified": 1788569862,
@@ -118,6 +175,51 @@
     },
     "gen-identity": {
       "locked": {
+        "lastModified": 1790443694,
+        "narHash": "sha256-bMRTyNF0vI4CAqRXSixzS3pmE/Uyk8TwpwH1OvpAnLw=",
+        "owner": "sini",
+        "repo": "gen-identity",
+        "rev": "3d933ab2a183ad3a6a4db37738e232c01201618c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-identity",
+        "type": "github"
+      }
+    },
+    "gen-identity_2": {
+      "locked": {
+        "lastModified": 1790443694,
+        "narHash": "sha256-bMRTyNF0vI4CAqRXSixzS3pmE/Uyk8TwpwH1OvpAnLw=",
+        "owner": "sini",
+        "repo": "gen-identity",
+        "rev": "3d933ab2a183ad3a6a4db37738e232c01201618c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-identity",
+        "type": "github"
+      }
+    },
+    "gen-identity_3": {
+      "locked": {
+        "lastModified": 1790443694,
+        "narHash": "sha256-bMRTyNF0vI4CAqRXSixzS3pmE/Uyk8TwpwH1OvpAnLw=",
+        "owner": "sini",
+        "repo": "gen-identity",
+        "rev": "3d933ab2a183ad3a6a4db37738e232c01201618c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-identity",
+        "type": "github"
+      }
+    },
+    "gen-identity_4": {
+      "locked": {
         "lastModified": 1787248094,
         "narHash": "sha256-FfBRtY/lnemVU5WZEXRsSwjEjs3PqYCSQU7LKL6qeak=",
         "owner": "sini",
@@ -128,6 +230,25 @@
       "original": {
         "owner": "sini",
         "repo": "gen-identity",
+        "type": "github"
+      }
+    },
+    "gen-memo": {
+      "inputs": {
+        "gen-graph": "gen-graph_3",
+        "gen-prelude": "gen-prelude_10"
+      },
+      "locked": {
+        "lastModified": 1790444364,
+        "narHash": "sha256-mQWYShS+RlNC8fW6XBSfGC2RqaTcs2uIccWy12Wk+Cs=",
+        "owner": "sini",
+        "repo": "gen-memo",
+        "rev": "0af56a168cc4b304478de6b1d3f4af220d7d6a89",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-memo",
         "type": "github"
       }
     },
@@ -171,8 +292,29 @@
     },
     "gen-merge_3": {
       "inputs": {
+        "gen-memo": "gen-memo",
         "gen-prelude": "gen-prelude_11",
+        "gen-scope": "gen-scope",
         "gen-types": "gen-types_4"
+      },
+      "locked": {
+        "lastModified": 1790444477,
+        "narHash": "sha256-Qhqo+3DgfkqSFaxbi8F+a8YWEcun3BFxm7z2QZnagLs=",
+        "owner": "sini",
+        "repo": "gen-merge",
+        "rev": "0fb180ac3db41bb071bab9cef5b0101a56fe4e66",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-merge",
+        "type": "github"
+      }
+    },
+    "gen-merge_4": {
+      "inputs": {
+        "gen-prelude": "gen-prelude_18",
+        "gen-types": "gen-types_5"
       },
       "locked": {
         "lastModified": 1785114420,
@@ -205,6 +347,111 @@
     },
     "gen-prelude_10": {
       "locked": {
+        "lastModified": 1790441253,
+        "narHash": "sha256-sp1ZcfJNMEZ6boslAdeCyQJbFgwWaHxC4b8gryJkaXA=",
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "rev": "ea852a6a929bb648758b7b2e26c88777b286d338",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "type": "github"
+      }
+    },
+    "gen-prelude_11": {
+      "locked": {
+        "lastModified": 1790441253,
+        "narHash": "sha256-sp1ZcfJNMEZ6boslAdeCyQJbFgwWaHxC4b8gryJkaXA=",
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "rev": "ea852a6a929bb648758b7b2e26c88777b286d338",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "type": "github"
+      }
+    },
+    "gen-prelude_12": {
+      "locked": {
+        "lastModified": 1790441253,
+        "narHash": "sha256-sp1ZcfJNMEZ6boslAdeCyQJbFgwWaHxC4b8gryJkaXA=",
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "rev": "ea852a6a929bb648758b7b2e26c88777b286d338",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "type": "github"
+      }
+    },
+    "gen-prelude_13": {
+      "locked": {
+        "lastModified": 1790441253,
+        "narHash": "sha256-sp1ZcfJNMEZ6boslAdeCyQJbFgwWaHxC4b8gryJkaXA=",
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "rev": "ea852a6a929bb648758b7b2e26c88777b286d338",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "type": "github"
+      }
+    },
+    "gen-prelude_14": {
+      "locked": {
+        "lastModified": 1790441253,
+        "narHash": "sha256-sp1ZcfJNMEZ6boslAdeCyQJbFgwWaHxC4b8gryJkaXA=",
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "rev": "ea852a6a929bb648758b7b2e26c88777b286d338",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "type": "github"
+      }
+    },
+    "gen-prelude_15": {
+      "locked": {
+        "lastModified": 1790441253,
+        "narHash": "sha256-sp1ZcfJNMEZ6boslAdeCyQJbFgwWaHxC4b8gryJkaXA=",
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "rev": "ea852a6a929bb648758b7b2e26c88777b286d338",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "type": "github"
+      }
+    },
+    "gen-prelude_16": {
+      "locked": {
+        "lastModified": 1786595333,
+        "narHash": "sha256-9loi/kuvayA/3jM9oiCV9amCIksxO1SivXEhWnKLBLg=",
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "rev": "57881cb5236bb3fd6be81a728e3274e4e60f754c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "type": "github"
+      }
+    },
+    "gen-prelude_17": {
+      "locked": {
         "lastModified": 1786239838,
         "narHash": "sha256-Z+fLq4FsOaBNyrtfEwhwwOmihSFnHe+Jf47VNsW9lZQ=",
         "owner": "sini",
@@ -218,7 +465,7 @@
         "type": "github"
       }
     },
-    "gen-prelude_11": {
+    "gen-prelude_18": {
       "locked": {
         "lastModified": 1783016618,
         "narHash": "sha256-J08Ao7Gr5M3cHwHJ1jGeKXjKK2AGol5PuWid8VhqMT4=",
@@ -233,22 +480,7 @@
         "type": "github"
       }
     },
-    "gen-prelude_12": {
-      "locked": {
-        "lastModified": 1783016618,
-        "narHash": "sha256-J08Ao7Gr5M3cHwHJ1jGeKXjKK2AGol5PuWid8VhqMT4=",
-        "owner": "sini",
-        "repo": "gen-prelude",
-        "rev": "62c2500777dc6854b3777d47303d0858ce0f1bb1",
-        "type": "github"
-      },
-      "original": {
-        "owner": "sini",
-        "repo": "gen-prelude",
-        "type": "github"
-      }
-    },
-    "gen-prelude_13": {
+    "gen-prelude_19": {
       "locked": {
         "lastModified": 1783016618,
         "narHash": "sha256-J08Ao7Gr5M3cHwHJ1jGeKXjKK2AGol5PuWid8VhqMT4=",
@@ -264,6 +496,21 @@
       }
     },
     "gen-prelude_2": {
+      "locked": {
+        "lastModified": 1783016618,
+        "narHash": "sha256-J08Ao7Gr5M3cHwHJ1jGeKXjKK2AGol5PuWid8VhqMT4=",
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "rev": "62c2500777dc6854b3777d47303d0858ce0f1bb1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-prelude",
+        "type": "github"
+      }
+    },
+    "gen-prelude_20": {
       "locked": {
         "lastModified": 1783016618,
         "narHash": "sha256-J08Ao7Gr5M3cHwHJ1jGeKXjKK2AGol5PuWid8VhqMT4=",
@@ -370,11 +617,11 @@
     },
     "gen-prelude_9": {
       "locked": {
-        "lastModified": 1786595333,
-        "narHash": "sha256-9loi/kuvayA/3jM9oiCV9amCIksxO1SivXEhWnKLBLg=",
+        "lastModified": 1790441253,
+        "narHash": "sha256-sp1ZcfJNMEZ6boslAdeCyQJbFgwWaHxC4b8gryJkaXA=",
         "owner": "sini",
         "repo": "gen-prelude",
-        "rev": "57881cb5236bb3fd6be81a728e3274e4e60f754c",
+        "rev": "ea852a6a929bb648758b7b2e26c88777b286d338",
         "type": "github"
       },
       "original": {
@@ -407,14 +654,17 @@
     "gen-schema_2": {
       "inputs": {
         "gen-algebra": "gen-algebra_3",
-        "nixpkgs": "nixpkgs"
+        "gen-graph": "gen-graph_2",
+        "gen-identity": "gen-identity",
+        "gen-merge": "gen-merge_3",
+        "gen-prelude": "gen-prelude_15"
       },
       "locked": {
-        "lastModified": 1782932835,
-        "narHash": "sha256-dAWfr0QloYq3R7j+oK0Lby+RgpDe54qyagszqLNBjik=",
+        "lastModified": 1790447706,
+        "narHash": "sha256-KIWYk8R4fj3yEQpmQ7M/2QekMQJ3KyPXtJ7VV5zrp7A=",
         "owner": "sini",
         "repo": "gen-schema",
-        "rev": "d59ee0e141533148c7a3ad7037c873317f7c612a",
+        "rev": "d832336d1998ad790805ff6df05074fb81e06df3",
         "type": "github"
       },
       "original": {
@@ -426,12 +676,12 @@
     "gen-schema_3": {
       "inputs": {
         "gen-algebra": "gen-algebra_4",
-        "gen-merge": "gen-merge_3",
+        "gen-merge": "gen-merge_4",
         "gen-prelude": [
           "gen-scope",
           "gen-prelude"
         ],
-        "gen-types": "gen-types_5"
+        "gen-types": "gen-types_6"
       },
       "locked": {
         "lastModified": 1786568225,
@@ -449,9 +699,29 @@
     },
     "gen-scope": {
       "inputs": {
-        "gen-graph": "gen-graph_2",
-        "gen-identity": "gen-identity",
-        "gen-prelude": "gen-prelude_10",
+        "gen-graph": "gen-graph_4",
+        "gen-identity": "gen-identity_2",
+        "gen-prelude": "gen-prelude_13"
+      },
+      "locked": {
+        "lastModified": 1790444290,
+        "narHash": "sha256-One8sm8ggpdYFclA9Izzp8NnylUp3WQ13iATB3SCOaA=",
+        "owner": "sini",
+        "repo": "gen-scope",
+        "rev": "01606b8eec09a4695ad1c4b8e80086e8945f6b94",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-scope",
+        "type": "github"
+      }
+    },
+    "gen-scope_2": {
+      "inputs": {
+        "gen-graph": "gen-graph_5",
+        "gen-identity": "gen-identity_4",
+        "gen-prelude": "gen-prelude_17",
         "gen-schema": "gen-schema_3"
       },
       "locked": {
@@ -524,7 +794,26 @@
     },
     "gen-types_4": {
       "inputs": {
-        "gen-prelude": "gen-prelude_12"
+        "gen-identity": "gen-identity_3",
+        "gen-prelude": "gen-prelude_14"
+      },
+      "locked": {
+        "lastModified": 1790444224,
+        "narHash": "sha256-sFH1vJcccJomcEBS/ap7nfzMMegK1BuVSYp2Gb6RVdE=",
+        "owner": "sini",
+        "repo": "gen-types",
+        "rev": "13a6539c021614afe253ca25755840bdacac9a0b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-types",
+        "type": "github"
+      }
+    },
+    "gen-types_5": {
+      "inputs": {
+        "gen-prelude": "gen-prelude_19"
       },
       "locked": {
         "lastModified": 1783025858,
@@ -540,9 +829,9 @@
         "type": "github"
       }
     },
-    "gen-types_5": {
+    "gen-types_6": {
       "inputs": {
-        "gen-prelude": "gen-prelude_13"
+        "gen-prelude": "gen-prelude_20"
       },
       "locked": {
         "lastModified": 1783025858,
@@ -559,22 +848,6 @@
       }
     },
     "nixpkgs": {
-      "locked": {
-        "lastModified": 1778869304,
-        "narHash": "sha256-30sZNZoA1cqF5JNO9fVX+wgiQYjB7HJqqJ4ztCDeBZE=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "d233902339c02a9c334e7e593de68855ad26c4cb",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_2": {
       "locked": {
         "lastModified": 1779508470,
         "narHash": "sha256-Ap9KJX+5xHIn3bPIpfNgT6MEXdAECECwo4/rmlQD74M=",
@@ -596,8 +869,8 @@
         "gen-aspects": "gen-aspects",
         "gen-graph": "gen-graph",
         "gen-schema": "gen-schema_2",
-        "gen-scope": "gen-scope",
-        "nixpkgs": "nixpkgs_2"
+        "gen-scope": "gen-scope_2",
+        "nixpkgs": "nixpkgs"
       }
     }
   },
