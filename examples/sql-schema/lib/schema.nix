@@ -9,7 +9,7 @@ let
     mkSchemaOption
     mkInstanceRegistry
     mkFieldValidator
-    ref
+    declarationOf
     setOf
     ;
 
@@ -196,21 +196,21 @@ let
             config.schema.network = {
               parent = "datacenter";
               options.cidr = lib.mkOption { type = lib.types.str; };
-              options.datacenter = lib.mkOption { type = ref "datacenter"; };
+              options.datacenter = lib.mkOption { type = declarationOf "datacenter"; };
             };
 
             config.schema.subnet = {
               parent = "network";
               options.cidr = lib.mkOption { type = lib.types.str; };
               options.gateway = lib.mkOption { type = lib.types.str; };
-              options.network = lib.mkOption { type = ref "network"; };
+              options.network = lib.mkOption { type = declarationOf "network"; };
             };
 
             config.schema.vlan = {
               parent = "subnet";
               options.id = lib.mkOption { type = lib.types.int; };
               options.vlan-name = lib.mkOption { type = lib.types.str; };
-              options.subnet = lib.mkOption { type = ref "subnet"; };
+              options.subnet = lib.mkOption { type = declarationOf "subnet"; };
             };
 
             # Compute
@@ -223,11 +223,11 @@ let
                 type = lib.types.listOf lib.types.str;
                 default = [ ];
               };
-              options.datacenter = lib.mkOption { type = ref "datacenter"; };
-              options.environment = lib.mkOption { type = ref "environment"; };
-              options.subnet = lib.mkOption { type = ref "subnet"; };
+              options.datacenter = lib.mkOption { type = declarationOf "datacenter"; };
+              options.environment = lib.mkOption { type = declarationOf "environment"; };
+              options.subnet = lib.mkOption { type = declarationOf "subnet"; };
               options.replaces = lib.mkOption {
-                type = lib.types.nullOr (ref "server");
+                type = lib.types.nullOr (declarationOf "server");
                 default = null;
               };
               validators = [ validators.server-ram-proportional ];
@@ -238,16 +238,16 @@ let
               options.mac = lib.mkOption { type = lib.types.str; };
               options.ip = lib.mkOption { type = lib.types.str; };
               options.primary_ = lib.mkOption { type = lib.types.bool; };
-              options.server = lib.mkOption { type = ref "server"; };
-              options.vlan = lib.mkOption { type = ref "vlan"; };
+              options.server = lib.mkOption { type = declarationOf "server"; };
+              options.vlan = lib.mkOption { type = declarationOf "vlan"; };
             };
 
             # Services
             config.schema.service = {
               options.protocol = lib.mkOption { type = lib.types.str; };
               options.healthcheck = lib.mkOption { type = lib.types.str; };
-              options.server = lib.mkOption { type = ref "server"; };
-              options.environment = lib.mkOption { type = ref "environment"; };
+              options.server = lib.mkOption { type = declarationOf "server"; };
+              options.environment = lib.mkOption { type = declarationOf "environment"; };
             };
 
             config.schema.port = {
@@ -255,12 +255,12 @@ let
               options.number = lib.mkOption { type = lib.types.int; };
               options.protocol = lib.mkOption { type = lib.types.str; };
               options.expose = lib.mkOption { type = lib.types.bool; };
-              options.service = lib.mkOption { type = ref "service"; };
+              options.service = lib.mkOption { type = declarationOf "service"; };
             };
 
             config.schema.service-dependency = {
-              options.upstream = lib.mkOption { type = ref "service"; };
-              options.downstream = lib.mkOption { type = ref "service"; };
+              options.upstream = lib.mkOption { type = declarationOf "service"; };
+              options.downstream = lib.mkOption { type = declarationOf "service"; };
               options.required = lib.mkOption { type = lib.types.bool; };
               options.protocol = lib.mkOption { type = lib.types.str; };
               validators = [ validators.no-self-dependency ];
@@ -270,7 +270,7 @@ let
             config.schema.domain = {
               options.tld = lib.mkOption { type = lib.types.bool; };
               options.wildcard = lib.mkOption { type = lib.types.bool; };
-              options.environment = lib.mkOption { type = ref "environment"; };
+              options.environment = lib.mkOption { type = declarationOf "environment"; };
             };
 
             config.schema.dns-record = {
@@ -278,24 +278,24 @@ let
               options.type = lib.mkOption { type = lib.types.str; };
               options.ttl = lib.mkOption { type = lib.types.int; };
               options.server = lib.mkOption {
-                type = lib.types.nullOr (ref "server");
+                type = lib.types.nullOr (declarationOf "server");
                 default = null;
               };
               options.loadbalancer = lib.mkOption {
-                type = lib.types.nullOr (ref "loadbalancer");
+                type = lib.types.nullOr (declarationOf "loadbalancer");
                 default = null;
               };
-              options.domain = lib.mkOption { type = ref "domain"; };
+              options.domain = lib.mkOption { type = declarationOf "domain"; };
               validators = [ validators.dns-record-has-target ];
             };
 
             # Load balancing
             config.schema.loadbalancer = {
               options.algorithm = lib.mkOption { type = lib.types.str; };
-              options.datacenter = lib.mkOption { type = ref "datacenter"; };
-              options.environment = lib.mkOption { type = ref "environment"; };
+              options.datacenter = lib.mkOption { type = declarationOf "datacenter"; };
+              options.environment = lib.mkOption { type = declarationOf "environment"; };
               options.failover = lib.mkOption {
-                type = lib.types.nullOr (ref "loadbalancer");
+                type = lib.types.nullOr (declarationOf "loadbalancer");
                 default = null;
               };
             };
@@ -304,20 +304,20 @@ let
               parent = "loadbalancer";
               options.weight = lib.mkOption { type = lib.types.int; };
               options.maxconn = lib.mkOption { type = lib.types.int; };
-              options.service = lib.mkOption { type = ref "service"; };
-              options.loadbalancer = lib.mkOption { type = ref "loadbalancer"; };
+              options.service = lib.mkOption { type = declarationOf "service"; };
+              options.loadbalancer = lib.mkOption { type = declarationOf "loadbalancer"; };
             };
 
             # Firewall
             config.schema.firewall-rule = {
-              options.src-subnet = lib.mkOption { type = ref "subnet"; };
-              options.dst-subnet = lib.mkOption { type = ref "subnet"; };
+              options.src-subnet = lib.mkOption { type = declarationOf "subnet"; };
+              options.dst-subnet = lib.mkOption { type = declarationOf "subnet"; };
               options.src-server = lib.mkOption {
-                type = lib.types.nullOr (ref "server");
+                type = lib.types.nullOr (declarationOf "server");
                 default = null;
               };
               options.dst-server = lib.mkOption {
-                type = lib.types.nullOr (ref "server");
+                type = lib.types.nullOr (declarationOf "server");
                 default = null;
               };
               options.protocol = lib.mkOption { type = lib.types.str; };
@@ -332,11 +332,11 @@ let
               options.issuer = lib.mkOption { type = lib.types.str; };
               options.expires-days = lib.mkOption { type = lib.types.int; };
               options.server = lib.mkOption {
-                type = lib.types.nullOr (ref "server");
+                type = lib.types.nullOr (declarationOf "server");
                 default = null;
               };
               options.loadbalancer = lib.mkOption {
-                type = lib.types.nullOr (ref "loadbalancer");
+                type = lib.types.nullOr (declarationOf "loadbalancer");
                 default = null;
               };
               validators = [ validators.cert-has-target ];
@@ -346,8 +346,8 @@ let
             config.schema.schedule = {
               options.cron = lib.mkOption { type = lib.types.str; };
               options.enabled = lib.mkOption { type = lib.types.bool; };
-              options.service = lib.mkOption { type = ref "service"; };
-              options.server = lib.mkOption { type = ref "server"; };
+              options.service = lib.mkOption { type = declarationOf "service"; };
+              options.server = lib.mkOption { type = declarationOf "server"; };
             };
 
             # Identity
@@ -358,27 +358,27 @@ let
 
             config.schema.ldap-role = {
               options.permissions = lib.mkOption { type = lib.types.listOf lib.types.str; };
-              options.ldap-group = lib.mkOption { type = ref "ldap-group"; };
+              options.ldap-group = lib.mkOption { type = declarationOf "ldap-group"; };
             };
 
             config.schema.user = {
               options.uid = lib.mkOption { type = lib.types.int; };
               options.shell = lib.mkOption { type = lib.types.str; };
               options.ssh-key = lib.mkOption { type = lib.types.str; };
-              options.ldap-role = lib.mkOption { type = ref "ldap-role"; };
+              options.ldap-role = lib.mkOption { type = declarationOf "ldap-role"; };
               options.servers = lib.mkOption {
-                type = setOf (ref "server");
+                type = setOf (declarationOf "server");
                 default = [ ];
               };
               options.manager = lib.mkOption {
-                type = lib.types.nullOr (ref "user");
+                type = lib.types.nullOr (declarationOf "user");
                 default = null;
               };
             };
 
             # Policy
             config.schema.access-policy = {
-              options.ldap-role = lib.mkOption { type = ref "ldap-role"; };
+              options.ldap-role = lib.mkOption { type = declarationOf "ldap-role"; };
               options.resource-kind = lib.mkOption { type = lib.types.str; };
               options.scope = lib.mkOption { type = lib.types.str; };
               options.actions = lib.mkOption { type = lib.types.listOf lib.types.str; };

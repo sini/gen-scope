@@ -64,12 +64,12 @@ let
 
   traitKind = {
     options.needs = lib.mkOption {
-      type = genSchema.setOf (genSchema.ref "trait");
+      type = genSchema.setOf (genSchema.declarationOf "trait");
       default = [ ];
       description = "Forward dependencies: trait refs, selectors, or strings (resolved at eval time).";
     };
     options.neededBy = lib.mkOption {
-      type = genSchema.setOf (genSchema.ref "trait");
+      type = genSchema.setOf (genSchema.declarationOf "trait");
       default = [ ];
       description = "Reverse injection: trait refs, selectors, or strings (resolved at eval time).";
     };

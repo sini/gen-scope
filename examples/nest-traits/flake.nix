@@ -22,10 +22,7 @@
       lib = nixpkgs.lib;
       genScope = gen-scope.lib;
       genAlgebra = gen-algebra.lib;
-      genSchema = import "${gen-schema}/lib" {
-        inherit lib;
-        algebra = genAlgebra;
-      };
+      genSchema = gen-schema.lib;
       aspects = gen-aspects.lib;
       genGraph = gen-graph.lib;
       nest = import ./lib {

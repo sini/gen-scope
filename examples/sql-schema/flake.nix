@@ -25,14 +25,10 @@
     let
       lib = nixpkgs.lib;
       genScope = gen-scope.lib;
-      genAlgebra = gen-algebra.lib;
       genSelect = gen-select.lib;
       genDispatch = gen-dispatch.lib;
       genBind = gen-bind.lib;
-      genSchema = import "${gen-schema}/lib" {
-        inherit lib;
-        algebra = genAlgebra;
-      };
+      genSchema = gen-schema.lib;
       genGraph = gen-graph.lib;
       sql = import ./lib {
         inherit

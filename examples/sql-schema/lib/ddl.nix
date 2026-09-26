@@ -40,7 +40,7 @@ let
       "text[]"
     else if lib.hasPrefix "nullOr" typeName then
       nixTypeToSql ((optType.nestedTypes or { }).elemType or { name = "text"; })
-    else if lib.hasPrefix "ref" typeName then
+    else if lib.hasPrefix "declarationOf" typeName then
       "text"
     else if lib.hasPrefix "setOf" typeName then
       null # junction table instead
