@@ -183,11 +183,9 @@ else if arm == "outer" then
     true' = prelude.length m.trueAtoms;
   }
 else if arm == "refuseUnknownField" then
-  # ★ AN ARGUMENT-ARITY ERROR IS NOT CONTAINED BY `tryEval`. `mkRule`'s pattern refuses an
-  # unknown field by name — the interpreter names the argument and even suggests the intended
-  # one — but the refusal kills the evaluation rather than answering `{ success = false; }`, so
-  # it is read here, off an exit code, for the same reason the aborts above are. The message is
-  # on stderr and the sweep matches it.
+  # `mkRule`'s unknown field is refused by the shared check (`lib/door.nix`), a named `throw` the
+  # suite contains (`ci/tests/doors.nix`) and whose text it pins (`ci/tests-error.nix`, `doors`).
+  # This arm reads the same text off the exit, beside the aborts above.
   builtins.deepSeq (s.mkRule {
     head = "f";
     negs = [ "x" ];

@@ -26,7 +26,7 @@
   requireScope,
   requireDeclaredDependencies,
 }:
-{
+builtins.mapAttrs (import ./door.nix { inherit prelude; }) {
   foldEquations =
     {
       scope,

@@ -1159,15 +1159,14 @@ in
     # `smuggledFieldEmitter` is `wellFormedEmitter` (asserted admitted, `tests/mint.nix`'s green
     # twin) plus one field neither `mintOne` nor anything upstream of it reads — standing for a
     # kind-option contribution smuggled onto an emitter record, which is what the measured defect
-    # let through silently. `mintOne`'s second formal is now the same closed pattern `mintStrata`'s
-    # own formals already are one level up, so Nix's own mechanism refuses it and names the field —
-    # `type` is `TypeError` rather than `ThrownError` because nothing here calls `throw`; the message
-    # is the evaluator's, matched loosely rather than pinned, on the same ground the arity cell states.
+    # let through silently. The emitter is checked at intake by the shared checks, closed on purpose
+    # beyond R5's open record (den-hoag-7gp66 P1), so the refusal is a `throw` naming the door, the
+    # field and the accepted set — catchable, where `mintOne`'s closed pattern aborted past `tryEval`.
     test-an-unknown-emitter-field-refuses-by-name = {
       expr = mint (withKinds [ smuggledFieldEmitter ]);
       expectedError = {
-        type = "TypeError";
-        msg = ".*mintOne.*unexpected argument 'kindOption'.*";
+        type = "ThrownError";
+        msg = exactly "gen-scope.mintStrata: an emitter: 'kindOption' is not an option of this door; the options are closed (accepted: 'pass', 'identifier', 'kind', 'relata', 'content', 'site') (in prelude.checkOptions)";
       };
     };
   };
@@ -3462,4 +3461,63 @@ in
         expectedError = err "gen-scope.eval: nta: `attributes` declares `nta-children` directly. An `nta` is declared on the KIND it grows from — `mkKind { nta = { <name> = builder; }; }` — so its children are stamped with the host's kind and minted from the host's coordinates. Move the builder onto its host kind's `nta`.";
       };
     };
+
+  # den-hoag-7gp66 P1: the closed doors' shared checks, each message pinned to the byte on the real
+  # path. Per door: a missing required field and a non-set argument refused naming the door; an
+  # unknown field refused on an options or mixed door; an extra field ADMITTED on a record door (R5's
+  # stated price); and the valid call admitted. An admission is observed as the door reading a field
+  # (`reached:<field>`, `tests/_fixtures/doors.nix`) or returning (`admitted`), never as a refusal.
+  config.flake.testsError.doors =
+    let
+      doors = import ./tests/_fixtures/doors.nix;
+      names = ns: builtins.concatStringsSep ", " (map (n: "'${n}'") ns);
+      admitted = door: args: {
+        expr = builtins.seq (door args) (throw "admitted");
+        expectedError = {
+          type = "ThrownError";
+          msg = "^(admitted|reached:.*)$";
+        };
+      };
+      thrown = expr: msg: {
+        inherit expr;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly msg;
+        };
+      };
+      cells =
+        name: d:
+        let
+          door = genScope.${name};
+          checkedBy = if d.class == "options" then "checkOptions" else "checkRequired";
+          nonSet =
+            if d.class == "options" then
+              "${d.door}: the options must be an attrset, not a int (accepted: ${names d.accepted}) (in prelude.checkOptions)"
+            else
+              "${d.door}: the argument must be an attrset, not a int (required: ${names d.required}) (in prelude.checkRequired)";
+        in
+        {
+          "test-${name}-valid-call-admitted" = admitted door d.args;
+          "test-${name}-non-set-refused" = thrown (door 1) nonSet;
+        }
+        // (
+          if d.class == "options" then
+            { }
+          else
+            {
+              "test-${name}-missing-field-refused" =
+                thrown (door d.withoutMissing) "${d.door}: required field '${d.missing}' is missing (required: ${names d.required}) (in prelude.${checkedBy})";
+            }
+        )
+        // (
+          if d.class == "record" then
+            { "test-${name}-extra-field-admitted" = admitted door d.withUnknown; }
+          else
+            {
+              "test-${name}-unknown-field-refused" =
+                thrown (door d.withUnknown) "${d.door}: '${d.unknown}' is not an option of this door; the options are closed (accepted: ${names d.accepted}) (in prelude.checkOptions)";
+            }
+        );
+    in
+    builtins.foldl' (acc: name: acc // cells name doors.${name}) { } (builtins.attrNames doors);
 }

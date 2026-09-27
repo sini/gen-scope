@@ -50,22 +50,19 @@
 # a located blame builds it from `values`, `settled` and `rounds` on its own side, where it still
 # knows what a member is and what its bound was declared to mean.
 #
-# ★ ONE REFUSAL IS REACHABLE HERE AND IT IS THE EVALUATOR'S, WHICH IS OUTSIDE WHAT "THROWS NOWHERE"
-# CLAIMS. The argument record below is a strict pattern, so a caller supplying a sixth field is
-# refused at application — `function 'ascend' called with unexpected argument '…'`, naming the
-# function and the field — and a missing field is refused the same way. It is NAMED and it is
-# UNCATCHABLE: `tryEval` reports `false` for a thrown value and does not contain this one at all, so
-# no caller can recover from it and no cell can observe it. That is a property of the arity check
-# rather than of anything written below.
+# ★ ONE REFUSAL IS REACHABLE HERE AND IT IS THE DOOR'S, WHICH IS OUTSIDE WHAT "THROWS NOWHERE"
+# CLAIMS. The argument record is a RECORD door (`door.nix`, R5): a missing field is refused by name,
+# catchably, naming `gen-scope.ascend`, and an extra field is admitted and never read.
 { prelude, forceFields }:
 let
+  door = import ./door.nix { inherit prelude; };
   inherit (prelude)
     all
     genAttrs
     iterateBounded
     ;
 in
-{
+builtins.mapAttrs door {
   # `settledBy` is asked once per member per round, of that member's OWN previous and next value.
   # The quantifier is `all` over the members and it lives HERE rather than on the caller's side,
   # because "did the round move anything" is a question about the round and not about a member: a

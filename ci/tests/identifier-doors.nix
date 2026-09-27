@@ -49,14 +49,31 @@ in
       expr = builtins.attrNames (S.nodesByType self "t");
       expected = [ ];
     };
-    # The guards live in the door bodies, never in a wrapper at the export, and a wrapper is
-    # detectable: it erases the formals a caller reads.
-    test-mintStrata-keeps-its-published-formals = {
-      expr = builtins.functionArgs S.mintStrata;
-      expected = {
-        emitters = false;
-        kinds = false;
-      };
+    # The string guards live in the door bodies. The record check is the one wrapper at the export
+    # (den-hoag-7gp66 P1, `lib/door.nix`), and it erases the native formals, so the published door's
+    # fields are observed by what it does: each is required, and refused catchably when missing.
+    test-mintStrata-requires-its-published-fields = {
+      expr =
+        map
+          (
+            f:
+            (builtins.tryEval (
+              S.mintStrata (
+                builtins.removeAttrs {
+                  emitters = [ ];
+                  kinds = { };
+                } [ f ]
+              )
+            )).success
+          )
+          [
+            "emitters"
+            "kinds"
+          ];
+      expected = [
+        false
+        false
+      ];
     };
   };
 }

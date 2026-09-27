@@ -38,6 +38,7 @@
 # this one: nothing here asks the door to carry a label.
 { prelude }:
 let
+  door = import ./door.nix { inherit prelude; };
   # First-occurrence-wins dedup over names, INDEX-BASED. Two constructions are excluded rather
   # than merely not chosen: a fold carrying a `seen` attrset copies that attrset once per
   # element, which is quadratic on the atom axis; and a self-recursive walk spends one evaluator
@@ -140,5 +141,6 @@ let
     };
 in
 {
-  inherit mkRule mkProgram;
+  mkRule = door "mkRule" mkRule;
+  mkProgram = door "mkProgram" mkProgram;
 }

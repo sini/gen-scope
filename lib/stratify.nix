@@ -94,16 +94,13 @@
 # meet or miss where the construction leaves nothing to miss. Any refusal an instance needs is the
 # instance's own and rides on top of this one.
 #
-# ★ ONE REFUSAL IS REACHABLE HERE AND IT IS THE EVALUATOR'S, WHICH IS OUTSIDE WHAT "THROWS NOWHERE"
-# CLAIMS. The argument record below is a strict pattern, so a caller supplying a seventh field is
-# refused at application — `function 'stratify' called with unexpected argument '…'`, naming the
-# function and the field, and a missing field is refused the same way. It is NAMED and it is
-# UNCATCHABLE: `tryEval` reports `false` for a thrown value and does not contain this one at all,
-# so a caller cannot recover from it and no cell can observe it. That is a property of the arity
-# check rather than of anything written below, and it is worth knowing for a caller who wants to
-# hand this loop a parameter it does not take.
+# ★ ONE REFUSAL IS REACHABLE HERE AND IT IS THE DOOR'S, WHICH IS OUTSIDE WHAT "THROWS NOWHERE"
+# CLAIMS. The argument record is a RECORD door (`door.nix`, R5): a missing field is refused by name,
+# catchably, naming `gen-scope.stratify`, and an extra field is admitted and never read — worth
+# knowing for a caller who wants to hand this loop a parameter it does not take.
 { prelude, forceFields }:
 let
+  door = import ./door.nix { inherit prelude; };
   inherit (prelude)
     elem
     filter
@@ -114,7 +111,7 @@ let
     tail
     ;
 in
-{
+builtins.mapAttrs door {
   # `describe` REACHES THIS FILE AND STOPS. It is never handed to `advance`, it appears in no field
   # of the result, and no line below applies it: it is a declaration in the signature and has no
   # runtime role here. What it declares is that an instance placing items in strata owes a way to

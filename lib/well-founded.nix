@@ -99,6 +99,7 @@
 # NOT PROVED. It has a differential oracle rather than a proof, and the oracle is the honest form.
 { prelude }:
 let
+  door = import ./door.nix { inherit prelude; };
   leastModelLib = import ./least-model.nix { inherit prelude; };
 
   # The Gelfond–Lifschitz reduct. Rules with a negative literal in the guess are DELETED; the
@@ -317,8 +318,8 @@ in
 {
   inherit
     reduct
-    wellFoundedModel
     verdictNames
     Pos
     ;
+  wellFoundedModel = door "wellFoundedModel" wellFoundedModel;
 }

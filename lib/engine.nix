@@ -38,6 +38,7 @@
 # and a caller that reads it gets a figure computed from the same door the contract publishes.
 { prelude, graph }:
 let
+  door = import ./door.nix { inherit prelude; };
   wellFoundedLib = import ./well-founded.nix { inherit prelude; };
   acceptanceLib = import ./acceptance.nix { inherit prelude; };
 
@@ -122,8 +123,8 @@ let
 in
 {
   inherit
-    solve
     provenanceFor
-    foldContributions
     ;
+  solve = door "solve" solve;
+  foldContributions = door "foldContributions" foldContributions;
 }

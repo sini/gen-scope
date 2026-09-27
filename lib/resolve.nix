@@ -29,6 +29,7 @@
 # facade note; it is not closed here.
 { prelude }:
 let
+  door = import ./door.nix { inherit prelude; };
   relations = import ./traversal-names.nix;
 
   # The reserved structural namespace, read from the classifier that owns and publishes it rather
@@ -669,23 +670,23 @@ in
 {
   inherit
     shadow
-    resolve
-    query
-    queryAll
-    queryReverse
     ambiguous
     visibleFrom
-    inherit'
-    inheritAll
-    inheritSet
     paramAttr
-    circular
-    collectionAttr
     collectImports
-    collect
     collectByType
     followEdge
     collectByLabel
-    subtypeOf
     ;
+  resolve = door "resolve" resolve;
+  query = door "query" query;
+  queryAll = door "queryAll" queryAll;
+  queryReverse = door "queryReverse" queryReverse;
+  inherit' = door "inherit'" inherit';
+  inheritAll = door "inheritAll" inheritAll;
+  inheritSet = door "inheritSet" inheritSet;
+  circular = door "circular" circular;
+  collectionAttr = door "collectionAttr" collectionAttr;
+  collect = door "collect" collect;
+  subtypeOf = door "subtypeOf" subtypeOf;
 }

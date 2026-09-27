@@ -145,35 +145,49 @@ in
     };
 
     # ── THE ENTRY'S ARGUMENT RECORD ──
+    # The entry is a RECORD door (den-hoag-7gp66 P1, R5): its fields are `emitters` and `kinds`, a
+    # missing one is refused by name, catchably, and an extra one is admitted and never read. So the
+    # record is observed by what the door does, not by `functionArgs`, which the shared checks erase.
     test-entry-argument-record-is-exactly-emitters-and-kinds = {
-      expr = builtins.attrNames (builtins.functionArgs mint);
-      expected = [
+      expr = map (f: (builtins.tryEval (mint (builtins.removeAttrs fixtureAdmitted [ f ]))).success) [
         "emitters"
         "kinds"
+      ];
+      expected = [
+        false
+        false
       ];
     };
     # The authority is injected by the library and never supplied by a caller: a caller-supplied
     # minter makes one minting authority a convention rather than a fact (ADR-0016 ruling 5). A
     # caller-supplied frozen set is refused on the neighbouring ground — a forgeable frozen set is a
     # rule authors must obey rather than a construction — and a stratum-0 seed would be that set
-    # under another name.
+    # under another name. Under R5 each is an extra field, admitted and never read: a throwing value
+    # in each place leaves the result unchanged, so none of them reaches the mint.
     test-entry-formals-admit-neither-the-authority-nor-a-frozen-set = {
-      expr = builtins.filter (n: builtins.functionArgs mint ? ${n}) [
-        "hashIdentity"
-        "frozen"
-        "frozenSet"
-        "seed"
-      ];
-      expected = [ ];
+      expr =
+        mint (
+          fixtureAdmitted
+          // {
+            hashIdentity = throw "hashIdentity was read";
+            frozen = throw "frozen was read";
+            frozenSet = throw "frozenSet was read";
+            seed = throw "seed was read";
+          }
+        ) == mint fixtureAdmitted;
+      expected = true;
     };
+    # The control on the same construction: a throwing value in a DECLARED field is read.
     test-entry-formals-answer-present-for-the-two-declared-fields = {
-      expr = builtins.filter (n: builtins.functionArgs mint ? ${n}) [
-        "emitters"
-        "kinds"
-      ];
+      expr =
+        map (f: (builtins.tryEval (mint (fixtureAdmitted // { ${f} = throw "${f} was read"; }))).success)
+          [
+            "emitters"
+            "kinds"
+          ];
       expected = [
-        "emitters"
-        "kinds"
+        false
+        false
       ];
     };
     test-module-formals-carry-the-authority-and-the-driver = {
@@ -207,7 +221,8 @@ in
     };
     test-kind-stratum-is-an-argument-with-no-handle-in-the-result = {
       expr = {
-        isAnArgument = builtins.functionArgs mint ? kinds;
+        isAnArgument =
+          !(builtins.tryEval (mint (fixtureAdmitted // { kinds = throw "kinds was read"; }))).success;
         reopenableFromTheResult = mint fixtureAdmitted ? kinds;
       };
       expected = {

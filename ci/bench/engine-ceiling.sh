@@ -85,8 +85,7 @@ done
 
 echo
 echo "── the refusals, read where their text is readable ──"
-# One of these two is not catchable at all and the other's MESSAGE is not: `tryEval` kills the
-# evaluation on an argument-arity error and discards the message on a throw. A refusal that does
+# Both are named throws, and `tryEval` discards a throw's message. A refusal that does
 # not name the surface and the offending rule is not a named refusal, so the text is matched here
 # rather than asserted in prose.
 for spec in "refuseUnknownField negs" "refuseConjunctiveOnUnaryArm unary-only"; do

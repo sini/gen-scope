@@ -66,6 +66,7 @@
 # on the program's own body arity and never on a caller's request.
 { prelude }:
 let
+  door = import ./door.nix { inherit prelude; };
   # THE FORCING DISCIPLINE, WRITTEN SO IT CANNOT GO PARTIAL. `foldl'` forces its accumulator to
   # weak head normal form, which for a record is the record and not its fields — so a field
   # written every round and read in none accumulates one update thunk per round, and forcing that
@@ -262,8 +263,8 @@ in
     forceFields
     armFor
     armNames
-    leastModel
-    leastModelUnary
-    leastModelRounds
     ;
+  leastModel = door "leastModel" leastModel;
+  leastModelUnary = door "leastModelUnary" leastModelUnary;
+  leastModelRounds = door "leastModelRounds" leastModelRounds;
 }

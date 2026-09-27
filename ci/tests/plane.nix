@@ -515,26 +515,55 @@ in
         "reusable"
       ];
     };
-    # A Decision cannot carry values: the constructor's argument set is CLOSED, so a field
-    # holding results is refused by name at construction rather than accepted silently. The
-    # cell reads the argument set itself — `false` here means "no default", i.e. required — so
-    # both the closure and the totality are pinned, and a widening reddens this cell.
-    #
-    # The refusal is an ARITY error, which `tryEval` does not catch: it cannot be caught and
-    # worked around, only fixed. That is why this cell states the closure positively.
-    test-decision-argument-set-is-closed-and-required = {
-      expr = builtins.functionArgs genScope.mkDecision;
+    # A Decision cannot carry values: the constructor is a RECORD door (den-hoag-7gp66 P1, R5), so a
+    # missing field is refused by name, catchably, and an extra field — one holding results, say — is
+    # admitted and never read: the Decision carries exactly its two fields either way. The same holds
+    # of the facade. Admitting the extra is R5's stated price; refusing it was an arity error that
+    # `tryEval` could not contain.
+    test-decision-argument-set-is-required-and-open = {
+      expr = {
+        missing = (builtins.tryEval (genScope.mkDecision { isClean = _: false; })).success;
+        extra = builtins.attrNames (
+          genScope.mkDecision {
+            isClean = _: false;
+            reusable = _: [ ];
+            values = { };
+          }
+        );
+      };
       expected = {
-        isClean = false;
-        reusable = false;
+        missing = false;
+        extra = [
+          "isClean"
+          "reusable"
+        ];
       };
     };
-    test-facade-argument-set-is-closed-and-required = {
-      expr = builtins.functionArgs genScope.mkFacade;
+    test-facade-argument-set-is-required-and-open = {
+      expr = {
+        missing =
+          (builtins.tryEval (
+            genScope.mkFacade {
+              get = null;
+              nodeIds = null;
+            }
+          )).success;
+        extra = builtins.attrNames (
+          genScope.mkFacade {
+            get = null;
+            nodeIds = null;
+            resolutional = null;
+            values = { };
+          }
+        );
+      };
       expected = {
-        get = false;
-        nodeIds = false;
-        resolutional = false;
+        missing = false;
+        extra = [
+          "get"
+          "nodeIds"
+          "resolutional"
+        ];
       };
     };
     # A decision that reuses without a prior to read from is a NAMED refusal, not an

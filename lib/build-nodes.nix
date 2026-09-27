@@ -28,6 +28,7 @@
 # the door the malformed record would otherwise be BUILT at.
 { prelude, kindSetDefect }:
 let
+  door = import ./door.nix { inherit prelude; };
   graph = import ./graph.nix;
 
   # ── THE RESERVED LABELS, REFUSED BY NAME ──
@@ -293,9 +294,9 @@ let
 in
 {
   inherit
-    buildRoots
     buildNodes
     mintAttachmentId
     parseParent
     ;
+  buildRoots = door "buildRoots" buildRoots;
 }

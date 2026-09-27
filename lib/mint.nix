@@ -192,18 +192,34 @@ let
   # either place used to abort past `tryEval` there, or earlier in the schedule's ordering.
   identifier = who: import ./string-argument.nix who "a node identifier";
   #
-  # A MISSING field is not read here: `mintOne`'s closed pattern refuses it, and a lookup here would
-  # pre-empt that refusal with a vaguer one.
+  # Each emitter is checked as a record first, by the shared checks: a missing field is refused by
+  # name, and so is an unknown one. The second is a closure held on purpose beyond R5's open record
+  # (den-hoag-mintone-silent-drop-1wjov): a kind-option contribution smuggled onto an emitter is
+  # refused rather than dropped unread. Both are catchable, where `mintOne`'s closed pattern — which
+  # now only ever meets a checked record — aborted past `tryEval`.
+  emitterDoor = "gen-scope.mintStrata: an emitter";
+  emitterFields = [
+    "pass"
+    "identifier"
+    "kind"
+    "relata"
+    "content"
+    "site"
+  ];
+  emitter =
+    e:
+    prelude.checkOptions emitterDoor emitterFields (prelude.checkRequired emitterDoor emitterFields e);
   identifiersOf = builtins.all (
     e:
-    !(e ? identifier)
-    || builtins.seq (identifier "mintStrata: an emitter's identifier" e.identifier) (
-      builtins.all (
-        label:
-        builtins.isString (
-          identifier "mintStrata: relatum '${label}' of '${e.identifier}'" e.relata.${label}
-        )
-      ) (attrNames (e.relata or { }))
+    builtins.seq (emitter e) (
+      builtins.seq (identifier "mintStrata: an emitter's identifier" e.identifier) (
+        builtins.all (
+          label:
+          builtins.isString (
+            identifier "mintStrata: relatum '${label}' of '${e.identifier}'" e.relata.${label}
+          )
+        ) (attrNames (e.relata or { }))
+      )
     )
   );
 
@@ -217,6 +233,8 @@ let
   # their own map, so an emitter whose content carries this name is merging a content key and not
   # colliding with anything.
   mintKey = "identity";
+
+  door = import ./door.nix { inherit prelude; };
 
   # ── THE TWO REFUSAL TEXTS ──
   # Each names the coordinates that let a reader find the construction rather than the symptom: the
@@ -237,7 +255,7 @@ let
     in
     "gen-scope.mintStrata: conflicting contributions to identity '${identity}' at key '${key}' (${first}, ${second})";
 in
-{
+builtins.mapAttrs door {
   mintStrata =
     { emitters, kinds }:
     let
@@ -279,12 +297,10 @@ in
       # ★ THE SECOND FORMAL IS A CLOSED PATTERN, NOT A BARE NAME (den-hoag-mintone-silent-drop-1wjov).
       # An `e:` binding lets `inherit (e) …` pick five names out of however many the caller supplied,
       # so a sixth field — a kind-option contribution smuggled onto an emitter, say — passes through
-      # unread and unremarked. `mintStrata`'s OWN formals one level up are already closed (`{ emitters,
-      # kinds }:`, no `...`), so a stray third argument there is refused BY NAME through Nix's own
-      # mechanism. This is that same discipline at the emitter's own intake: the pattern names exactly
-      # the six fields an emitter carries — the five read here plus `pass`, which `itemsAt` already
-      # used to place this emitter in its stratum but which still rides on the record `mintOne`
-      # receives — and a caller's seventh field is refused by name before it can go anywhere silent.
+      # unread and unremarked. The pattern names exactly the six fields an emitter carries — the five
+      # read here plus `pass`, which `itemsAt` already used to place this emitter in its stratum but
+      # which still rides on the record `mintOne` receives. A caller's seventh field never reaches it:
+      # `identifiersOf` refuses it by name, catchably, before anything is scheduled.
       mintOne =
         frozen:
         {

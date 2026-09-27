@@ -264,6 +264,7 @@
 # neither is silent.
 { prelude }:
 let
+  door = import ./door.nix { inherit prelude; };
   inherit (builtins)
     attrNames
     isAttrs
@@ -1298,12 +1299,12 @@ let
 in
 {
   inherit
-    mkKind
     mkKinds
     mkClaim
-    resolveClaims
     # INTERNAL, and removed before the surface merge in `default.nix`: the two doors take it as a
     # formal, and no consumer needs a predicate the doors already decide.
     kindSetDefect
     ;
+  mkKind = door "mkKind" mkKind;
+  resolveClaims = door "resolveClaims" resolveClaims;
 }

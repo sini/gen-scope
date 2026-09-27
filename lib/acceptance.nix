@@ -41,6 +41,7 @@
 # which is why the acceptance judge is a person and not a threshold.
 { prelude }:
 let
+  door = import ./door.nix { inherit prelude; };
   # The environment every ceiling and cost reading in this library holds under. It is part of the
   # comparison rather than a note beside it: a figure read under a different call-depth guard or
   # a different stack limit is a figure about a different machine.
@@ -130,7 +131,7 @@ in
 {
   inherit
     verifiedDepth
-    acceptanceSignal
     signalNames
     ;
+  acceptanceSignal = door "acceptanceSignal" acceptanceSignal;
 }

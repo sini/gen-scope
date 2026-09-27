@@ -28,6 +28,7 @@
 { prelude }:
 let
   structural = import ./structural.nix { inherit prelude; };
+  door = import ./door.nix { inherit prelude; };
 in
 rec {
   # The cold decision: nothing is clean, nothing is reusable. The cold case is the warm case
@@ -39,11 +40,12 @@ rec {
 
   # Both fields are REQUIRED and both are TOTAL. A defaulted `isClean` would make the absence
   # of a decision mean something, and what it meant would be invisible at the call site.
-  mkDecision =
+  mkDecision = door "mkDecision" (
     { isClean, reusable }:
     {
       inherit isClean reusable;
-    };
+    }
+  );
 
   # The facade the plane reads through. WHAT IS CLOSED IS THE RECORD'S KEY SET: `get`,
   # `nodeIds`, `resolutional` and nothing else. No `node` entry, no `allNodes`, no combinator
@@ -84,7 +86,7 @@ rec {
   # `get` answers within the resolutional vocabulary; asked for a structural attribute it
   # RECOMPUTES rather than serving, which is the evaluator's own always-recompute branch and
   # not a check performed here.
-  mkFacade =
+  mkFacade = door "mkFacade" (
     {
       get,
       nodeIds,
@@ -92,7 +94,8 @@ rec {
     }:
     {
       inherit get nodeIds resolutional;
-    };
+    }
+  );
 
   # The names a facade carries, as data, so a widening fails a cell rather than passing
   # silently.
@@ -111,7 +114,7 @@ rec {
   # a production result and it is not a rule the plane must obey to get a correct answer. It is
   # the disagreement between what the plane names and what the vocabulary contains, reported as
   # a finding rather than left as silence.
-  decisionFindings =
+  decisionFindings = door "decisionFindings" (
     {
       decision,
       resolutional,
@@ -130,5 +133,6 @@ rec {
           else
             "attribute not in this node's resolutional vocabulary";
       }) (builtins.filter (attrName: !(builtins.elem attrName vocabulary)) (decision.reusable nodeId))
-    ) nodeIds;
+    ) nodeIds
+  );
 }

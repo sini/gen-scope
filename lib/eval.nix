@@ -19,6 +19,7 @@
   graph,
 }:
 let
+  door = import ./door.nix { inherit prelude; };
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
 
@@ -2248,9 +2249,6 @@ let
 in
 {
   inherit
-    eval
-    evalDebug
-    evalWarm
     # The `nta` child identifier and its total decoder, published so a caller can predict the
     # identifier a child is minted under and read one back; the evaluator mints and decodes with
     # these same bindings, so the two cannot disagree.
@@ -2259,6 +2257,9 @@ in
     # The seam guard's reason, published so a cell can assert the MESSAGE rather than the fact of a
     # refusal. `tryEval` catches the throw and discards its text, so the validator is the only
     # CI-testable form of a guard whose message names the reader, the target and the relation.
-    seamAcquisitionDefect
     ;
+  eval = door "eval" eval;
+  evalDebug = door "evalDebug" evalDebug;
+  evalWarm = door "evalWarm" evalWarm;
+  seamAcquisitionDefect = door "seamAcquisitionDefect" seamAcquisitionDefect;
 }
