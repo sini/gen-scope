@@ -3464,9 +3464,10 @@ in
 
   # ── `getNta`'s REFUSALS (den-hoag-n6dh7 Unit 2.0) ──
   # One cell per refusal. An absent NTA, group or key is refused with `ntaLookup`'s `nta:` text,
-  # naming the host; an unknown or quotient attribute with `get`'s own text; and a reader bound to
-  # no node — the evaluation's record, or any reader of an evaluation running no `nta` channel —
-  # with its own. The value cells are `tests/nta.nix`'s U2.0 block.
+  # naming the host; an unknown or quotient attribute with `getNta`'s own door-named text (7gp66 R6,
+  # den-hoag-n6dh7 C1) rather than `get`'s reused text; and a reader bound to no node — the
+  # evaluation's record, or any reader of an evaluation running no `nta` channel — with its own.
+  # The value cells are `tests/nta.nix`'s U2.0 block.
   config.flake.testsError.nta-getNta-refusals =
     let
       fx = import ./tests/_fixtures/nta.nix { inherit genScope; };
@@ -3524,11 +3525,11 @@ in
       };
       test-an-unknown-attribute-is-refused-by-get = {
         expr = read genScope.eval (self: _: self.getNta "sub" "g" "b" "nosuch");
-        expectedError = err "gen-scope: unknown attribute 'nosuch' on node '${mintNtaId "r" "sub" "g" "b"}'";
+        expectedError = err "gen-scope.nta: `getNta`: unknown attribute 'nosuch' on NTA 'sub' group 'g' key 'b' of host 'r' (in self.get)";
       };
       test-a-quotient-attribute-is-refused-by-get = {
         expr = read genScope.eval (self: _: self.getNta "sub" "g" "b" "q");
-        expectedError = err "gen-scope: self.get 'q' on '${mintNtaId "r" "sub" "g" "b"}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step. Read it with `getRepresentative`, which returns it tagged.";
+        expectedError = err "gen-scope.nta: `getNta`: 'q' on NTA 'sub' group 'g' key 'b' of host 'r' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getNta` reads raw values only (in self.get)";
       };
       test-the-evaluations-own-record-is-unbound = {
         expr = (fx.nestWith genScope.eval { }).getNta "sub" "g" "b" "v";

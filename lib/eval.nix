@@ -1080,8 +1080,11 @@ let
             # node's own product and the child's record — never by minting, decoding or resolving an
             # identifier (ADR-0006, one evaluation per node). With no round open it answers from the
             # record's `_eval`; with one open it runs the guarded per-attribute evaluator on the
-            # child, as `demand` does. An absent NTA, group or key is refused by name, and an unknown
-            # or quotient attribute by `get`'s own refusal, before anything resolves.
+            # child, as `demand` does. The host's product resolves first: an absent NTA, group or key
+            # is refused by name before anything else is checked (`ntaMember`'s text, naming the
+            # host). Only once that resolves does an unknown or quotient attribute refuse — as
+            # `getNta`'s own door-named text (7gp66 R6), not by `get`'s reused message, since the
+            # caller invoked `getNta` and never minted or saw the child's identifier.
             getNtaAt =
               acc: host: name: group: key: attrName:
               if !round.open && runAttributes ? ${attrName} && !(isQuotientAttr attrName) then
@@ -1090,8 +1093,14 @@ let
                 let
                   child = ntaMember "`getNta`" (acc.get host ntaChannel) host name group key;
                 in
-                if !(runAttributes ? ${attrName}) || isQuotientAttr attrName then
-                  self.get child.id attrName
+                if !(runAttributes ? ${attrName}) then
+                  builtins.seq child (
+                    throw "gen-scope.nta: `getNta`: unknown attribute '${attrName}' on NTA '${name}' group '${group}' key '${key}' of host '${host}' (in self.get)"
+                  )
+                else if isQuotientAttr attrName then
+                  builtins.seq child (
+                    throw "gen-scope.nta: `getNta`: '${attrName}' on NTA '${name}' group '${group}' key '${key}' of host '${host}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getNta` reads raw values only (in self.get)"
+                  )
                 else
                   evalAttr null child.id attrName runAttributes.${attrName};
 
