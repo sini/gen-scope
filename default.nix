@@ -80,14 +80,20 @@ in
   # cannot carry a value outward at all — so the only place a formal NAME and its resolved PATH are
   # both in scope is this file's argument TO `wire`, and `resolve` leaves by that same argument
   # rather than by a second formal. What `./lib` actually receives is a different question: `wire`
-  # RECEIVES `{ deps, resolve }`, and passes on whatever it chooses to — here `deps` and nothing
-  # else, but only because the default below reads `{ deps, resolve }: import ./lib deps,`. A cell
+  # RECEIVES `{ deps, resolve, lock }`, and passes on whatever it chooses to — here `deps` and nothing
+  # else, but only because the default below reads `{ deps, resolve, lock }: import ./lib deps,`. A cell
   # injecting `dep = segs: segs` alongside `wire = args: args` reads this shim's own formal-to-path
   # map AND its own resolver directly, with nothing fetched, no path restated and no fold
   # transcribed. The record destructures with no `...`, so a drifted body shape is loud at the
   # default; adding `wire` was a widening and breaks no caller for the same reason — there is no
   # `...` here, and no caller passes a name this root does not declare.
-  wire ? { deps, resolve }: import ./lib deps,
+  wire ?
+    {
+      deps,
+      resolve,
+      lock,
+    }:
+    import ./lib deps,
   prelude ? inputs.gen-prelude or (dep [ "gen-prelude" ]),
   graph ? inputs.gen-graph or (dep [ "gen-graph" ]),
   identity ? inputs.gen-identity or (dep [ "gen-identity" ]),
@@ -109,5 +115,5 @@ let
   forced = builtins.deepSeq (builtins.mapAttrs (_: builtins.typeOf) deps) null;
 in
 builtins.seq forced (wire {
-  inherit deps resolve;
+  inherit deps resolve lock;
 })

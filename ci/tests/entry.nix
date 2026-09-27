@@ -92,7 +92,13 @@ let
     inputs = { };
     src = segs: throw "the entry cell must not fetch: ${builtins.concatStringsSep "." segs}";
     dep = segs: throw "the entry cell must not build: ${builtins.concatStringsSep "." segs}";
-    wire = { deps, resolve }: import ../../lib deps;
+    wire =
+      {
+        deps,
+        resolve,
+        lock,
+      }:
+      import ../../lib deps;
   };
 
   entry = import ../.. entryArgs;
@@ -101,7 +107,7 @@ let
   # THAN WRITTEN AT THE APPLICATION — `entryArgs`' own rule, for the same reason. `dep` stops the
   # resolver at the PATH instead of fetching it, and replacing `wire` publishes the whole record the
   # shim's body hands TO `wire` — its `deps` half is the attrset `./lib` receives only while `wire`'s
-  # own default is `{ deps, resolve }: import ./lib deps`, which the cell at the foot of this file is
+  # own default is `{ deps, resolve, lock }: import ./lib deps`, which the cell at the foot of this file is
   # what holds, and its `resolve` half is the shim's own `follows` rule, which is why nothing below
   # transcribes that rule. So this application is hermetic by CONSTRUCTION. Nothing else is supplied:
   # every dependency formal is left at its default, which is the point — the defaults are the
@@ -121,14 +127,14 @@ let
   # expectation while both are wrong.
   shimResolve = seam.resolve;
 
-  # ★ THE ci LOCK, READ AS PURE DATA — and the rule that walks it is NOT TRANSCRIBED HERE:
+  # ★ THE ROOT LOCK, READ AS PURE DATA — and the rule that walks it is NOT TRANSCRIBED HERE:
   # `shimResolve` above IS `default.nix`'s binding. A direct edge IS the node key; a `follows` value
   # is a PATH resolved segment by segment from this lock's own root. Never `lock.nodes.<label>` — a
   # last-segment shortcut reads a DIFFERENT node, and this library's OWN `ci/flake.lock` is a live
   # instance of exactly that: its `gen-prelude` root input resolves to a different node under the
   # walked rule than the bare label `gen-prelude` names. Reading the lock is pure data; nothing here
   # fetches.
-  lock = builtins.fromJSON (builtins.readFile ../../flake.lock);
+  lock = seam.lock;
 
   # ★★ THE RESOLVER IS BOUND OVER ITS LOCK, AND THAT IS WHAT MAKES ITS CONTROL EXPRESSIBLE AT ALL. A
   # `repoOf` closed over THIS lock has no free parameter, so a control could only re-assert the main
@@ -176,7 +182,7 @@ let
   # prophylactic, because the shim's own prose quotes this default, so an unstripped scan keeps
   # reading 1 on a file whose CODE has been rewired. Bound once and read by BOTH cells below: two
   # literals spelled the same are two predicates, and the control would then guard only its own copy.
-  wireNeedle = ''wire[[:space:]]*\?[[:space:]]*[{][[:space:]]*deps[[:space:]]*,[[:space:]]*resolve[[:space:]]*[}][[:space:]]*:[[:space:]]*import[[:space:]]+\./lib[[:space:]]+deps[[:space:]]*,'';
+  wireNeedle = ''wire[[:space:]]*\?[[:space:]]*[{][[:space:]]*deps[[:space:]]*,[[:space:]]*resolve[[:space:]]*,[[:space:]]*lock[[:space:]]*,?[[:space:]]*[}][[:space:]]*:[[:space:]]*import[[:space:]]+\./lib[[:space:]]+deps[[:space:]]*,'';
   countWire =
     text:
     builtins.length (
@@ -202,6 +208,31 @@ let
   entryNeedle = ''\.\./\.\.[[:space:]]*\{'';
   countEntry =
     text: builtins.length (builtins.filter builtins.isList (builtins.split entryNeedle text));
+
+  # ★ THE THIRD NEEDLE, AND IT SCANS THE COMPLEMENT OF THE ONE PERMITTED SHAPE, never the defect's
+  # spelling: every binding of `lock` is captured, and any right-hand side other than `seam.lock` is
+  # offending — so a path bound a statement earlier, an aliased `readFile` and a read moved into a
+  # second file red exactly as the 2026-09-16 reversion does. The leading class keeps `lockPath =`
+  # and `seedlock =` out, `[^=;]` keeps `lock ==` out, and `seamBound` counts the permitted shape
+  # itself, so a binding moved into an `inherit`, which no `lock =` scan can see, reds on its
+  # absence. COMMENTS ARE STRIPPED FIRST, for the reason `wireNeedle`'s scan strips them.
+  lockBindingNeedle = "(^|[^[:alnum:]_'-])lock[[:space:]]*=([^=;][^;]*);";
+  lockBindingsOf =
+    text:
+    let
+      rhss = map (m: builtins.elemAt m 1) (
+        builtins.filter builtins.isList (
+          builtins.split lockBindingNeedle (
+            builtins.concatStringsSep "" (builtins.filter builtins.isString (builtins.split "#[^\n]*" text))
+          )
+        )
+      );
+      isSeam = rhs: builtins.match "[[:space:]]*seam[.]lock[[:space:]]*" rhs != null;
+    in
+    {
+      offending = builtins.length (builtins.filter (rhs: !isSeam rhs) rhss);
+      seamBound = builtins.length (builtins.filter isSeam rhss);
+    };
 in
 {
   flake.tests.entry.test-standalone-entry-constructs-its-siblings =
@@ -453,7 +484,7 @@ in
 
   # ★★★ THE SHIM'S OWN `wire` DEFAULT, AND IT IS WHAT EVERY HERMETIC CELL ABOVE RESTS ON. `paths` is
   # the `deps` half of the record the shim's body hands to `wire` — it is the attrset `./lib`
-  # RECEIVES only while `wire`'s own default is `{ deps, resolve }: import ./lib deps`, and no cell
+  # RECEIVES only while `wire`'s own default is `{ deps, resolve, lock }: import ./lib deps`, and no cell
   # above reads that default: the two hermetic cells REPLACE `wire` with `args: args`, the forcing
   # cell stops at WHNF of whatever `wire` returned, and the surface cell compares `attrNames`, which
   # `./lib`'s structure fixes independently of its arguments.
@@ -473,11 +504,11 @@ in
   # `commented` proves the comment strip is LIVE.
   flake.tests.entry.test-control-the-wire-default-check-discriminates = {
     expr = {
-      exact = countWire "wire ? { deps, resolve }: import ./lib deps,";
-      rewired = countWire ''wire ? { deps, resolve }: import ./lib (deps // { x = throw "no"; }),'';
+      exact = countWire "wire ? { deps, resolve, lock }: import ./lib deps,";
+      rewired = countWire ''wire ? { deps, resolve, lock }: import ./lib (deps // { x = throw "no"; }),'';
       commented = countWire ''
-        # wire ? { deps, resolve }: import ./lib deps,
-        wire ? { deps, resolve }: import ./lib (deps // { }),
+        # wire ? { deps, resolve, lock }: import ./lib deps,
+        wire ? { deps, resolve, lock }: import ./lib (deps // { }),
       '';
     };
     expected = {
@@ -509,4 +540,68 @@ in
       expr = (import ../.. (pathArgs // { inputs = bag; })).deps;
       expected = overrides;
     };
+
+  # ★★★ `…-defaults-to-its-own-node` COMPARES A REPOSITORY NAME, SO IT CANNOT TELL WHICH LOCK IT
+  # READ: two locks naming one repository at two revisions agree on `locked.repo`. Measured
+  # 2026-09-16 (`specs/2026-09-15-gen-pin-source-split-spec.md` §2.2): `lock` above left reading the
+  # ci lock after `default.nix` had moved to the root lock, and that cell stayed green. There is no
+  # independently declared revision to compare against, so the fix is not a comparison: `lock` is
+  # read through `seam`, the value `default.nix`'s own `fetch` closes over — the move this file
+  # already makes for `resolve`. This cell makes the sharing an obligation: THIS FILE'S OWN TEXT
+  # binds `lock` exactly once, to `seam.lock`, and to nothing else anywhere.
+  flake.tests.entry.test-the-lock-is-read-through-the-shims-own-seam = {
+    expr = lockBindingsOf (builtins.readFile ./entry.nix);
+    expected = {
+      offending = 0;
+      seamBound = 1;
+    };
+  };
+
+  # ★★ THE DETECTOR IS SHOWN ABLE TO FIRE on each way a second read of the lock comes back, and
+  # silent on the permitted shape. ASSEMBLED, NOT WRITTEN: every fixture binding is split inside
+  # `lock`, so the main arm's scan of this file does not read the fixtures as bindings of its own.
+  flake.tests.entry.test-control-the-lock-provenance-check-discriminates = {
+    expr = builtins.mapAttrs (_: lockBindingsOf) {
+      permitted = "  lo" + "ck = seam.lock;\n";
+      ciLock = "  lo" + "ck = builtins.fromJSON (builtins.readFile ../flake.lock);\n";
+      reflowed =
+        "  lo" + "ck =\n    builtins.fromJSON\n      (builtins.readFile\n        ../../flake.lock);\n";
+      pathBound =
+        "  lockPath = ../../flake.lock;\n  lo" + "ck = builtins.fromJSON (builtins.readFile lockPath);\n";
+      aliased =
+        "  readLock = builtins.readFile;\n  lo" + "ck = builtins.fromJSON (readLock ../../flake.lock);\n";
+      secondFile = "  lo" + "ck = import ./lock-reader.nix;\n";
+      inherited = "  inherit (import ./lock-reader.nix) lock;\n";
+    };
+    expected = {
+      permitted = {
+        offending = 0;
+        seamBound = 1;
+      };
+      ciLock = {
+        offending = 1;
+        seamBound = 0;
+      };
+      reflowed = {
+        offending = 1;
+        seamBound = 0;
+      };
+      pathBound = {
+        offending = 1;
+        seamBound = 0;
+      };
+      aliased = {
+        offending = 1;
+        seamBound = 0;
+      };
+      secondFile = {
+        offending = 1;
+        seamBound = 0;
+      };
+      inherited = {
+        offending = 0;
+        seamBound = 0;
+      };
+    };
+  };
 }
