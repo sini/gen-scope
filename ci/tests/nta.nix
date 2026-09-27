@@ -373,6 +373,30 @@ in
           "readB";
       expected = 2;
     };
+    # Both evaluators' `getNta` agree, at both depths measured above: the debug accessor's route
+    # (item 4) is a different implementation of the same property, not a different value.
+    test-U20-evalDebug-agrees-with-eval-on-getNta = {
+      expr =
+        let
+          extra = {
+            readB = self: _: self.getNta "sub" "g" "b" "v";
+            readK = self: _: self.getNta "sub" "g" "k" "v";
+            readAK = self: _: self.getNta "sub" "g" "a" "readK";
+          };
+        in
+        [
+          ((fx.nestWith genScope.eval extra).get "r" "readB")
+          ((fx.nestWith genScope.evalDebug extra).get "r" "readB")
+          ((fx.nestWith genScope.eval extra).get "r" "readAK")
+          ((fx.nestWith genScope.evalDebug extra).get "r" "readAK")
+        ];
+      expected = [
+        2
+        2
+        3
+        3
+      ];
+    };
     # Inside an open round the co-located cache refuses by its lifetime rule, so the read runs the
     # guarded per-attribute evaluator: a circular step demanding a body that reads through
     # `getNta` converges on the child's value.

@@ -2152,6 +2152,34 @@ let
           # across sibling branches is not recoverable here — the thread runs downward into the
           # consumer's attribute functions, and their results are values, so nothing carries a
           # read set back up.
+          # The application `getTraced` (an id the public accessor names) and `debugGetNta` (a
+          # child's own id, read off the record `ntaMember` already resolved) share: cycle
+          # detection against `visited`, the circular/record-shape refusals, and the `nta`
+          # channel's `getNta` binding for a body that itself grows further `nta` children. `id`
+          # is a LABEL here, carried into the trace and passed to `fn` — the record it names, if
+          # any, is never re-read through it.
+          applyTraced =
+            id: attrName: traceEntry: path:
+            if visited ? ${traceEntry} then
+              throw "gen-scope: cycle detected: ${builtins.concatStringsSep " -> " path}"
+            else
+              let
+                fn = runAttributes.${attrName};
+                s = mkSelf (visited // { ${traceEntry} = true; }) path;
+              in
+              # The debug evaluator's production reading of a circular declaration is the
+              # per-instance ascent: its fresh-self-per-get shadow stack already detects the
+              # cross-instance re-entry a shared round exists to drive, and driving one here
+              # would defeat the tracing the evaluator exists for.
+              if isCircularDecl fn then
+                debugCircular id fn s
+              else if builtins.isAttrs fn then
+                throw "gen-scope: attribute '${attrName}' on '${id}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
+              else if runAttributes ? ${ntaChannel} then
+                fn (s // { getNta = debugGetNta s id; }) id
+              else
+                fn s id;
+
           getTraced =
             id: attrName:
             builtins.seq (identifier "self.getTraced" id) (
@@ -2164,34 +2192,31 @@ let
                 value =
                   if !(runAttributes ? ${attrName}) then
                     throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
-                  else if visited ? ${traceEntry} then
-                    throw "gen-scope: cycle detected: ${builtins.concatStringsSep " -> " path}"
                   else
-                    let
-                      fn = runAttributes.${attrName};
-                      s = mkSelf (visited // { ${traceEntry} = true; }) path;
-                    in
-                    # The debug evaluator's production reading of a circular declaration is the
-                    # per-instance ascent: its fresh-self-per-get shadow stack already detects the
-                    # cross-instance re-entry a shared round exists to drive, and driving one here
-                    # would defeat the tracing the evaluator exists for.
-                    if isCircularDecl fn then
-                      debugCircular id fn s
-                    else if builtins.isAttrs fn then
-                      throw "gen-scope: attribute '${attrName}' on '${id}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
-                    else if runAttributes ? ${ntaChannel} then
-                      fn (s // { getNta = debugGetNta s id; }) id
-                    else
-                      fn s id;
+                    applyTraced id attrName traceEntry path;
               }
             );
-          # The production reader's `getNta`, on this evaluator's reader. There is no co-located
-          # cache here to answer from — a fresh accessor per read is what records the trace — so the
-          # child found in the host's product is read by the id its record carries, and the read
-          # lands in the trace like any other.
+          # `getNta`, on this evaluator's reader. There is no co-located cache here to answer
+          # from — a fresh accessor per read is what records the trace — so the attribute is
+          # APPLIED directly on the record `ntaMember` already resolved, through `applyTraced`,
+          # exactly as the production accessor's round-open arm applies it on `child.id`
+          # (`getNtaAt`): the child is never re-read through the public `get`, so `getNta` mints
+          # no identifier, decodes none, and never resolves the child through one — its own
+          # door-named refusals fire (7gp66 R6) rather than `get`'s reused, id-naming text, since
+          # the caller invoked `getNta` and never minted or saw the child's identifier.
           debugGetNta =
             s: host: name: group: key: attrName:
-            s.get (ntaMember "`getNta`" (s.get host ntaChannel) host name group key).id attrName;
+            let
+              child = ntaMember "`getNta`" (s.get host ntaChannel) host name group key;
+              traceEntry = "${child.id}.${attrName}";
+              path = traceList ++ [ traceEntry ];
+            in
+            if !(runAttributes ? ${attrName}) then
+              throw "gen-scope.nta: `getNta`: unknown attribute '${attrName}' on NTA '${name}' group '${group}' key '${key}' of host '${host}' (in self.get)"
+            else if isQuotientAttr attrName then
+              throw "gen-scope.nta: `getNta`: '${attrName}' on NTA '${name}' group '${group}' key '${key}' of host '${host}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getNta` reads raw values only (in self.get)"
+            else
+              applyTraced child.id attrName traceEntry path;
           debugCircular =
             id: decl: s:
             let

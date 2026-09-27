@@ -3559,6 +3559,19 @@ in
         expr = read genScope.evalDebug (self: _: self.getNta "sub" "nog" "b" "v");
         expectedError = err "gen-scope.nta: `getNta`: NTA 'sub' on host 'r' yields no group 'nog'";
       };
+      # `getNta`'s own door-named text, not `get`'s reused message: the OLD debug route resolved
+      # the child by its minted id through the public `get`, so this cell reads
+      # `gen-scope: unknown attribute 'nosuch' on node '<minted-id>'` — leaking the identifier the
+      # caller never saw — until the debug accessor applies the attribute directly on the record
+      # `ntaMember` already resolved (den-hoag-n6dh7, gate v0 §5 P5).
+      test-evalDebug-refuses-an-unknown-attribute-by-getNta = {
+        expr = read genScope.evalDebug (self: _: self.getNta "sub" "g" "b" "nosuch");
+        expectedError = err "gen-scope.nta: `getNta`: unknown attribute 'nosuch' on NTA 'sub' group 'g' key 'b' of host 'r' (in self.get)";
+      };
+      test-evalDebug-refuses-a-quotient-attribute-by-getNta = {
+        expr = read genScope.evalDebug (self: _: self.getNta "sub" "g" "b" "q");
+        expectedError = err "gen-scope.nta: `getNta`: 'q' on NTA 'sub' group 'g' key 'b' of host 'r' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getNta` reads raw values only (in self.get)";
+      };
       test-evalDebugs-own-record-is-unbound = {
         expr = (fx.nestWith genScope.evalDebug { }).getNta "sub" "g" "b" "v";
         expectedError = err unbound;
