@@ -76,6 +76,27 @@ let
       };
   };
 
+  # `nest`: the root grows one child per key of its first definition, and a child whose seed
+  # carries `s` grows one grandchild under group `g` key `k` — the two depths at which a host reads
+  # its own children through `getNta`.
+  nest = mkKind {
+    name = "nest";
+    nta.sub =
+      self: id:
+      let
+        d = first self id;
+      in
+      {
+        g =
+          if id == "r" then
+            builtins.mapAttrs (k: _: [ (addr 0 [ k ]) ]) d
+          else if isAttrs d && d ? s then
+            { k = [ (addr 0 [ "s" ]) ]; }
+          else
+            { };
+      };
+  };
+
   # `raw`: the builder is a parameter, so one kind carries every refusal and every address case. It
   # grows from the root only, so an enumeration over it is finite whatever the builder yields.
   rawWith =
@@ -152,6 +173,27 @@ let
     builder: extra:
     evalWith (mkKinds [ (rawWith builder) ]) (root "raw" { defs = [ { s = { }; } ]; } // extra);
 
+  # The `nest` graph: child `a` carries grandchild `k`, child `b` carries none. `extra` adds the
+  # attributes a cell reads through; `evaluator` is `eval` or `evalDebug`.
+  nestWith =
+    evaluator: extra:
+    evaluator {
+      scope = scopeOf (mkKinds [ nest ]) (
+        root "nest" {
+          defs = [
+            {
+              a = {
+                v = 1;
+                s.v = 3;
+              };
+              b.v = 2;
+            }
+          ];
+        }
+      );
+      attributes = attributes // { v = self: id: (first self id).v; } // extra;
+    };
+
   # The one `raw` child under group `g` key `k`, its seed the given list.
   seeded = seed: rawRun (_: _: { g.k = seed; });
   child = mintNtaId "r" "x" "g" "k";
@@ -168,6 +210,7 @@ in
     rawWith
     rawRun
     rawNodes
+    nestWith
     seeded
     child
     seedOfChild

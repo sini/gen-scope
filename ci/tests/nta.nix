@@ -329,5 +329,75 @@ in
       expr = fx.threeLevels.projectionFindings "r";
       expected = [ ];
     };
+
+    # ── U2.0 · a host reads its own children through `getNta` (den-hoag-n6dh7 Unit 2.0) ──
+    # The read goes through the host's own product and the child's record; the refusals are
+    # `tests-error.nix`'s `nta-getNta-refusals`, and one evaluation per node is U2.0-c in
+    # `tests-process.nix`.
+    test-U20-a-host-reads-its-childs-attribute = {
+      expr =
+        (fx.nestWith genScope.eval { readB = self: _: self.getNta "sub" "g" "b" "v"; }).get "r"
+          "readB";
+      expected = 2;
+    };
+    # Depth 2: the child is itself a host and reads its grandchild inside its own body.
+    test-U20-a-child-reads-its-grandchild = {
+      expr =
+        (fx.nestWith genScope.eval {
+          readK = self: _: self.getNta "sub" "g" "k" "v";
+          readAK = self: _: self.getNta "sub" "g" "a" "readK";
+        }).get
+          "r"
+          "readAK";
+      expected = 3;
+    };
+    # The record read and the read by identifier answer one value.
+    test-U20-the-record-read-agrees-with-the-read-by-id = {
+      expr =
+        let
+          ev = fx.nestWith genScope.eval { readB = self: _: self.getNta "sub" "g" "b" "v"; };
+        in
+        [
+          (ev.get "r" "readB")
+          (ev.get (mintNtaId "r" "sub" "g" "b") "v")
+        ];
+      expected = [
+        2
+        2
+      ];
+    };
+    # The debug evaluator's reader carries it too.
+    test-U20-evalDebug-reads-through-getNta = {
+      expr =
+        (fx.nestWith genScope.evalDebug { readB = self: _: self.getNta "sub" "g" "b" "v"; }).get "r"
+          "readB";
+      expected = 2;
+    };
+    # Inside an open round the co-located cache refuses by its lifetime rule, so the read runs the
+    # guarded per-attribute evaluator: a circular step demanding a body that reads through
+    # `getNta` converges on the child's value.
+    test-U20-getNta-answers-inside-an-open-round = {
+      expr =
+        (fx.nestWith genScope.eval {
+          readB = self: _: self.getNta "sub" "g" "b" "v";
+          ring =
+            genScope.circular
+              {
+                carrier = {
+                  bottom = 0;
+                  leq = a: b: a <= b;
+                  height = 3;
+                  quotient = false;
+                };
+              }
+              (
+                self: id: _:
+                self.get id "readB"
+              );
+        }).get
+          "r"
+          "ring";
+      expected = 2;
+    };
   };
 }

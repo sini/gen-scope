@@ -776,15 +776,33 @@ let
 
   ntaLookup =
     ev: id: t:
-    let
-      groups = (ev.get t.host ntaChannel).${t.name};
-    in
-    if !(groups ? ${t.group}) then
-      throw "gen-scope.nta: node '${id}' not reachable: NTA '${t.name}' on host '${t.host}' yields no group '${t.group}'"
-    else if !(groups.${t.group} ? ${t.key}) then
-      throw "gen-scope.nta: node '${id}' not reachable: NTA '${t.name}' on host '${t.host}' yields group '${t.group}' with no key '${t.key}'"
+    ntaMember "node '${id}' not reachable" (ev.get t.host ntaChannel) t.host t.name t.group t.key;
+
+  # One child record of a host's `nta` product, by its coordinates. The
+  # product is read, never an identifier: `ntaLookup` reaches it by decoding one, a reader's
+  # `getNta` from the host's own record. `what` names the read in the refusal.
+  ntaMember =
+    what: product: host: name: group: key:
+    if !(product ? ${name}) then
+      throw "gen-scope.nta: ${what}: host '${host}' declares no NTA '${name}'"
+    else if !(product.${name} ? ${group}) then
+      throw "gen-scope.nta: ${what}: NTA '${name}' on host '${host}' yields no group '${group}'"
+    else if !(product.${name}.${group} ? ${key}) then
+      throw "gen-scope.nta: ${what}: NTA '${name}' on host '${host}' yields group '${group}' with no key '${key}'"
     else
-      groups.${t.group}.${t.key};
+      product.${name}.${group}.${key};
+
+  # `f` over the values of a child-bearing attribute at its depth. `mapAttrs` is lazy in values,
+  # so an `nta` group's key set is still forced alone.
+  mapAtDepth =
+    d: f: v:
+    if d <= 1 then builtins.mapAttrs (_: f) v else builtins.mapAttrs (_: mapAtDepth (d - 1) f) v;
+
+  # The refusal a reader not bound to a node answers `getNta` with: the evaluation's own record,
+  # and every reader of an evaluation that runs no `nta` channel.
+  ntaUnbound =
+    _: _: _: _:
+    throw "gen-scope.nta: `getNta` reads the reading node's own `nta` children, so it is answered only on a body's reader in an evaluation whose kinds declare an NTA. Outside a body, read a child by its identifier with `get`.";
 
   # The attribute set the evaluators actually run: the caller's, with the selection channel guarded
   # and the spawn channel the registry declares added. Writing the spawn channel by hand is refused —
@@ -951,7 +969,6 @@ let
             # because a substrate whose attribute set varies by node must still answer per node.
             resolutionalNamesAll = structural.resolutionalNames (builtins.attrNames runAttributes);
             resolutionalAt = _nodeId: resolutionalNamesAll;
-            structuralNamesAll = builtins.filter structural.structural (builtins.attrNames runAttributes);
 
             # served nodeId = reusable nodeId ∩ resolutional nodeId. A total function, not a check
             # that can fail.
@@ -997,17 +1014,50 @@ let
             # recomputing it is running or joining the round. The reuse branch is additionally gated
             # on the round being closed: a prior's settled value served inside a round would replace
             # an in-flight approximation with a value from a different world.
+            #
+            # `acc` is the accessor the body's reader is built on: `null` for `self`, or an `nta`
+            # child's own record reader (below).
+            #
+            # AN `nta` CHILD IS READ THROUGH ITS OWN RECORD. Its co-located `_eval` runs its bodies on
+            # a reader whose `node` and `get` answer the child's own id from the record in hand, so a
+            # child never resolves itself by decoding its identifier. The record is the one the
+            # host's product carries and `ntaLookup` answers, so a read by id and a read through the
+            # record reach one memo cell: one evaluation per node. While a round is open the child
+            # takes `wrapChild`'s refusing cache, the lifetime rule unchanged.
             evalAttr =
-              nodeId: attrName: fn:
+              acc: nodeId: attrName: fn:
               if structural.structural attrName then
                 let
-                  raw = applyAttr nodeId attrName fn;
+                  raw = applyAttr acc nodeId attrName fn;
                 in
-                if structural.childBearing attrName then wrapAt (structural.childDepth attrName) raw else raw
+                if attrName == ntaChannel && !round.open then
+                  mapAtDepth (structural.childDepth attrName) (
+                    childNode:
+                    let
+                      own = self // {
+                        getNta = getNtaAt own childNode.id;
+                        node = tid: if tid == childNode.id then wrapped else self.node tid;
+                        get =
+                          tid: a:
+                          if tid == childNode.id && runAttributes ? ${a} && !(isQuotientAttr a) then
+                            wrapped._eval.${a}
+                          else
+                            self.get tid a;
+                      };
+                      wrapped = childNode // {
+                        _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
+                      };
+                    in
+                    wrapped
+                  ) raw
+                else if structural.childBearing attrName then
+                  mapAtDepth (structural.childDepth attrName) wrapChild raw
+                else
+                  raw
               else if !round.open && decision.isClean nodeId && builtins.elem attrName (servedAt nodeId) then
                 servePrior nodeId attrName
               else
-                applyAttr nodeId attrName fn;
+                applyAttr acc nodeId attrName fn;
 
             # ── THE `self.node` SEAM GUARD, AT THE ORDINARY APPLICATION SITE ──
             # A body may not ACQUIRE a node record across an edge its node did not declare. This is
@@ -1024,7 +1074,26 @@ let
             # any guard could sit. ADR-0030's dynamic read recorder is the live control on that
             # residual — a disagreement between what a body read and what its node declared is a
             # finding in the recorder's own terms.
-            readerSelf = bindReader declaredRelation self;
+            #
+            # In an evaluation that runs the `nta` channel the reader also carries `getNta name group
+            # key attrName`: the reading node's own `nta` child's attribute, reached through the
+            # node's own product and the child's record — never by minting, decoding or resolving an
+            # identifier (ADR-0006, one evaluation per node). With no round open it answers from the
+            # record's `_eval`; with one open it runs the guarded per-attribute evaluator on the
+            # child, as `demand` does. An absent NTA, group or key is refused by name, and an unknown
+            # or quotient attribute by `get`'s own refusal, before anything resolves.
+            getNtaAt =
+              acc: host: name: group: key: attrName:
+              if !round.open && runAttributes ? ${attrName} && !(isQuotientAttr attrName) then
+                (ntaMember "`getNta`" (acc.get host ntaChannel) host name group key)._eval.${attrName}
+              else
+                let
+                  child = ntaMember "`getNta`" (acc.get host ntaChannel) host name group key;
+                in
+                if !(runAttributes ? ${attrName}) || isQuotientAttr attrName then
+                  self.get child.id attrName
+                else
+                  evalAttr null child.id attrName runAttributes.${attrName};
 
             # The ONE site at which a member of `runAttributes` is applied, and the total
             # classification over declaration shapes: a function is an ordinary attribute, a
@@ -1032,13 +1101,20 @@ let
             # without the third arm a malformed declaration reaches Nix as "attempt to call something
             # which is not a function", an abort carrying no name of ours.
             applyAttr =
-              nodeId: attrName: fn:
+              acc: nodeId: attrName: fn:
               if isCircularDecl fn then
                 circularDemand nodeId attrName (fn // { step = bindStepReader declaredRelation fn.step; })
               else if builtins.isAttrs fn then
                 throw "gen-scope: attribute '${attrName}' on '${nodeId}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
               else
-                fn (readerSelf nodeId) nodeId;
+                fn (
+                  if acc != null then
+                    bindReader declaredRelation acc nodeId
+                  else if runAttributes ? ${ntaChannel} then
+                    bindReader declaredRelation (self // { getNta = getNtaAt self nodeId; }) nodeId
+                  else
+                    bindReader declaredRelation self nodeId
+                ) nodeId;
 
             # ── THE DEMAND RULE (three cases), THE ADMISSION, AND THE SHARED ROUND ──
             #
@@ -1654,16 +1730,9 @@ let
                       throw "gen-scope: the `_eval` cache for '${attrName}' on '${childNode.id or "<child>"}' is not readable inside an open circular round — a round's memo lives on the round's own accessor, and a value cached here would be an approximation wearing a final value's clothes. Read through `self.get`, which serves the round's current level."
                     ) runAttributes
                   else
-                    builtins.mapAttrs (attrName: fn: evalAttr childNode.id attrName fn) runAttributes;
+                    builtins.mapAttrs (evalAttr null childNode.id) runAttributes;
               };
-            # A child-bearing value wrapped at its depth: `mapAttrs` is lazy in values, so an `nta`
-            # group's key set is still forced alone.
-            wrapAt =
-              d: v:
-              if d <= 1 then builtins.mapAttrs (_: wrapChild) v else builtins.mapAttrs (_: wrapAt (d - 1)) v;
-            rootEval = prelude.mapAttrs (
-              id: _: builtins.mapAttrs (attrName: fn: evalAttr id attrName fn) runAttributes
-            ) roots;
+            rootEval = prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots;
 
             # ── THE PARENT CHAIN, GROUNDED BEFORE IT IS DESCENDED ──
             # `parseParent` names an id; nothing obliges that id to resolve. Handed straight to
@@ -1771,7 +1840,7 @@ let
                     if !round.open && n ? _eval then
                       n._eval.${attrName}
                     else
-                      evalAttr id attrName runAttributes.${attrName}
+                      evalAttr null id attrName runAttributes.${attrName}
                 )
               );
           in
@@ -1792,6 +1861,9 @@ let
                 builtins.seq (identifier "self.getRepresentative" id) (throw (repOnNonQuotient id attrName))
               else
                 demand "self.getRepresentative" id attrName;
+
+            # A body's reader binds this to its node (`applyAttr`); unbound, it refuses by name.
+            getNta = ntaUnbound;
 
             # --- Tier 2: Materialization (forces evaluation, memoized) ---
 
@@ -1961,6 +2033,9 @@ let
             # A child-bearing attribute is presented at depth one (`structural.flattenChildren`), the
             # shape the projection below reads; the others pass through unchanged.
             structuralAttributes =
+              let
+                structuralNamesAll = builtins.filter structural.structural (builtins.attrNames runAttributes);
+              in
               id: prelude.genAttrs structuralNamesAll (name: structural.flattenChildren name (self.get id name));
 
             # THE SAME PARTITION AS A RELATION — `id -> [id]`, which is the arity the record above is
@@ -2095,10 +2170,19 @@ let
                       debugCircular id fn s
                     else if builtins.isAttrs fn then
                       throw "gen-scope: attribute '${attrName}' on '${id}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
+                    else if runAttributes ? ${ntaChannel} then
+                      fn (s // { getNta = debugGetNta s id; }) id
                     else
                       fn s id;
               }
             );
+          # The production reader's `getNta`, on this evaluator's reader. There is no co-located
+          # cache here to answer from — a fresh accessor per read is what records the trace — so the
+          # child found in the host's product is read by the id its record carries, and the read
+          # lands in the trace like any other.
+          debugGetNta =
+            s: host: name: group: key: attrName:
+            s.get (ntaMember "`getNta`" (s.get host ntaChannel) host name group key).id attrName;
           debugCircular =
             id: decl: s:
             let
@@ -2139,6 +2223,7 @@ let
         in
         {
           inherit getTraced;
+          getNta = ntaUnbound;
 
           # The read path this accessor was reached along, as a value.
           trace = traceList;

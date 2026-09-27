@@ -184,10 +184,22 @@
           # U1-i — one memo per `nta` child attribute: four reads, one application.
           answers nta-memo "$libSrc" 1
           traceCount nta-memo 1
+          # U2.0-c — one evaluation per node (den-hoag-n6dh7 Unit 2.0): three children, each read
+          # through the host's record with `getNta` and by identifier, in either order, at depth 1
+          # and at depth 2 (the grandchild read inside its host's own body), apply their probe 3
+          # times; the live control reads by identifier through a second evaluation, 6.
+          for c in once-d1-record once-d1-id once-d2-record once-d2-id; do
+            answers "$c" "$libSrc" 6
+            traceCount "$c" 3
+          done
+          for c in once-d1-ctl once-d2-ctl; do
+            answers "$c" "$libSrc" 6
+            traceCount "$c" 6
+          done
 
           # 0/0 is a false pass: the runner must have executed every cell above.
-          [ "$ran" = "17" ] || die runner "expected 17 evaluations, ran $ran"
-          echo "tests-process: 17 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
+          [ "$ran" = "23" ] || die runner "expected 23 evaluations, ran $ran"
+          echo "tests-process: 23 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
         ''
         + ''
           cat "$out"

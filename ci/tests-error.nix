@@ -3462,6 +3462,108 @@ in
       };
     };
 
+  # ── `getNta`'s REFUSALS (den-hoag-n6dh7 Unit 2.0) ──
+  # One cell per refusal. An absent NTA, group or key is refused with `ntaLookup`'s `nta:` text,
+  # naming the host; an unknown or quotient attribute with `get`'s own text; and a reader bound to
+  # no node — the evaluation's record, or any reader of an evaluation running no `nta` channel —
+  # with its own. The value cells are `tests/nta.nix`'s U2.0 block.
+  config.flake.testsError.nta-getNta-refusals =
+    let
+      fx = import ./tests/_fixtures/nta.nix { inherit genScope; };
+      inherit (genScope) mintNtaId;
+      read =
+        evaluator: body:
+        (fx.nestWith evaluator {
+          reads = body;
+          q =
+            circular
+              {
+                carrier = {
+                  bottom = 0;
+                  leq = a: b: a <= b;
+                  height = 1;
+                  quotient = true;
+                };
+              }
+              (
+                _: _: _:
+                0
+              );
+        }).get
+          "r"
+          "reads";
+      err = msg: {
+        type = "ThrownError";
+        msg = exactly msg;
+      };
+      unbound = "gen-scope.nta: `getNta` reads the reading node's own `nta` children, so it is answered only on a body's reader in an evaluation whose kinds declare an NTA. Outside a body, read a child by its identifier with `get`.";
+    in
+    {
+      test-an-absent-nta-is-refused = {
+        expr = read genScope.eval (self: _: self.getNta "nope" "g" "b" "v");
+        expectedError = err "gen-scope.nta: `getNta`: host 'r' declares no NTA 'nope'";
+      };
+      test-an-absent-group-is-refused = {
+        expr = read genScope.eval (self: _: self.getNta "sub" "nog" "b" "v");
+        expectedError = err "gen-scope.nta: `getNta`: NTA 'sub' on host 'r' yields no group 'nog'";
+      };
+      test-an-absent-key-is-refused = {
+        expr = read genScope.eval (self: _: self.getNta "sub" "g" "nokey" "v");
+        expectedError = err "gen-scope.nta: `getNta`: NTA 'sub' on host 'r' yields group 'g' with no key 'nokey'";
+      };
+      # Depth 2: the host is itself an `nta` child, and the refusal names it.
+      test-an-absent-key-under-a-child-host-is-refused = {
+        expr =
+          (fx.nestWith genScope.eval {
+            inner = self: _: self.getNta "sub" "g" "nokey" "v";
+            reads = self: _: self.getNta "sub" "g" "a" "inner";
+          }).get
+            "r"
+            "reads";
+        expectedError = err "gen-scope.nta: `getNta`: NTA 'sub' on host '${mintNtaId "r" "sub" "g" "a"}' yields group 'g' with no key 'nokey'";
+      };
+      test-an-unknown-attribute-is-refused-by-get = {
+        expr = read genScope.eval (self: _: self.getNta "sub" "g" "b" "nosuch");
+        expectedError = err "gen-scope: unknown attribute 'nosuch' on node '${mintNtaId "r" "sub" "g" "b"}'";
+      };
+      test-a-quotient-attribute-is-refused-by-get = {
+        expr = read genScope.eval (self: _: self.getNta "sub" "g" "b" "q");
+        expectedError = err "gen-scope: self.get 'q' on '${mintNtaId "r" "sub" "g" "b"}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step. Read it with `getRepresentative`, which returns it tagged.";
+      };
+      test-the-evaluations-own-record-is-unbound = {
+        expr = (fx.nestWith genScope.eval { }).getNta "sub" "g" "b" "v";
+        expectedError = err unbound;
+      };
+      test-a-reader-in-an-evaluation-running-no-nta-is-unbound = {
+        expr =
+          (genScope.eval {
+            scope = {
+              nodes.r = {
+                id = "r";
+                parent = null;
+                decls = { };
+              };
+              nodeOrder = [ "r" ];
+            };
+            attributes = {
+              children = _: _: { };
+              reads = self: _: self.getNta "sub" "g" "b" "v";
+            };
+          }).get
+            "r"
+            "reads";
+        expectedError = err unbound;
+      };
+      test-evalDebug-refuses-an-absent-group = {
+        expr = read genScope.evalDebug (self: _: self.getNta "sub" "nog" "b" "v");
+        expectedError = err "gen-scope.nta: `getNta`: NTA 'sub' on host 'r' yields no group 'nog'";
+      };
+      test-evalDebugs-own-record-is-unbound = {
+        expr = (fx.nestWith genScope.evalDebug { }).getNta "sub" "g" "b" "v";
+        expectedError = err unbound;
+      };
+    };
+
   # den-hoag-7gp66 P1: the closed doors' shared checks, each message pinned to the byte on the real
   # path. Per door: a missing required field and a non-set argument refused naming the door; an
   # unknown field refused on an options or mixed door; an extra field ADMITTED on a record door (R5's

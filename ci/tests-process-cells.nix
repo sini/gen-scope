@@ -364,6 +364,93 @@ let
         )
       )
     );
+
+  # U2.0-c · one evaluation per node (den-hoag-n6dh7 Unit 2.0). Three children, each carrying one
+  # grandchild. A child (depth 1) or a grandchild (depth 2, read inside its host's own body) is read
+  # through the host's record with `getNta` AND by identifier, in either order, and its probe
+  # applies ONCE: n firings. The live control reads by identifier through a SECOND evaluation: 2n.
+  onceKeys = [
+    "a"
+    "b"
+    "c"
+  ];
+  onceAddr = at: {
+    attr = "defs";
+    def = 0;
+    inherit at;
+  };
+  # `_`: a distinct argument per call is a distinct evaluation with its own memo.
+  onceEval =
+    _:
+    evalLib.eval {
+      scope = {
+        nodes.h = {
+          id = "h";
+          type = "nest";
+          parent = null;
+          decls = { };
+        };
+        nodeOrder = [ "h" ];
+        kinds = mkKinds [
+          (mkKind {
+            name = "nest";
+            nta.sub = self: id: {
+              g =
+                if id == "h" then
+                  builtins.listToAttrs (
+                    map (k: {
+                      name = k;
+                      value = [ (onceAddr [ k ]) ];
+                    }) onceKeys
+                  )
+                else if builtins.head (self.get id "defs") ? s then
+                  { k = [ (onceAddr [ "s" ]) ]; }
+                else
+                  { };
+            };
+          })
+        ];
+      };
+      attributes = {
+        children = _: _: { };
+        defs =
+          self: id:
+          let
+            d = (self.node id).decls;
+          in
+          if d ? seed then
+            map (e: e.value) d.seed
+          else
+            [
+              (builtins.listToAttrs (
+                map (k: {
+                  name = k;
+                  value.s = { };
+                }) onceKeys
+              ))
+            ];
+        probe = _: _: builtins.trace "F1-PROBE" 1;
+        inner = self: _: self.getNta "sub" "g" "k" "probe";
+        viaD1 = self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "probe") 0 onceKeys;
+        viaD2 = self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "inner") 0 onceKeys;
+      };
+    };
+  onceChild = k: evalLib.mintNtaId "h" "sub" "g" k;
+  onceGrand = k: evalLib.mintNtaId (onceChild k) "sub" "g" "k";
+  once =
+    depth: recordFirst: split:
+    let
+      ev = onceEval 1;
+      evById = if split then onceEval 2 else ev;
+      viaRecord = ev.get "h" (if depth == 1 then "viaD1" else "viaD2");
+      byId = builtins.foldl' (
+        acc: k: acc + evById.get ((if depth == 1 then onceChild else onceGrand) k) "probe"
+      ) 0 onceKeys;
+    in
+    if recordFirst then
+      builtins.seq viaRecord (viaRecord + byId)
+    else
+      builtins.seq byId (viaRecord + byId);
 in
 if arm == "lrp2" then
   lrp2 (builtins.div 1 0)
@@ -404,5 +491,17 @@ else if arm == "nta-cyc-ctl" then
   (ntaCyc ntaConst evalLib.eval).get "h" "n"
 else if arm == "nta-memo" then
   ntaMemo
+else if arm == "once-d1-record" then
+  once 1 true false
+else if arm == "once-d1-id" then
+  once 1 false false
+else if arm == "once-d1-ctl" then
+  once 1 true true
+else if arm == "once-d2-record" then
+  once 2 true false
+else if arm == "once-d2-id" then
+  once 2 false false
+else if arm == "once-d2-ctl" then
+  once 2 true true
 else
   throw "tests-process-cells: unknown arm '${arm}'"
