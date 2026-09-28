@@ -301,27 +301,26 @@ let
   # ── the read arms, over a run that registers a subject and wires nothing ──
   # The k8s fixture cannot host this: every claim subject there is wired, so a subject drawn from it
   # is FOREIGN to the run rather than unwired, and the two arms would measure one case twice.
-  unwiredRun = s.resolveClaims {
-    kinds = s.mkKinds [
-      (s.mkKind {
-        name = "noWire";
-        resolve = c: _ctx: {
-          resources.${c.subject.name} = {
-            ok = true;
+  unwiredRun =
+    s.resolveClaims { }
+      (s.mkKinds [
+        (s.mkKind {
+          resolve = c: _ctx: {
+            resources.${c.subject.name} = {
+              ok = true;
+            };
           };
-        };
-      })
-    ];
-    claims = [
-      (s.mkClaim {
-        kind = "noWire";
-        subject = {
-          id_hash = "id-q";
-          name = "q";
-        };
-      })
-    ];
-  };
+        } "noWire")
+      ])
+      [
+        (s.mkClaim {
+          kind = "noWire";
+          subject = {
+            id_hash = "id-q";
+            name = "q";
+          };
+        })
+      ];
   unwiredSubject = {
     id_hash = "id-q";
   };

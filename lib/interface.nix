@@ -40,7 +40,7 @@ rec {
 
   # Both fields are REQUIRED and both are TOTAL. A defaulted `isClean` would make the absence
   # of a decision mean something, and what it meant would be invisible at the call site.
-  mkDecision = door "mkDecision" (
+  mkDecision = door.record "mkDecision" (
     { isClean, reusable }:
     {
       inherit isClean reusable;
@@ -86,7 +86,7 @@ rec {
   # `get` answers within the resolutional vocabulary; asked for a structural attribute it
   # RECOMPUTES rather than serving, which is the evaluator's own always-recompute branch and
   # not a check performed here.
-  mkFacade = door "mkFacade" (
+  mkFacade = door.record "mkFacade" (
     {
       get,
       nodeIds,
@@ -114,7 +114,7 @@ rec {
   # a production result and it is not a rule the plane must obey to get a correct answer. It is
   # the disagreement between what the plane names and what the vocabulary contains, reported as
   # a finding rather than left as silence.
-  decisionFindings = door "decisionFindings" (
+  decisionFindings = door.record "decisionFindings" (
     {
       decision,
       resolutional,

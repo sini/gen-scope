@@ -7,17 +7,20 @@ let
   mkAttrs = roots: {
     children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
     imports = self: id: (self.node id).decls.__edges.I or [ ];
-    vals = collectionAttr {
-      traverse = "neron";
-      extract = self: id: (self.node id).decls.val or null;
-    };
+    vals = collectionAttr { } "neron" (self: id: (self.node id).decls.val or null);
   };
 
   # --- Test 1: P-only chain (root → mid → leaf) ---
   pOnlyRoots = genScope.buildRoots {
     parentGraph = genScope.overlays [
-      (genScope.edge "leaf" "mid")
-      (genScope.edge "mid" "root")
+      (genScope.edge {
+        from = "leaf";
+        to = "mid";
+      })
+      (genScope.edge {
+        from = "mid";
+        to = "root";
+      })
     ];
     decls = {
       root.val = "root-val";
@@ -27,15 +30,19 @@ let
     types = { };
   };
   pOnlyResult = genScope.eval {
-    scope = pOnlyRoots;
-    attributes = mkAttrs pOnlyRoots;
     parseParent = id: (pOnlyRoots.nodes.${id} or { parent = null; }).parent;
-  };
+  } (mkAttrs pOnlyRoots) pOnlyRoots;
 
   # --- Test 2: I-edge graph (leaf imports dep; leaf → root via P) ---
   iEdgeRoots = genScope.buildRoots {
-    parentGraph = genScope.edge "leaf" "root";
-    importGraph = genScope.edge "leaf" "dep";
+    parentGraph = genScope.edge {
+      from = "leaf";
+      to = "root";
+    };
+    importGraph = genScope.edge {
+      from = "leaf";
+      to = "dep";
+    };
     decls = {
       root.val = "root-val";
       leaf.val = "leaf-val";
@@ -44,17 +51,24 @@ let
     types = { };
   };
   iEdgeResult = genScope.eval {
-    scope = iEdgeRoots;
-    attributes = mkAttrs iEdgeRoots;
     parseParent = id: (iEdgeRoots.nodes.${id} or { parent = null; }).parent;
-  };
+  } (mkAttrs iEdgeRoots) iEdgeRoots;
 
   # --- Test 3: Diamond dedup (leaf imports a and b; a also imports b) ---
   diamondRoots = genScope.buildRoots {
     importGraph = genScope.overlays [
-      (genScope.edge "leaf" "a")
-      (genScope.edge "leaf" "b")
-      (genScope.edge "a" "b")
+      (genScope.edge {
+        from = "leaf";
+        to = "a";
+      })
+      (genScope.edge {
+        from = "leaf";
+        to = "b";
+      })
+      (genScope.edge {
+        from = "a";
+        to = "b";
+      })
     ];
     decls = {
       leaf.val = "leaf-val";
@@ -64,17 +78,24 @@ let
     types = { };
   };
   diamondResult = genScope.eval {
-    scope = diamondRoots;
-    attributes = mkAttrs diamondRoots;
     parseParent = id: (diamondRoots.nodes.${id} or { parent = null; }).parent;
-  };
+  } (mkAttrs diamondRoots) diamondRoots;
 
   # --- Test 4: Parent has its own imports ---
   parentImportsRoots = genScope.buildRoots {
-    parentGraph = genScope.edge "leaf" "root";
+    parentGraph = genScope.edge {
+      from = "leaf";
+      to = "root";
+    };
     importGraph = genScope.overlays [
-      (genScope.edge "leaf" "leaf-dep")
-      (genScope.edge "root" "root-dep")
+      (genScope.edge {
+        from = "leaf";
+        to = "leaf-dep";
+      })
+      (genScope.edge {
+        from = "root";
+        to = "root-dep";
+      })
     ];
     decls = {
       leaf.val = "leaf-val";
@@ -85,10 +106,8 @@ let
     types = { };
   };
   parentImportsResult = genScope.eval {
-    scope = parentImportsRoots;
-    attributes = mkAttrs parentImportsRoots;
     parseParent = id: (parentImportsRoots.nodes.${id} or { parent = null; }).parent;
-  };
+  } (mkAttrs parentImportsRoots) parentImportsRoots;
 
   # --- Test 5: Root only (P-only chain queried at root) ---
   # Reuse pOnlyRoots/pOnlyResult, query at root
@@ -96,12 +115,24 @@ let
   # --- Test 6: Cycle — a imports b, b imports a, both children of root ---
   cycleRoots = genScope.buildRoots {
     parentGraph = genScope.overlays [
-      (genScope.edge "a" "root")
-      (genScope.edge "b" "root")
+      (genScope.edge {
+        from = "a";
+        to = "root";
+      })
+      (genScope.edge {
+        from = "b";
+        to = "root";
+      })
     ];
     importGraph = genScope.overlays [
-      (genScope.edge "a" "b")
-      (genScope.edge "b" "a")
+      (genScope.edge {
+        from = "a";
+        to = "b";
+      })
+      (genScope.edge {
+        from = "b";
+        to = "a";
+      })
     ];
     decls = {
       root = {
@@ -117,16 +148,20 @@ let
     types = { };
   };
   cycleResult = genScope.eval {
-    scope = cycleRoots;
-    attributes = mkAttrs cycleRoots;
     parseParent = id: (cycleRoots.nodes.${id} or { parent = null; }).parent;
-  };
+  } (mkAttrs cycleRoots) cycleRoots;
 
   # --- Test 7: Null skip — mid has no val field ---
   nullRoots = genScope.buildRoots {
     parentGraph = genScope.overlays [
-      (genScope.edge "leaf" "mid")
-      (genScope.edge "mid" "root")
+      (genScope.edge {
+        from = "leaf";
+        to = "mid";
+      })
+      (genScope.edge {
+        from = "mid";
+        to = "root";
+      })
     ];
     decls = {
       root = {
@@ -140,10 +175,8 @@ let
     types = { };
   };
   nullResult = genScope.eval {
-    scope = nullRoots;
-    attributes = mkAttrs nullRoots;
     parseParent = id: (nullRoots.nodes.${id} or { parent = null; }).parent;
-  };
+  } (mkAttrs nullRoots) nullRoots;
 in
 {
   flake.tests."neron-traverse" = {

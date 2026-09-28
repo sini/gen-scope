@@ -29,15 +29,14 @@ let
   leaf =
     name:
     mkKind {
-      inherit name;
       resolve = _: _: { };
-    };
+    } name;
   node =
     name: below:
     mkKind {
-      inherit name below;
+      inherit below;
       resolve = _: _: { };
-    };
+    } name;
 
   # ── FIXTURES ──
   # `levels` × `width`, every node at level i pointing at EVERY node at level i−1. Generated
@@ -410,28 +409,31 @@ in
     # And the record's other carried shapes: the registration-time pairing check and the input
     # form the previous construction accepted.
     test-dedup-key-without-fold-refused = {
-      expr = didThrow (mkKind {
-        name = "x";
-        dedupKey = _: "k";
-        resolve = _: _: { };
-      });
+      expr = didThrow (
+        mkKind {
+          dedupKey = _: "k";
+          resolve = _: _: { };
+        } "x"
+      );
       expected = true;
     };
     test-fold-without-dedup-key-refused = {
-      expr = didThrow (mkKind {
-        name = "x";
-        fold = _: vs: builtins.head vs;
-        resolve = _: _: { };
-      });
+      expr = didThrow (
+        mkKind {
+          fold = _: vs: builtins.head vs;
+          resolve = _: _: { };
+        } "x"
+      );
       expected = true;
     };
     test-control-both-dedup-key-and-fold-register = {
-      expr = succeeds (mkKind {
-        name = "x";
-        dedupKey = _: "k";
-        fold = _: vs: builtins.head vs;
-        resolve = _: _: { };
-      });
+      expr = succeeds (
+        mkKind {
+          dedupKey = _: "k";
+          fold = _: vs: builtins.head vs;
+          resolve = _: _: { };
+        } "x"
+      );
       expected = true;
     };
     # The attribute-set form is retired: an attribute set has no order for the fold to mint in.
@@ -549,11 +551,10 @@ in
       expr =
         builtins.attrNames
           (genScope.mkKinds [
-            (genScope.mkKind { name = "structural"; })
+            (genScope.mkKind { } "structural")
             (genScope.mkKind {
-              name = "host";
               below = [ "structural" ];
-            })
+            } "host")
           ]).kinds;
       expected = [
         "host"
@@ -563,11 +564,10 @@ in
     test-a-kind-with-no-resolver-takes-a-rank-like-any-other = {
       expr =
         (genScope.mkKinds [
-          (genScope.mkKind { name = "structural"; })
+          (genScope.mkKind { } "structural")
           (genScope.mkKind {
-            name = "host";
             below = [ "structural" ];
-          })
+          } "host")
         ]).depth;
       expected = {
         host = 1;
@@ -580,16 +580,14 @@ in
     test-control-demand-and-structural-kinds-rank-in-one-order = {
       expr =
         (genScope.mkKinds [
-          (genScope.mkKind { name = "leaf"; })
+          (genScope.mkKind { } "leaf")
           (genScope.mkKind {
-            name = "structural";
             below = [ "leaf" ];
-          })
+          } "structural")
           (genScope.mkKind {
-            name = "demanding";
             below = [ "structural" ];
             resolve = _: _: { };
-          })
+          } "demanding")
         ]).depth;
       expected = {
         demanding = 2;
@@ -607,10 +605,9 @@ in
       expr =
         builtins.attrNames
           (genScope.mkKind {
-            name = "host";
             below = [ "child" ];
             spawns.child = _self: _id: { };
-          }).spawns;
+          } "host").spawns;
       expected = [ "child" ];
     };
     # The refusal as a BOOLEAN, beside the message cell next door, because the two suites are read
@@ -622,10 +619,9 @@ in
       expr =
         !(builtins.tryEval (
           builtins.deepSeq (genScope.mkKind {
-            name = "host";
             below = [ "low" ];
             spawns.sideways = _self: _id: { };
-          }) null
+          } "host") null
         )).success;
       expected = true;
     };
@@ -633,9 +629,8 @@ in
       expr =
         !(builtins.tryEval (
           builtins.deepSeq (genScope.mkKind {
-            name = "host";
             spawns.child = _self: _id: { };
-          }) null
+          } "host") null
         )).success;
       expected = true;
     };

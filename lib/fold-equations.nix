@@ -26,7 +26,13 @@
   requireScope,
   requireDeclaredDependencies,
 }:
-builtins.mapAttrs (import ./door.nix { inherit prelude; }) {
+# `foldEquations { settings?; } { scope; parseParent; schedule; declaredDependencies; }`
+# (den-hoag-7gp66 P2, R7): the one option leaves to a closed set first, and the four operands stay ONE
+# open record — R7 (a): the scope is the subject, and the schedule, the parent reading and the
+# declared relation are three configuration operands with no order among them a caller could read
+# off the call. The record is guarded against the options step, so `settings` given on it is refused
+# by name rather than dropped.
+builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
   foldEquations =
     {
       scope,

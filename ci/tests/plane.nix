@@ -38,12 +38,11 @@ let
   planeKinds =
     spawn:
     genScope.mkKinds [
-      (genScope.mkKind { name = "d"; })
+      (genScope.mkKind { } "d")
       (genScope.mkKind {
-        name = "t";
         below = [ "d" ];
         spawns.d = spawn;
-      })
+      } "t")
     ];
   noSpawn = _self: _id: { };
   poisonSpawn =
@@ -96,14 +95,8 @@ let
     label = self: id: "cached-${id}";
   };
 
-  cold = genScope.eval {
-    scope = planeScope;
-    attributes = attrs;
-  };
-  prior = genScope.eval {
-    scope = poisonedScope;
-    attributes = priorAttrs;
-  };
+  cold = genScope.eval { } attrs planeScope;
+  prior = genScope.eval { } priorAttrs poisonedScope;
 
   # A graph that actually materializes a child, for the facade-residual cells: `children` is
   # what hands a raw node record back through `get`. Both levels are registered and the channel
@@ -126,24 +119,21 @@ let
     label = self: id: "fresh-${id}";
   };
 
-  childCold = genScope.eval {
-    scope = childScope;
-    attributes = childAttrs;
-  };
+  childCold = genScope.eval { } childAttrs childScope;
 
   # The same program answering values a cold run never produces, so anything served from it is
   # visible wherever it surfaces — including through a channel that bypasses `get`.
-  childPrior = genScope.eval {
-    scope = childScope;
-    attributes = childAttrs // {
+  childPrior = genScope.eval { } (
+    childAttrs
+    // {
       "edges-owns" = self: id: [ "POISON-EDGE" ];
       label = self: id: "cached-${id}";
-    };
-  };
+    }
+  ) childScope;
 
   # Everything clean, reusing one STRUCTURAL and one RESOLUTIONAL name, so both can be read
   # back through the same residual channel in one fixture.
-  childWarm = genScope.evalWarm {
+  childWarm = genScope.evalWarm { } {
     scope = childScope;
     attributes = childAttrs;
     prior = childPrior;
@@ -159,7 +149,7 @@ let
   # One warm evaluation per row, everything clean, reusing exactly the named attributes.
   row =
     names:
-    genScope.evalWarm {
+    genScope.evalWarm { } {
       scope = planeScope;
       inherit prior;
       attributes = attrs;
@@ -172,7 +162,7 @@ let
   # A decision whose attribute NAME is constructed during evaluation, from graph data — the
   # shape `followEdge` and `collectionAttr`'s `label:` traversal issue. No enumeration could
   # have anticipated it.
-  dynamicRow = genScope.evalWarm {
+  dynamicRow = genScope.evalWarm { } {
     scope = planeScope;
     inherit prior;
     attributes = attrs;
@@ -435,13 +425,13 @@ in
     test-structural-attributes-force-no-resolutional-attribute = {
       expr =
         let
-          e = genScope.eval {
-            scope = planeScope;
-            attributes = attrs // {
+          e = genScope.eval { } (
+            attrs
+            // {
               label = self: id: throw "resolutional attribute forced";
               owned = self: id: throw "resolutional attribute forced";
-            };
-          };
+            }
+          ) planeScope;
           s = e.structuralAttributes "a";
         in
         {
@@ -573,13 +563,11 @@ in
         let
           r = builtins.tryEval (
             (genScope.eval {
-              scope = planeScope;
-              attributes = attrs;
               decision = genScope.mkDecision {
                 isClean = _: true;
                 reusable = _: [ "label" ];
               };
-            }).get
+            } attrs planeScope).get
               "a"
               "label"
           );
@@ -599,8 +587,6 @@ in
     test-provenance-is-carried-to-the-caller = {
       expr =
         (genScope.eval {
-          scope = planeScope;
-          attributes = attrs;
           provenance = [
             {
               fact = "input-past-verified-bound";
@@ -608,7 +594,7 @@ in
               bound = 32;
             }
           ];
-        }).provenance;
+        } attrs planeScope).provenance;
       expected = [
         {
           fact = "input-past-verified-bound";
@@ -619,13 +605,17 @@ in
     };
     test-provenance-survives-the-warm-entry-point = {
       expr =
-        (genScope.evalWarm {
-          scope = planeScope;
-          inherit prior;
-          attributes = attrs;
-          decision = genScope.coldDecision;
-          provenance = [ { fact = "carried"; } ];
-        }).provenance;
+        (genScope.evalWarm
+          {
+            provenance = [ { fact = "carried"; } ];
+          }
+          {
+            scope = planeScope;
+            inherit prior;
+            attributes = attrs;
+            decision = genScope.coldDecision;
+          }
+        ).provenance;
       expected = [ { fact = "carried"; } ];
     };
   };
@@ -636,7 +626,7 @@ in
     test-cold-decision-matches-plain-eval = {
       expr =
         let
-          w = genScope.evalWarm {
+          w = genScope.evalWarm { } {
             scope = planeScope;
             inherit prior;
             attributes = attrs;

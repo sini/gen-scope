@@ -12,88 +12,57 @@
 { genScope, ... }:
 let
   # a → b → c, unary throughout.
-  unary = genScope.mkProgram {
-    rules = [
-      { head = "a"; }
-      {
-        head = "b";
-        pos = [ "a" ];
-      }
-      {
-        head = "c";
-        pos = [ "b" ];
-      }
-    ];
-  };
+  unary = genScope.mkProgram [
+    { head = "a"; }
+    {
+      head = "b";
+      pos = [ "a" ];
+    }
+    {
+      head = "c";
+      pos = [ "b" ];
+    }
+  ];
   # The same derived set, reached through a binary body.
-  conjunctive = genScope.mkProgram {
-    rules = [
-      { head = "a"; }
-      { head = "b"; }
-      {
-        head = "c";
-        pos = [
-          "a"
-          "b"
-        ];
-      }
-      {
-        head = "d";
-        pos = [
-          "c"
-          "unsupported"
-        ];
-      }
-    ];
-  };
+  conjunctive = genScope.mkProgram [
+    { head = "a"; }
+    { head = "b"; }
+    {
+      head = "c";
+      pos = [
+        "a"
+        "b"
+      ];
+    }
+    {
+      head = "d";
+      pos = [
+        "c"
+        "unsupported"
+      ];
+    }
+  ];
   derivedOf = m: builtins.attrNames m.derived;
 
   # The door and both arms take a STARTING SET, and these cells are about the un-seeded case, so
   # the empty seed is written ONCE here rather than at every call. The seeded case has its own
   # suite (ci/tests/interpretation.nix), where the seed is the subject rather than a constant.
-  lmDoor =
-    program:
-    genScope.leastModel {
-      inherit program;
-      seed = { };
-    };
-  lmUnary =
-    program:
-    genScope.leastModelUnary {
-      inherit program;
-      seed = { };
-    };
-  lmRounds =
-    program:
-    genScope.leastModelRounds {
-      inherit program;
-      seed = { };
-    };
+  lmDoor = program: genScope.leastModel { } program;
+  lmUnary = program: genScope.leastModelUnary { } program;
+  lmRounds = program: genScope.leastModelRounds { } program;
 
   # ── THE SEEDED FIXTURE, WHERE THE SEED IS THE SUBJECT ──
   # `q :- a.` is the smallest program whose answer MOVES with the starting set, so a seed that is
   # admitted is visibly admitted rather than merely not refused. `atoms = [ "q" "a" ]`, which is
   # what makes `offbase` below off-base.
-  seedable = genScope.mkProgram {
-    rules = [
-      {
-        head = "q";
-        pos = [ "a" ];
-      }
-    ];
-  };
-  seededUnary =
-    seed:
-    genScope.leastModelUnary {
-      program = seedable;
-      inherit seed;
-    };
-  seededRounds =
-    seed:
-    genScope.leastModelRounds {
-      program = seedable;
-      inherit seed;
-    };
+  seedable = genScope.mkProgram [
+    {
+      head = "q";
+      pos = [ "a" ];
+    }
+  ];
+  seededUnary = seed: genScope.leastModelUnary seed seedable;
+  seededRounds = seed: genScope.leastModelRounds seed seedable;
 in
 {
   flake.tests."engine-least-model" = {

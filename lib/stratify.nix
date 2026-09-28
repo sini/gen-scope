@@ -111,7 +111,7 @@ let
     tail
     ;
 in
-builtins.mapAttrs door {
+builtins.mapAttrs door.record {
   # `describe` REACHES THIS FILE AND STOPS. It is never handed to `advance`, it appears in no field
   # of the result, and no line below applies it: it is a declaration in the signature and has no
   # runtime role here. What it declares is that an instance placing items in strata owes a way to

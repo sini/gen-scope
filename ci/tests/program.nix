@@ -10,23 +10,21 @@
 # property of.
 { genScope, ... }:
 let
-  p = genScope.mkProgram {
-    rules = [
-      {
-        head = "z";
-        pos = [ "b" ];
-        neg = [ "q" ];
-      }
-      { head = "b"; }
-      {
-        head = "z";
-        pos = [
-          "b"
-          "r"
-        ];
-      }
-    ];
-  };
+  p = genScope.mkProgram [
+    {
+      head = "z";
+      pos = [ "b" ];
+      neg = [ "q" ];
+    }
+    { head = "b"; }
+    {
+      head = "z";
+      pos = [
+        "b"
+        "r"
+      ];
+    }
+  ];
 in
 {
   flake.tests."engine-program" = {
@@ -56,16 +54,14 @@ in
     # routes the other way, so the discriminator is being read rather than a constant returned.
     test-a-two-literal-rule-with-one-positive-literal-is-unary = {
       expr =
-        (genScope.mkProgram {
-          rules = [
-            { head = "b"; }
-            {
-              head = "z";
-              pos = [ "b" ];
-              neg = [ "q" ];
-            }
-          ];
-        }).unaryBodies;
+        (genScope.mkProgram [
+          { head = "b"; }
+          {
+            head = "z";
+            pos = [ "b" ];
+            neg = [ "q" ];
+          }
+        ]).unaryBodies;
       expected = true;
     };
     # The door's accessor: nodes, and an edge function carrying BOTH bodies unsigned and deduped
@@ -107,7 +103,7 @@ in
     # Both bodies default to empty because a rule with neither is a FACT — the base case of the
     # least model, not an omission.
     test-a-bodyless-rule-is-a-fact = {
-      expr = genScope.mkRule { head = "f"; };
+      expr = genScope.mkRule { } "f";
       expected = {
         head = "f";
         pos = [ ];

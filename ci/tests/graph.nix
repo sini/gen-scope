@@ -18,7 +18,10 @@
     };
 
     test-edge = {
-      expr = genScope.edge "a" "b";
+      expr = genScope.edge {
+        from = "a";
+        to = "b";
+      };
       expected = {
         vertices = [
           "a"
@@ -42,7 +45,19 @@
     };
 
     test-overlay-edges = {
-      expr = (genScope.overlay (genScope.edge "a" "b") (genScope.edge "c" "d")).edges;
+      expr =
+        (genScope.overlay
+          (genScope.edge {
+            from = "a";
+            to = "b";
+          })
+          (
+            genScope.edge {
+              from = "c";
+              to = "d";
+            }
+          )
+        ).edges;
       expected = [
         {
           from = "a";
@@ -56,7 +71,11 @@
     };
 
     test-connect-cross-product = {
-      expr = (genScope.connect (genScope.vertex "a") (genScope.vertex "b")).edges;
+      expr =
+        (genScope.connect {
+          from = (genScope.vertex "a");
+          to = (genScope.vertex "b");
+        }).edges;
       expected = [
         {
           from = "a";
@@ -68,18 +87,20 @@
     test-connect-multi = {
       expr =
         builtins.length
-          (genScope.connect
-            (genScope.vertices [
-              "a"
-              "b"
-            ])
-            (
+          (genScope.connect {
+            from = (
+              genScope.vertices [
+                "a"
+                "b"
+              ]
+            );
+            to = (
               genScope.vertices [
                 "c"
                 "d"
               ]
-            )
-          ).edges;
+            );
+          }).edges;
       expected = 4;
     };
 
@@ -175,7 +196,12 @@
     };
 
     test-gmap = {
-      expr = genScope.gmap (x: "${x}-mapped") (genScope.edge "a" "b");
+      expr = genScope.gmap (x: "${x}-mapped") (
+        genScope.edge {
+          from = "a";
+          to = "b";
+        }
+      );
       expected = {
         vertices = [
           "a-mapped"
@@ -208,7 +234,13 @@
     };
 
     test-transpose = {
-      expr = (genScope.transpose (genScope.edge "a" "b")).edges;
+      expr =
+        (genScope.transpose (
+          genScope.edge {
+            from = "a";
+            to = "b";
+          }
+        )).edges;
       expected = [
         {
           from = "b";
@@ -281,22 +313,42 @@
     };
 
     test-hasVertex-true = {
-      expr = genScope.hasVertex "a" (genScope.edge "a" "b");
+      expr = genScope.hasVertex "a" (
+        genScope.edge {
+          from = "a";
+          to = "b";
+        }
+      );
       expected = true;
     };
 
     test-hasVertex-false = {
-      expr = genScope.hasVertex "c" (genScope.edge "a" "b");
+      expr = genScope.hasVertex "c" (
+        genScope.edge {
+          from = "a";
+          to = "b";
+        }
+      );
       expected = false;
     };
 
     test-hasEdge-true = {
-      expr = genScope.hasEdge "a" "b" (genScope.edge "a" "b");
+      expr = genScope.hasEdge "a" "b" (
+        genScope.edge {
+          from = "a";
+          to = "b";
+        }
+      );
       expected = true;
     };
 
     test-hasEdge-false = {
-      expr = genScope.hasEdge "b" "a" (genScope.edge "a" "b");
+      expr = genScope.hasEdge "b" "a" (
+        genScope.edge {
+          from = "a";
+          to = "b";
+        }
+      );
       expected = false;
     };
 

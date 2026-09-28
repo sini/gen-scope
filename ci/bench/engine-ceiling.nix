@@ -119,8 +119,8 @@ let
 
   # A chain of `n` atoms whose bodies are BINARY, so the program routes to the round loop and
   # the loop runs one round per atom.
-  roundsProgram = s.mkProgram {
-    rules = map (
+  roundsProgram = s.mkProgram (
+    map (
       i:
       if i == 0 then
         { head = pad "a" i; }
@@ -132,12 +132,12 @@ let
             (pad "a" 0)
           ];
         }
-    ) (builtins.genList (i: i) n);
-  };
+    ) (builtins.genList (i: i) n)
+  );
 
   # A negation chain: the alternating fixpoint's outer loop runs d/2 + 2 rounds on it.
-  outerProgram = s.mkProgram {
-    rules = map (
+  outerProgram = s.mkProgram (
+    map (
       i:
       if i == 0 then
         { head = pad "a" i; }
@@ -146,8 +146,8 @@ let
           head = pad "a" i;
           neg = [ (pad "a" (i - 1)) ];
         }
-    ) (builtins.genList (i: i) n);
-  };
+    ) (builtins.genList (i: i) n)
+  );
 in
 if arm == "forced" then
   run s.forceFields "operator"
@@ -162,10 +162,7 @@ else if arm == "tryUnforced" then
   builtins.tryEval (run (_: null) "operator")
 else if arm == "rounds" then
   let
-    m = s.leastModelRounds {
-      program = s.reduct roundsProgram { };
-      seed = { };
-    };
+    m = s.leastModelRounds { } (s.reduct roundsProgram { });
   in
   builtins.deepSeq m.derived {
     inherit (m) converged;
@@ -173,43 +170,36 @@ else if arm == "rounds" then
   }
 else if arm == "outer" then
   let
-    m = s.wellFoundedModel {
-      program = outerProgram;
-      interpretation = [ ];
-    };
+    m = s.wellFoundedModel [ ] outerProgram;
   in
   builtins.deepSeq m.trueAtoms {
     inherit (m) converged outerRounds arm;
     true' = prelude.length m.trueAtoms;
   }
 else if arm == "refuseUnknownField" then
-  # `mkRule`'s unknown field is refused by the shared check (`lib/door.nix`), a named `throw` the
-  # suite contains (`ci/tests/doors.nix`) and whose text it pins (`ci/tests-error.nix`, `doors`).
-  # This arm reads the same text off the exit, beside the aborts above.
+  # `mkRule`'s unknown option is refused by its options door (`lib/door.nix`), a named `throw` the
+  # suite contains (`ci/tests/door-checks.nix`) and whose text it pins (`ci/tests-error.nix`,
+  # `door-checks`). This arm reads the same text off the exit, beside the aborts above.
   builtins.deepSeq (s.mkRule {
-    head = "f";
     negs = [ "x" ];
-  }) 1
+  } "f") 1
 else if arm == "refuseConjunctiveOnUnaryArm" then
   # The unary arm's refusal IS catchable, so the suite pins that it fires. What the suite cannot
   # read is the MESSAGE — `tryEval` discards it — and a refusal that does not name the surface
   # and the offending rule is not a named refusal. That text is read here.
-  builtins.deepSeq (s.leastModelUnary {
-    seed = { };
-    program = s.mkProgram {
-      rules = [
-        { head = "a"; }
-        { head = "b"; }
-        {
-          head = "c";
-          pos = [
-            "a"
-            "b"
-          ];
-        }
-      ];
-    };
-  }) 1
+  builtins.deepSeq (s.leastModelUnary { } (
+    s.mkProgram [
+      { head = "a"; }
+      { head = "b"; }
+      {
+        head = "c";
+        pos = [
+          "a"
+          "b"
+        ];
+      }
+    ]
+  )) 1
 else if arm == "okControl" then
   1
 else if arm == "catchControl" then

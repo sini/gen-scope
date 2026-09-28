@@ -66,7 +66,6 @@
 # on the program's own body arity and never on a caller's request.
 { prelude }:
 let
-  door = import ./door.nix { inherit prelude; };
   # THE FORCING DISCIPLINE, WRITTEN SO IT CANNOT GO PARTIAL. `foldl'` forces its accumulator to
   # weak head normal form, which for a record is the record and not its fields — so a field
   # written every round and read in none accumulates one update thunk per round, and forcing that
@@ -264,7 +263,10 @@ in
     armFor
     armNames
     ;
-  leastModel = door "leastModel" leastModel;
-  leastModelUnary = door "leastModelUnary" leastModelUnary;
-  leastModelRounds = door "leastModelRounds" leastModelRounds;
+  # Positional (den-hoag-7gp66 P2, R7 rule 4): `leastModel seed program`. The model is the
+  # program's, so the program is the subject and goes last; the seed is the configuration the model
+  # is taken under — the order the family's `solve interpretation program` keeps.
+  leastModel = seed: program: leastModel { inherit program seed; };
+  leastModelUnary = seed: program: leastModelUnary { inherit program seed; };
+  leastModelRounds = seed: program: leastModelRounds { inherit program seed; };
 }

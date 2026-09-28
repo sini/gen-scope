@@ -14,13 +14,16 @@
 let
   # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
   # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
-  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { } name) names);
 
   inherit (genScope) foldEquations;
 
   roots = genScope.buildRoots {
     kinds = flatKinds [ "host" ];
-    parentGraph = genScope.edge "child" "parent";
+    parentGraph = genScope.edge {
+      from = "child";
+      to = "parent";
+    };
     decls = {
       parent = {
         v = 10;
@@ -82,7 +85,7 @@ let
     inherit equations;
   };
 
-  ctx = foldEquations {
+  ctx = foldEquations { } {
     scope = roots;
     inherit schedule;
     parseParent = id: roots.nodes.${id}.parent or null;
@@ -92,7 +95,7 @@ let
   # The same fold over a NON-EMPTY relation, which is what makes the trace cells below
   # discriminating: against the empty relation every deps list is empty and a derivation that
   # dropped its argument entirely would read identically to one that used it.
-  edgedCtx = foldEquations {
+  edgedCtx = foldEquations { } {
     scope = roots;
     inherit schedule;
     parseParent = id: roots.nodes.${id}.parent or null;
@@ -278,7 +281,7 @@ in
     # walks them, so a CYCLIC declaration resolves exactly as an acyclic one does.
     test-cyclic-declared-dependencies-leave-the-cold-path-alone = {
       expr =
-        (foldEquations {
+        (foldEquations { } {
           scope = roots;
           inherit schedule;
           parseParent = id: roots.nodes.${id}.parent or null;
@@ -296,24 +299,28 @@ in
     # schedule whose gate refuses gets the refusal here, where they made the call.
     test-a-throwing-schedule-is-refused-at-the-entry = {
       expr =
-        (builtins.tryEval (foldEquations {
-          scope = roots;
-          parseParent = _: null;
-          declaredDependencies = contracted { };
-          schedule = throw "the gate refused this grammar";
-        })).success;
+        (builtins.tryEval (
+          foldEquations { } {
+            scope = roots;
+            parseParent = _: null;
+            declaredDependencies = contracted { };
+            schedule = throw "the gate refused this grammar";
+          }
+        )).success;
       expected = false;
     };
     # The control beside it: the same expression against a schedule that does not throw. Without it
     # the cell above passes against an entry that refuses everything.
     test-control-a-schedule-that-does-not-throw-is-not-refused = {
       expr =
-        (builtins.tryEval (foldEquations {
-          scope = roots;
-          inherit schedule;
-          parseParent = _: null;
-          declaredDependencies = contracted { };
-        })).success;
+        (builtins.tryEval (
+          foldEquations { } {
+            scope = roots;
+            inherit schedule;
+            parseParent = _: null;
+            declaredDependencies = contracted { };
+          }
+        )).success;
       expected = true;
     };
 

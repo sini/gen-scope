@@ -2,7 +2,7 @@
 let
   # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
   # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
-  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { } name) names);
 
   inherit (genScope)
     parent
@@ -22,9 +22,18 @@ let
       "user"
     ];
     parentGraph = genScope.overlays [
-      (genScope.edge "a" "root")
-      (genScope.edge "b" "root")
-      (genScope.edge "c" "a")
+      (genScope.edge {
+        from = "a";
+        to = "root";
+      })
+      (genScope.edge {
+        from = "b";
+        to = "root";
+      })
+      (genScope.edge {
+        from = "c";
+        to = "a";
+      })
     ];
     importGraph = genScope.empty;
     decls = {
@@ -41,14 +50,16 @@ let
     };
   };
 
-  result = genScope.eval {
-    scope = roots;
-    attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-      imports = self: id: [ ];
-    };
-    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
-  };
+  result =
+    genScope.eval
+      {
+        parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
+      }
+      {
+        children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+        imports = self: id: [ ];
+      }
+      roots;
 in
 {
   flake.tests."queries" = {

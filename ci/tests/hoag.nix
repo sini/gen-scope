@@ -2,7 +2,7 @@
 let
   # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
   # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
-  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { } name) names);
 
   # Multi-level: env → host → user
   roots = genScope.buildRoots {
@@ -12,9 +12,18 @@ let
       "user"
     ];
     parentGraph = genScope.overlays [
-      (genScope.edge "host1" "env")
-      (genScope.edge "user1" "host1")
-      (genScope.edge "user2" "host1")
+      (genScope.edge {
+        from = "host1";
+        to = "env";
+      })
+      (genScope.edge {
+        from = "user1";
+        to = "host1";
+      })
+      (genScope.edge {
+        from = "user2";
+        to = "host1";
+      })
     ];
     importGraph = genScope.empty;
     decls = {
@@ -39,20 +48,22 @@ let
     };
   };
 
-  result = genScope.eval {
-    scope = roots;
-    attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-      imports = self: id: [ ];
-      label =
-        self: id:
-        let
-          node = self.node id;
-        in
-        node.decls.hostname or node.decls.username or node.decls.name or id;
-    };
-    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
-  };
+  result =
+    genScope.eval
+      {
+        parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
+      }
+      {
+        children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+        imports = self: id: [ ];
+        label =
+          self: id:
+          let
+            node = self.node id;
+          in
+          node.decls.hostname or node.decls.username or node.decls.name or id;
+      }
+      roots;
 
   # ── DERIVED CHILDREN: THE EXPANSION IS DECLARED ON THE KIND IT EXPANDS FROM ──
   # `cluster` expands into `proxy` and says so at registration, where `proxy` must already be one
@@ -60,10 +71,9 @@ let
   # produce anything else. The builder is written under the key naming what it produces and the
   # substrate stamps `type` from that key: nothing in the body chooses a kind.
   proxyKinds = genScope.mkKinds [
-    (genScope.mkKind { name = "proxy"; })
-    (genScope.mkKind { name = "service"; })
+    (genScope.mkKind { } "proxy")
+    (genScope.mkKind { } "service")
     (genScope.mkKind {
-      name = "cluster";
       below = [ "proxy" ];
       spawns = {
         proxy =
@@ -84,11 +94,14 @@ let
           else
             { };
       };
-    })
+    } "cluster")
   ];
 
   proxyRoots = genScope.buildRoots {
-    parentGraph = genScope.edge "svc" "cluster";
+    parentGraph = genScope.edge {
+      from = "svc";
+      to = "cluster";
+    };
     importGraph = genScope.empty;
     kinds = proxyKinds;
     decls = {
@@ -105,58 +118,61 @@ let
     };
   };
 
-  proxyResult = genScope.eval {
-    scope = proxyRoots;
-    attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) proxyRoots.nodes;
-      imports = self: id: [ ];
-      port = self: id: (self.node id).decls.port or null;
-    };
-    parseParent =
-      id:
-      if proxyRoots.nodes ? ${id} then
-        proxyRoots.nodes.${id}.parent
-      else
-        # Derived children: parse parent from id suffix
-        let
-          parts = lib.splitString "-proxy" id;
-        in
-        if builtins.length parts > 1 then builtins.head parts else null;
-  };
+  proxyResult =
+    genScope.eval
+      {
+        parseParent =
+          id:
+          if proxyRoots.nodes ? ${id} then
+            proxyRoots.nodes.${id}.parent
+          else
+            # Derived children: parse parent from id suffix
+            let
+              parts = lib.splitString "-proxy" id;
+            in
+            if builtins.length parts > 1 then builtins.head parts else null;
+      }
+      {
+        children = self: id: lib.filterAttrs (_: n: n.parent == id) proxyRoots.nodes;
+        imports = self: id: [ ];
+        port = self: id: (self.node id).decls.port or null;
+      }
+      proxyRoots;
 
   # A builder that records what its handle SERVES: the observation rides the spawned child's own
   # `decls`, so the measurement is taken at the one position the handle exists for.
   spawnHandleObs =
-    (genScope.eval {
-      scope = genScope.buildRoots {
-        parentGraph = genScope.vertex "h";
-        importGraph = genScope.empty;
-        decls.h = { };
-        types.h = "host";
-        kinds = genScope.mkKinds [
-          (genScope.mkKind { name = "low"; })
-          (genScope.mkKind {
-            name = "host";
-            below = [ "low" ];
-            spawns = {
-              low = handle: id: {
-                "${id}-obs" = {
-                  id = "${id}-obs";
-                  decls = {
-                    handleNames = builtins.attrNames handle;
-                    nodeRecordNames = builtins.attrNames (handle.node id);
+    (genScope.eval { }
+      {
+        children = _self: _id: { };
+        imports = _self: _id: [ ];
+      }
+      (
+        genScope.buildRoots {
+          parentGraph = genScope.vertex "h";
+          importGraph = genScope.empty;
+          decls.h = { };
+          types.h = "host";
+          kinds = genScope.mkKinds [
+            (genScope.mkKind { } "low")
+            (genScope.mkKind {
+              below = [ "low" ];
+              spawns = {
+                low = handle: id: {
+                  "${id}-obs" = {
+                    id = "${id}-obs";
+                    decls = {
+                      handleNames = builtins.attrNames handle;
+                      nodeRecordNames = builtins.attrNames (handle.node id);
+                    };
                   };
                 };
               };
-            };
-          })
-        ];
-      };
-      attributes = {
-        children = _self: _id: { };
-        imports = _self: _id: [ ];
-      };
-    }).node
+            } "host")
+          ];
+        }
+      )
+    ).node
       "h-obs";
 in
 {
@@ -271,14 +287,11 @@ in
     test-a-hand-written-spawn-attribute-is-refused = {
       expr =
         !(builtins.tryEval (
-          (genScope.eval {
-            scope = proxyRoots;
-            attributes = {
-              children = _self: _id: { };
-              imports = _self: _id: [ ];
-              derived-children = _self: _id: { };
-            };
-          }).get
+          (genScope.eval { } {
+            children = _self: _id: { };
+            imports = _self: _id: [ ];
+            derived-children = _self: _id: { };
+          } proxyRoots).get
             "cluster"
             "children"
         )).success;
@@ -292,9 +305,8 @@ in
     test-a-builder-writing-its-own-type-is-refused =
       let
         kinds = genScope.mkKinds [
-          (genScope.mkKind { name = "low"; })
+          (genScope.mkKind { } "low")
           (genScope.mkKind {
-            name = "high";
             below = [ "low" ];
             spawns.low = _self: id: {
               "${id}-c" = {
@@ -304,7 +316,7 @@ in
                 decls = { };
               };
             };
-          })
+          } "high")
         ];
         scope = genScope.buildRoots {
           inherit kinds;
@@ -316,13 +328,10 @@ in
         expr =
           !(builtins.tryEval (
             builtins.deepSeq
-              (genScope.eval {
-                inherit scope;
-                attributes = {
-                  children = _self: _id: { };
-                  imports = _self: _id: [ ];
-                };
-              }).allNodes
+              (genScope.eval { } {
+                children = _self: _id: { };
+                imports = _self: _id: [ ];
+              } scope).allNodes
               null
           )).success;
         expected = true;
@@ -334,9 +343,8 @@ in
     test-control-the-same-spawn-without-a-written-type-materializes =
       let
         kinds = genScope.mkKinds [
-          (genScope.mkKind { name = "low"; })
+          (genScope.mkKind { } "low")
           (genScope.mkKind {
-            name = "high";
             below = [ "low" ];
             spawns.low = _self: id: {
               "${id}-c" = {
@@ -345,20 +353,17 @@ in
                 decls = { };
               };
             };
-          })
+          } "high")
         ];
         scope = genScope.buildRoots {
           inherit kinds;
           parentGraph = genScope.vertex "h";
           types.h = "high";
         };
-        ev = genScope.eval {
-          inherit scope;
-          attributes = {
-            children = _self: _id: { };
-            imports = _self: _id: [ ];
-          };
-        };
+        ev = genScope.eval { } {
+          children = _self: _id: { };
+          imports = _self: _id: [ ];
+        } scope;
       in
       {
         expr = (ev.node "h-c").type;

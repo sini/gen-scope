@@ -13,7 +13,7 @@
 let
   # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
   # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
-  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { } name) names);
 
   # Declared z, y, b, a — against a codepoint a, b, root, y, z.
   declared = [
@@ -22,11 +22,25 @@ let
     "b"
     "a"
   ];
-  pg = genScope.overlays (map (v: genScope.edge v "root") declared);
+  pg = genScope.overlays (
+    map (
+      v:
+      genScope.edge {
+        from = v;
+        to = "root";
+      }
+    ) declared
+  );
 
   # Two labelled dimensions, each declaring its vertices reverse-alphabetically.
-  gM = genScope.edge "n" "m";
-  gN = genScope.edge "d" "c";
+  gM = genScope.edge {
+    from = "n";
+    to = "m";
+  };
+  gN = genScope.edge {
+    from = "d";
+    to = "c";
+  };
   contribution = label: graph: { inherit label graph; };
 
   ordered = genScope.buildRoots {
@@ -53,32 +67,32 @@ let
 
   # The evaluator fixtures: two importers of one target, declared order ≠ codepoint.
   importers = genScope.overlays [
-    (genScope.edge "z" "t")
-    (genScope.edge "m" "t")
+    (genScope.edge {
+      from = "z";
+      to = "t";
+    })
+    (genScope.edge {
+      from = "m";
+      to = "t";
+    })
   ];
   agreeing = genScope.overlays [
-    (genScope.edge "m" "t")
-    (genScope.edge "z" "t")
+    (genScope.edge {
+      from = "m";
+      to = "t";
+    })
+    (genScope.edge {
+      from = "z";
+      to = "t";
+    })
   ];
   attrs = {
     children = _self: _id: { };
     imports = self: id: (self.node id).decls.__edges.I or [ ];
-    needed-by = genScope.queryReverse { dataFilter = node: node.id; };
+    needed-by = genScope.queryReverse { } (node: node.id);
   };
-  walkOf =
-    scope:
-    (genScope.eval {
-      inherit scope;
-      attributes = attrs;
-    }).allNodeIds;
-  answerOf =
-    scope:
-    (genScope.eval {
-      inherit scope;
-      attributes = attrs;
-    }).get
-      "t"
-      "needed-by";
+  walkOf = scope: (genScope.eval { } attrs scope).allNodeIds;
+  answerOf = scope: (genScope.eval { } attrs scope).get "t" "needed-by";
 
   # O15's subject: the library's own source, read the way `purity` reads it, so the closure is
   # asserted over the tree rather than over a list someone maintains.
@@ -106,9 +120,8 @@ let
   # `genericResolve` — the site §2.5 excludes from the constructor's declared-order guarantee.
   # Declared reverse-alphabetically ("z" before "a"), like every fixture in this file.
   o10Kinds = genScope.mkKinds [
-    (genScope.mkKind { name = "leaf"; })
+    (genScope.mkKind { } "leaf")
     (genScope.mkKind {
-      name = "root";
       below = [ "leaf" ];
       spawns.leaf = _handle: id: {
         shared = {
@@ -118,7 +131,7 @@ let
           };
         };
       };
-    })
+    } "root")
   ];
   o10Roots = genScope.buildRoots {
     parentGraph = genScope.vertices [
@@ -139,15 +152,7 @@ let
   o10Attrs = {
     children = _self: _id: { };
   };
-  o10Build =
-    evalFn: extra:
-    evalFn (
-      {
-        scope = o10Roots;
-        attributes = o10Attrs;
-      }
-      // extra
-    );
+  o10Build = evalFn: extra: evalFn extra o10Attrs o10Roots;
 
   # A genuinely patched COPY of `eval.nix`, built the way the round-1 gate built its
   # (`reports/den-hoag-u1sf-gate-v1.md`, C-5): the source is read, its five sibling imports are
@@ -304,9 +309,22 @@ in
       expr =
         let
           r = genScope.buildRoots {
-            parentGraph = genScope.edge "a" "root";
-            importGraph = genScope.edge "a" "lib1";
-            edgeGraphs = [ (contribution "M" (genScope.edge "a" "m1")) ];
+            parentGraph = genScope.edge {
+              from = "a";
+              to = "root";
+            };
+            importGraph = genScope.edge {
+              from = "a";
+              to = "lib1";
+            };
+            edgeGraphs = [
+              (contribution "M" (
+                genScope.edge {
+                  from = "a";
+                  to = "m1";
+                }
+              ))
+            ];
           };
         in
         {
@@ -331,9 +349,19 @@ in
       expr =
         builtins.attrNames
           (genScope.buildRoots {
-            parentGraph = genScope.edge "a" "root";
+            parentGraph = genScope.edge {
+              from = "a";
+              to = "root";
+            };
             importGraph = genScope.empty;
-            edgeGraphs = [ (contribution "M" (genScope.edge "a" "m1")) ];
+            edgeGraphs = [
+              (contribution "M" (
+                genScope.edge {
+                  from = "a";
+                  to = "m1";
+                }
+              ))
+            ];
           }).nodes.a.decls.__edges;
       expected = [ "M" ];
     };

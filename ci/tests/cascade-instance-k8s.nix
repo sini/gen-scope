@@ -31,23 +31,26 @@ let
   b = entry "b";
 
   # ── two databases sharing a provider: private pg-password secrets must coexist (subject-namespaced) ──
-  twoDbs = resolveClaims {
-    inherit (k8s) kinds ctx;
-    claims = [
-      (mkClaim {
-        kind = "database";
-        subject = k8s.apps.sonarr;
-        provider = k8s.apps.media-pg;
-        dbs = [ "main" ];
-      })
-      (mkClaim {
-        kind = "database";
-        subject = k8s.apps.radarr;
-        provider = k8s.apps.media-pg;
-        dbs = [ "main" ];
-      })
-    ];
-  };
+  twoDbs =
+    resolveClaims
+      {
+        inherit (k8s) ctx;
+      }
+      k8s.kinds
+      [
+        (mkClaim {
+          kind = "database";
+          subject = k8s.apps.sonarr;
+          provider = k8s.apps.media-pg;
+          dbs = [ "main" ];
+        })
+        (mkClaim {
+          kind = "database";
+          subject = k8s.apps.radarr;
+          provider = k8s.apps.media-pg;
+          dbs = [ "main" ];
+        })
+      ];
 
   # ── connect dedup + port-distinctness (folds.same collapses identical edges; port splits groups) ──
   connectClaims = [
@@ -71,9 +74,8 @@ let
     }) # different port ⇒ distinct group + distinct key
   ];
   connects = resolveClaims {
-    inherit (k8s) kinds ctx;
-    claims = connectClaims;
-  };
+    inherit (k8s) ctx;
+  } k8s.kinds connectClaims;
 in
 {
   flake.tests.cascade-instance-k8s = {

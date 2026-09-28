@@ -83,7 +83,7 @@ let
 in
 if arm == "eval" then
   let
-    ev = evalLib.eval { inherit scope attributes; };
+    ev = evalLib.eval { } attributes scope;
   in
   [
     (ev.get "c" "probe")
@@ -93,9 +93,8 @@ if arm == "eval" then
 else if arm == "evalDebug" then
   let
     ev = evalLib.evalDebug {
-      inherit scope attributes;
       parseParent = id: if id == "c" then "p" else null;
-    };
+    } attributes scope;
   in
   [
     (ev.get "c" "probe")

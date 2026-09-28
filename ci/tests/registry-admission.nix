@@ -37,31 +37,27 @@ let
 
   # ── W1 — self-naming. A declaration; `mkKinds` cannot mint it.
   w1 = mkKind {
-    name = "k";
     below = [ "k" ];
     spawns.k = spawnOf "k";
-  };
+  } "k";
 
   # ── W2 — a two-cycle. Both halves are declarations and NEITHER names itself.
   w2a = mkKind {
-    name = "a";
     below = [ "b" ];
     spawns.b = spawnOf "i";
-  };
+  } "a";
   w2b = mkKind {
-    name = "b";
     below = [ "a" ];
     spawns.a = spawnOf "i";
-  };
+  } "b";
 
   # ── THE CONTROL REGISTRY — `host` ranks above `item` and `item` spawns nothing, so the
   # expansion is one level deep. Declared leaf first: a kind follows the kinds its `below` names.
-  itemDecl = mkKind { name = "item"; };
+  itemDecl = mkKind { } "item";
   hostDecl = mkKind {
-    name = "host";
     below = [ "item" ];
     spawns.item = spawnOf "i";
-  };
+  } "host";
   okKinds = mkKinds [
     itemDecl
     hostDecl
@@ -69,12 +65,11 @@ let
 
   # ── G3 — two honest registries whose declarations disagree, merged with `//`.
   upKinds = mkKinds [
-    (mkKind { name = "host"; })
+    (mkKind { } "host")
     (mkKind {
-      name = "item";
       below = [ "host" ];
       spawns.host = spawnOf "i";
-    })
+    } "item")
   ];
   merged = okKinds // {
     kinds = okKinds.kinds // {
@@ -84,22 +79,20 @@ let
 
   # ── C1's admitted arm — two registries sharing an IDENTICAL leaf, merged. Every name maps to
   # one kind, so the merge is coherent and admitted.
-  leafDecl = mkKind { name = "leaf"; };
+  leafDecl = mkKind { } "leaf";
   leftKinds = mkKinds [
     leafDecl
     (mkKind {
-      name = "left";
       below = [ "leaf" ];
       spawns.leaf = spawnOf "l";
-    })
+    } "left")
   ];
   rightKinds = mkKinds [
     leafDecl
     (mkKind {
-      name = "right";
       below = [ "leaf" ];
       spawns.leaf = spawnOf "r";
-    })
+    } "right")
   ];
   sharedLeaf = leftKinds // {
     kinds = leftKinds.kinds // rightKinds.kinds;
@@ -112,18 +105,16 @@ let
   midDecl =
     suffix:
     mkKind {
-      name = "mid";
       below = [ "leaf" ];
       spawns.leaf = spawnOf suffix;
-    };
+    } "mid";
   topKinds = mkKinds [
     leafDecl
     (midDecl "x")
     (mkKind {
-      name = "top";
       below = [ "mid" ];
       spawns.mid = spawnOf "m";
-    })
+    } "top")
   ];
   otherMid = mkKinds [
     leafDecl
@@ -160,22 +151,19 @@ let
 
   # ── C3 — one declaration set in two admissible orders, and reversed.
   diamondA = [
-    (mkKind { name = "leaf"; })
+    (mkKind { } "leaf")
     (mkKind {
-      name = "a";
       below = [ "leaf" ];
-    })
+    } "a")
     (mkKind {
-      name = "b";
       below = [ "leaf" ];
-    })
+    } "b")
     (mkKind {
-      name = "top";
       below = [
         "a"
         "b"
       ];
-    })
+    } "top")
   ];
   diamondB = [
     (builtins.elemAt diamondA 0)
@@ -211,7 +199,7 @@ let
   };
 
   attributes.children = _self: _id: { };
-  runEval = scope: (genScope.eval { inherit scope attributes; }).allNodeIds;
+  runEval = scope: (genScope.eval { } attributes scope).allNodeIds;
 
   # Forced, because a refusal on the far side of a lazy field is a refusal nothing reached.
   caught = e: builtins.tryEval (builtins.deepSeq e "ADMITTED");
@@ -300,10 +288,7 @@ in
     test-C5-the-stamped-kind-is-the-spawn-keys-record = {
       expr =
         let
-          ev = genScope.eval {
-            scope = buildScope topKinds "top";
-            inherit attributes;
-          };
+          ev = genScope.eval { } attributes (buildScope topKinds "top");
         in
         {
           inherit ((ev.node "root-m")._kind) name depth below;

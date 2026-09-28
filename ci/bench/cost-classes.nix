@@ -208,17 +208,14 @@ let
     }
     .${shape} or (throw "unknown shape ${shape}");
 
-  program = s.mkProgram { inherit rules; };
+  program = s.mkProgram rules;
 
   # `deepSeq` over the whole record, so no cell can pass by leaving the expensive field a thunk,
   # and every arm reports the same shape so a row is comparable across arms.
   report =
     extra:
     let
-      model = s.wellFoundedModel {
-        inherit program;
-        interpretation = [ ];
-      };
+      model = s.wellFoundedModel [ ] program;
       row = {
         inherit
           arm
@@ -247,10 +244,7 @@ else if arm == "depth" then
   report { inherit ((graph.condensation program.dependency)) depth; }
 else if arm == "solve" then
   let
-    solved = s.solve {
-      inherit program;
-      interpretation = [ ];
-    };
+    solved = s.solve [ ] program;
   in
   report {
     inherit (solved) condensationDepth;

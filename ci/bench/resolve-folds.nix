@@ -174,32 +174,29 @@ let
 
   run =
     scope: attr: readId:
-    (evalLib.eval {
-      inherit scope;
-      attributes = {
+    (evalLib.eval
+      {
+        parseParent = i: (scope.nodes.${i} or { parent = null; }).parent;
+      }
+      {
         children = _self: i: prelude.filterAttrs (_: node: node.parent == i) scope.nodes;
         imports = _self: _i: [ ];
         gathered = attr;
-      };
-      parseParent = i: (scope.nodes.${i} or { parent = null; }).parent;
-    }).get
+      }
+      scope
+    ).get
       readId
       "gathered";
 
   out =
     if arm == "collectionAttr" then
-      run wideScope (resolveLib.collectionAttr {
-        traverse = "children";
-        extract = extractAt;
-      }) "root"
+      run wideScope (resolveLib.collectionAttr { } "children" extractAt) "root"
     else if arm == "collectionAttr-defect" then
       run wideScope (resolveLib.collectionAttr {
-        traverse = "children";
-        extract = extractAt;
         combine = a: b: a ++ b;
-      }) "root"
+      } "children" extractAt) "root"
     else if arm == "inheritAll" then
-      run deepScope (resolveLib.inheritAll { inherit extract; }) "n0"
+      run deepScope (resolveLib.inheritAll { } extract) "n0"
     else if arm == "inheritAll-defect" then
       run deepScope (inheritAllPrior { inherit extract; }) "n0"
     else

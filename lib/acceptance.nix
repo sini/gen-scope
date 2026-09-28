@@ -133,5 +133,5 @@ in
     verifiedDepth
     signalNames
     ;
-  acceptanceSignal = door "acceptanceSignal" acceptanceSignal;
+  acceptanceSignal = door.record "acceptanceSignal" acceptanceSignal;
 }

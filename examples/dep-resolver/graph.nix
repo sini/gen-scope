@@ -21,11 +21,10 @@ let
   # the builder cannot produce anything else. Its records carry no `type`; the substrate stamps the
   # kind from the key the builder is declared under.
   kinds = genScope.mkKinds [
-    (genScope.mkKind { name = "lib"; })
-    (genScope.mkKind { name = "app"; })
-    (genScope.mkKind { name = "manifest"; })
+    (genScope.mkKind { } "lib")
+    (genScope.mkKind { } "app")
+    (genScope.mkKind { } "manifest")
     (genScope.mkKind {
-      name = "workspace";
       below = [ "manifest" ];
       # The builder DECLARES what the manifest is and nothing else: a spawn builder is handed a
       # declarations-only handle, so an attribute value has no name here — and it never belonged
@@ -41,7 +40,7 @@ let
           };
         };
       };
-    })
+    } "workspace")
   ];
 
   roots = genScope.buildRoots {
@@ -54,17 +53,35 @@ let
       "lib-logging@3.1"
     ];
     importGraph = genScope.overlays [
-      (genScope.edge "app@1.0" "lib-http@2.3")
-      (genScope.edge "app@1.0" "lib-json@1.5")
-      (genScope.edge "lib-http@2.3" "lib-json@1.5")
-      (genScope.edge "lib-http@2.3" "lib-tls@1.2")
-      (genScope.edge "lib-logging@3.1" "lib-json@1.5")
+      (genScope.edge {
+        from = "app@1.0";
+        to = "lib-http@2.3";
+      })
+      (genScope.edge {
+        from = "app@1.0";
+        to = "lib-json@1.5";
+      })
+      (genScope.edge {
+        from = "lib-http@2.3";
+        to = "lib-json@1.5";
+      })
+      (genScope.edge {
+        from = "lib-http@2.3";
+        to = "lib-tls@1.2";
+      })
+      (genScope.edge {
+        from = "lib-logging@3.1";
+        to = "lib-json@1.5";
+      })
     ];
     edgeGraphs = [
       # D = devDependency (separate from runtime deps)
       {
         label = "D";
-        graph = genScope.edge "app@1.0" "lib-logging@3.1";
+        graph = genScope.edge {
+          from = "app@1.0";
+          to = "lib-logging@3.1";
+        };
       }
     ];
     decls = {

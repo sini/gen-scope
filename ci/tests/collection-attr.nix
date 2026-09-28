@@ -5,10 +5,19 @@ let
   # Tree: root → {a, b}; a imports b
   roots = genScope.buildRoots {
     parentGraph = genScope.overlays [
-      (genScope.edge "a" "root")
-      (genScope.edge "b" "root")
+      (genScope.edge {
+        from = "a";
+        to = "root";
+      })
+      (genScope.edge {
+        from = "b";
+        to = "root";
+      })
     ];
-    importGraph = genScope.edge "a" "b";
+    importGraph = genScope.edge {
+      from = "a";
+      to = "b";
+    };
     decls = {
       root = {
         tags = [ "root-tag" ];
@@ -23,61 +32,47 @@ let
     types = { };
   };
 
-  result = genScope.eval {
-    scope = roots;
-    attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-      imports = self: id: (self.node id).decls.__edges.I or [ ];
+  result =
+    genScope.eval
+      {
+        parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
+      }
+      {
+        children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+        imports = self: id: (self.node id).decls.__edges.I or [ ];
 
-      tags = self: id: (self.node id).decls.tags or [ ];
+        tags = self: id: (self.node id).decls.tags or [ ];
 
-      # Collect tags from imports
-      import-tags = collectionAttr {
-        traverse = "imports";
-        extract = self: id: (self.node id).decls.tags or [ ];
-      };
+        # Collect tags from imports
+        import-tags = collectionAttr { } "imports" (self: id: (self.node id).decls.tags or [ ]);
 
-      # Collect tags from children
-      child-tags = collectionAttr {
-        traverse = "children";
-        extract = self: id: (self.node id).decls.tags or [ ];
-      };
+        # Collect tags from children
+        child-tags = collectionAttr { } "children" (self: id: (self.node id).decls.tags or [ ]);
 
-      # Collect tags from siblings
-      sibling-tags = collectionAttr {
-        traverse = "siblings";
-        extract = self: id: (self.node id).decls.tags or [ ];
-      };
+        # Collect tags from siblings
+        sibling-tags = collectionAttr { } "siblings" (self: id: (self.node id).decls.tags or [ ]);
 
-      # Collect from ancestors
-      ancestor-tags = collectionAttr {
-        traverse = "ancestors";
-        extract = self: id: (self.node id).decls.tags or [ ];
-      };
+        # Collect from ancestors
+        ancestor-tags = collectionAttr { } "ancestors" (self: id: (self.node id).decls.tags or [ ]);
 
-      # Filtered collection
-      filtered-child-tags = collectionAttr {
-        traverse = "children";
-        extract = self: id: (self.node id).decls.tags or [ ];
-        filter = node: node.id != "b";
-      };
+        # Filtered collection
+        filtered-child-tags = collectionAttr {
+          filter = node: node.id != "b";
+        } "children" (self: id: (self.node id).decls.tags or [ ]);
 
-      # A SUPPLIED `combine`, which nothing in the suite reached before. The default is the sentinel
-      # `null` — the ordered-list discipline taken in one pass — so this is the arm that says the
-      # fold is still there for a caller who asks for it. `bracket` is non-associative on purpose:
-      # it pins the LEFT association `combine (combine [ ] t0) t1`, which is what `foldl'` gives and
-      # what a right fold would not.
-      bracketed-child-tags = collectionAttr {
-        traverse = "children";
-        extract = self: id: (self.node id).decls.tags or [ ];
-        combine = a: b: [ "<" ] ++ a ++ b ++ [ ">" ];
-      };
+        # A SUPPLIED `combine`, which nothing in the suite reached before. The default is the sentinel
+        # `null` — the ordered-list discipline taken in one pass — so this is the arm that says the
+        # fold is still there for a caller who asks for it. `bracket` is non-associative on purpose:
+        # it pins the LEFT association `combine (combine [ ] t0) t1`, which is what `foldl'` gives and
+        # what a right fold would not.
+        bracketed-child-tags = collectionAttr {
+          combine = a: b: [ "<" ] ++ a ++ b ++ [ ">" ];
+        } "children" (self: id: (self.node id).decls.tags or [ ]);
 
-      # collectImports convenience
-      import-tags-simple = collectImports (self: id: (self.node id).decls.tags or [ ]);
-    };
-    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
-  };
+        # collectImports convenience
+        import-tags-simple = collectImports (self: id: (self.node id).decls.tags or [ ]);
+      }
+      roots;
 in
 {
   flake.tests."collection-attr" = {

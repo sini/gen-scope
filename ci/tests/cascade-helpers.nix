@@ -46,13 +46,12 @@ let
   # reach a subject the run registered and left empty.
   unwiredKinds = genScope.mkKinds [
     (genScope.mkKind {
-      name = "noWire";
       resolve = c: _ctx: {
         resources.${c.subject.name} = {
           ok = true;
         };
       };
-    })
+    } "noWire")
   ];
   unwiredSubject = {
     id_hash = "id-q";
@@ -62,15 +61,12 @@ let
     id_hash = "id-never-claimed";
     name = "never";
   };
-  unwiredRun = genScope.resolveClaims {
-    kinds = unwiredKinds;
-    claims = [
-      (genScope.mkClaim {
-        kind = "noWire";
-        subject = unwiredSubject;
-      })
-    ];
-  };
+  unwiredRun = genScope.resolveClaims { } unwiredKinds [
+    (genScope.mkClaim {
+      kind = "noWire";
+      subject = unwiredSubject;
+    })
+  ];
 
   # api-key secret fold spec, exercised directly.
   secretByKey = folds.byKey {

@@ -75,14 +75,13 @@ let
   };
   run =
     attrs: target:
-    (evalLib.eval {
-      inherit scope;
-      attributes = {
+    (evalLib.eval { } (
+      {
         children = _self: _id: { };
         imports = _self: _id: [ ];
       }
-      // attrs;
-    }).get
+      // attrs
+    ) scope).get
       "n"
       target;
 
@@ -307,7 +306,6 @@ let
     let
       kinds = mkKinds [
         (mkKind {
-          name = "tree";
           nta.sub = self: id: {
             g =
               if keyed self id > 99 then
@@ -323,11 +321,18 @@ let
                   ];
                 };
           };
-        })
+        } "tree")
       ];
     in
-    (evaluator {
-      scope = {
+    (evaluator { }
+      {
+        children = _: _: { };
+        defs = _: id: if id == "h" then [ { s = { }; } ] else [ ];
+        n = self: id: builtins.length (builtins.attrNames (self._childRecords id));
+        # U1-i's memo probe: one trace per APPLICATION of the attribute body.
+        probe = _: _: builtins.trace "F1-PROBE" 1;
+      }
+      {
         nodes.h = {
           id = "h";
           type = "tree";
@@ -336,18 +341,16 @@ let
         };
         nodeOrder = [ "h" ];
         inherit kinds;
-      };
-      attributes = {
-        children = _: _: { };
-        defs = _: id: if id == "h" then [ { s = { }; } ] else [ ];
-        n = self: id: builtins.length (builtins.attrNames (self._childRecords id));
-        # U1-i's memo probe: one trace per APPLICATION of the attribute body.
-        probe = _: _: builtins.trace "F1-PROBE" 1;
-      };
-    });
+      }
+    );
   ntaByN = self: id: self.get id "n";
   ntaConst = _: _: 0;
-  ntaChild = evalLib.mintNtaId "h" "sub" "g" "k";
+  ntaChild = evalLib.mintNtaId {
+    host = "h";
+    name = "sub";
+    group = "g";
+    key = "k";
+  };
 
   # U1-i · one memo: the child's attribute read through `get` twice, through `_eval` once and reached
   # once through enumeration, and its body applies ONCE.
@@ -382,36 +385,8 @@ let
   # `_`: a distinct argument per call is a distinct evaluation with its own memo.
   onceEval =
     _:
-    evalLib.eval {
-      scope = {
-        nodes.h = {
-          id = "h";
-          type = "nest";
-          parent = null;
-          decls = { };
-        };
-        nodeOrder = [ "h" ];
-        kinds = mkKinds [
-          (mkKind {
-            name = "nest";
-            nta.sub = self: id: {
-              g =
-                if id == "h" then
-                  builtins.listToAttrs (
-                    map (k: {
-                      name = k;
-                      value = [ (onceAddr [ k ]) ];
-                    }) onceKeys
-                  )
-                else if builtins.head (self.get id "defs") ? s then
-                  { k = [ (onceAddr [ "s" ]) ]; }
-                else
-                  { };
-            };
-          })
-        ];
-      };
-      attributes = {
+    evalLib.eval { }
+      {
         children = _: _: { };
         defs =
           self: id:
@@ -450,10 +425,50 @@ let
         viaHost = self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "hostRead") 0 onceKeys;
         viaHostCtl =
           self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "hostReadCtl") 0 onceKeys;
+      }
+      {
+        nodes.h = {
+          id = "h";
+          type = "nest";
+          parent = null;
+          decls = { };
+        };
+        nodeOrder = [ "h" ];
+        kinds = mkKinds [
+          (mkKind {
+            nta.sub = self: id: {
+              g =
+                if id == "h" then
+                  builtins.listToAttrs (
+                    map (k: {
+                      name = k;
+                      value = [ (onceAddr [ k ]) ];
+                    }) onceKeys
+                  )
+                else if builtins.head (self.get id "defs") ? s then
+                  { k = [ (onceAddr [ "s" ]) ]; }
+                else
+                  { };
+            };
+          } "nest")
+        ];
       };
+  onceChild =
+    k:
+    evalLib.mintNtaId {
+      host = "h";
+      name = "sub";
+      group = "g";
+      key = k;
     };
-  onceChild = k: evalLib.mintNtaId "h" "sub" "g" k;
-  onceGrand = k: evalLib.mintNtaId (onceChild k) "sub" "g" "k";
+  onceGrand =
+    k:
+    evalLib.mintNtaId {
+      host = (onceChild k);
+      name = "sub";
+      group = "g";
+      key = "k";
+    };
   once =
     depth: recordFirst: split:
     let
@@ -487,51 +502,50 @@ let
             value = v;
           }) keys
         );
-      ev = evalLib.eval {
-        scope = {
-          nodes.h = {
-            id = "h";
-            type = "nest";
-            parent = null;
-            decls = { };
+      ev =
+        evalLib.eval { }
+          {
+            children = _: _: { };
+            defs =
+              self: id:
+              let
+                d = (self.node id).decls;
+              in
+              if d ? seed then map (e: e.value) d.seed else [ (table { v = 1; }) ];
+            pos = _: _: { sub.g = table 1; };
+            leaf = self: id: builtins.head (self.get id "defs") + self.getHostAt "pos";
+            sum = self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "leaf") 0 keys;
+          }
+          {
+            nodes.h = {
+              id = "h";
+              type = "nest";
+              parent = null;
+              decls = { };
+            };
+            nodeOrder = [ "h" ];
+            kinds = mkKinds [
+              (mkKind {
+                nta.sub =
+                  _: id:
+                  if id == "h" then
+                    {
+                      g = builtins.mapAttrs (k: _: [
+                        {
+                          attr = "defs";
+                          def = 0;
+                          at = [
+                            k
+                            "v"
+                          ];
+                        }
+                      ]) (table null);
+                    }
+                  else
+                    { };
+              } "nest")
+            ];
           };
-          nodeOrder = [ "h" ];
-          kinds = mkKinds [
-            (mkKind {
-              name = "nest";
-              nta.sub =
-                _: id:
-                if id == "h" then
-                  {
-                    g = builtins.mapAttrs (k: _: [
-                      {
-                        attr = "defs";
-                        def = 0;
-                        at = [
-                          k
-                          "v"
-                        ];
-                      }
-                    ]) (table null);
-                  }
-                else
-                  { };
-            })
-          ];
-        };
-        attributes = {
-          children = _: _: { };
-          defs =
-            self: id:
-            let
-              d = (self.node id).decls;
-            in
-            if d ? seed then map (e: e.value) d.seed else [ (table { v = 1; }) ];
-          pos = _: _: { sub.g = table 1; };
-          leaf = self: id: builtins.head (self.get id "defs") + self.getHostAt "pos";
-          sum = self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "leaf") 0 keys;
-        };
-      };
     in
     ev.get "h" "sum";
 
@@ -542,27 +556,34 @@ let
   chain =
     what: n:
     let
-      ev = evalLib.eval {
-        scope = buildRoots {
-          parentGraph = ag.vertex "r";
-          importGraph = ag.empty;
-          decls.r = { };
-          types.r = "tree";
-          kinds = mkKinds [
-            (mkKind {
-              name = "tree";
-              nta.sub = self: id: if self.get id "depth" < n then { g.k = [ ]; } else { };
-            })
-          ];
-        };
-        attributes = {
-          children = _: _: { };
-          imports = _: _: [ ];
-          depth = self: id: if id == "r" then 0 else self.getHostAt "pos";
-          pos = self: id: { sub.g.k = self.get id "depth" + 1; };
-        };
-      };
-      deepest = builtins.foldl' (h: _: evalLib.mintNtaId h "sub" "g" "k") "r" (builtins.genList (x: x) n);
+      ev =
+        evalLib.eval { }
+          {
+            children = _: _: { };
+            imports = _: _: [ ];
+            depth = self: id: if id == "r" then 0 else self.getHostAt "pos";
+            pos = self: id: { sub.g.k = self.get id "depth" + 1; };
+          }
+          (buildRoots {
+            parentGraph = ag.vertex "r";
+            importGraph = ag.empty;
+            decls.r = { };
+            types.r = "tree";
+            kinds = mkKinds [
+              (mkKind {
+                nta.sub = self: id: if self.get id "depth" < n then { g.k = [ ]; } else { };
+              } "tree")
+            ];
+          });
+      deepest = builtins.foldl' (
+        h: _:
+        evalLib.mintNtaId {
+          host = h;
+          name = "sub";
+          group = "g";
+          key = "k";
+        }
+      ) "r" (builtins.genList (x: x) n);
     in
     if what == "ids" then builtins.length ev.allNodeIds else ev.get deepest "depth";
 in

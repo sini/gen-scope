@@ -66,11 +66,9 @@ let
 
   disciplineKinds = mkKinds [
     (mkKind {
-      name = "leaf";
       resolve = c: ctx: { resources.leafSeen = probe c ctx; };
-    })
+    } "leaf")
     (mkKind {
-      name = "comp";
       below = [ "leaf" ];
       resolve = c: ctx: {
         resources.compSeen = probe c ctx;
@@ -81,20 +79,22 @@ let
           })
         ];
       };
-    })
+    } "comp")
   ];
 
-  disciplineRun = resolveClaims {
-    kinds = disciplineKinds;
-    ctx = ctxIn;
-    claims = [
-      (mkClaim {
-        kind = "comp";
-        subject = subjA;
-        extra = "payload";
-      })
-    ];
-  };
+  disciplineRun =
+    resolveClaims
+      {
+        ctx = ctxIn;
+      }
+      disciplineKinds
+      [
+        (mkClaim {
+          kind = "comp";
+          subject = subjA;
+          extra = "payload";
+        })
+      ];
 
   comp = disciplineRun.resources.comp.compSeen;
   leaf = disciplineRun.resources.leaf.leafSeen;
@@ -107,11 +107,9 @@ let
 
   cascadeKindList = [
     (mkKind {
-      name = "leaf";
       resolve = c: _: { resources.${pathKey c} = c.subject.id_hash; };
-    })
+    } "leaf")
     (mkKind {
-      name = "a";
       below = [ "leaf" ];
       resolve = c: _: {
         resources.${pathKey c} = "a";
@@ -123,9 +121,8 @@ let
           })
         ];
       };
-    })
+    } "a")
     (mkKind {
-      name = "b";
       below = [ "leaf" ];
       resolve = c: _: {
         resources.${pathKey c} = "b";
@@ -136,9 +133,8 @@ let
           })
         ];
       };
-    })
+    } "b")
     (mkKind {
-      name = "top";
       below = [
         "a"
         "b"
@@ -156,36 +152,30 @@ let
           })
         ];
       };
-    })
+    } "top")
     (mkKind {
-      name = "unused";
       resolve = _: _: { };
-    })
+    } "unused")
   ];
 
   cascadeKinds = mkKinds cascadeKindList;
 
-  cascadeRun = resolveClaims {
-    kinds = cascadeKinds;
-    claims = [
-      (mkClaim {
-        kind = "top";
-        subject = subjA;
-      })
-      (mkClaim {
-        kind = "leaf";
-        subject = subjB;
-      })
-    ];
-  };
+  cascadeRun = resolveClaims { } cascadeKinds [
+    (mkClaim {
+      kind = "top";
+      subject = subjA;
+    })
+    (mkClaim {
+      kind = "leaf";
+      subject = subjB;
+    })
+  ];
 
   chainKinds = mkKinds [
     (mkKind {
-      name = "c0";
       resolve = c: _: { resources.${pathKey c} = 0; };
-    })
+    } "c0")
     (mkKind {
-      name = "c1";
       below = [ "c0" ];
       resolve = c: _: {
         resources.${pathKey c} = 1;
@@ -196,9 +186,8 @@ let
           })
         ];
       };
-    })
+    } "c1")
     (mkKind {
-      name = "c2";
       below = [ "c1" ];
       resolve = c: _: {
         resources.${pathKey c} = 2;
@@ -209,28 +198,22 @@ let
           })
         ];
       };
+    } "c2")
+  ];
+
+  chainRun = resolveClaims { } chainKinds [
+    (mkClaim {
+      kind = "c2";
+      subject = subjA;
     })
   ];
 
-  chainRun = resolveClaims {
-    kinds = chainKinds;
-    claims = [
-      (mkClaim {
-        kind = "c2";
-        subject = subjA;
-      })
-    ];
-  };
-
-  soloRun = resolveClaims {
-    kinds = cascadeKinds;
-    claims = [
-      (mkClaim {
-        kind = "leaf";
-        subject = subjB;
-      })
-    ];
-  };
+  soloRun = resolveClaims { } cascadeKinds [
+    (mkClaim {
+      kind = "leaf";
+      subject = subjB;
+    })
+  ];
 
   # ── (e) A STALE REGISTRY MAXIMUM ──
   # A registry record whose declared `maxDepth` does not cover its own measure. The run reads the
@@ -240,19 +223,16 @@ let
     maxDepth = 1;
   };
 
-  truncatedRun = resolveClaims {
-    kinds = truncatedKinds;
-    claims = [
-      (mkClaim {
-        kind = "top";
-        subject = subjA;
-      })
-      (mkClaim {
-        kind = "a";
-        subject = subjB;
-      })
-    ];
-  };
+  truncatedRun = resolveClaims { } truncatedKinds [
+    (mkClaim {
+      kind = "top";
+      subject = subjA;
+    })
+    (mkClaim {
+      kind = "a";
+      subject = subjB;
+    })
+  ];
 
   # ── (b) THE ARMED CONSTRUCTOR VARIANT ──
   # The constructor with its kind check in a FIELD rather than in the chain's condition. Refuses
@@ -286,29 +266,20 @@ let
       };
 
   leafKindValue = mkKind {
-    name = "leaf";
     resolve = _: _: { };
-  };
+  } "leaf";
 
   # ── (d) THE REFUSAL SHAPES ──
-  runWith =
-    claims:
-    resolveClaims {
-      kinds = cascadeKinds;
-      inherit claims;
-    };
+  runWith = claims: resolveClaims { } cascadeKinds claims;
 
   emitsOutsideBelow = mkKinds [
     (mkKind {
-      name = "l";
       resolve = _: _: { };
-    })
+    } "l")
     (mkKind {
-      name = "sibling";
       resolve = _: _: { };
-    })
+    } "sibling")
     (mkKind {
-      name = "t";
       below = [ "l" ];
       resolve = c: _: {
         claims = [
@@ -318,28 +289,22 @@ let
           })
         ];
       };
+    } "t")
+  ];
+
+  outsideBelowRun = resolveClaims { } emitsOutsideBelow [
+    (mkClaim {
+      kind = "t";
+      subject = subjA;
     })
   ];
 
-  outsideBelowRun = resolveClaims {
-    kinds = emitsOutsideBelow;
-    claims = [
-      (mkClaim {
-        kind = "t";
-        subject = subjA;
-      })
-    ];
-  };
-
-  legalEmissionRun = resolveClaims {
-    kinds = emitsOutsideBelow;
-    claims = [
-      (mkClaim {
-        kind = "l";
-        subject = subjA;
-      })
-    ];
-  };
+  legalEmissionRun = resolveClaims { } emitsOutsideBelow [
+    (mkClaim {
+      kind = "l";
+      subject = subjA;
+    })
+  ];
 
   # A kind at the BOTTOM of the measure that emits anyway. Its emission is created in the last
   # round the schedule has, so nothing downstream selects it and no result field is built from
@@ -352,7 +317,6 @@ let
   # chain, so the round that strands its emission is the third of three.
   bottomEmitter = mkKinds [
     (mkKind {
-      name = "t0";
       resolve = c: _: {
         resources.t0 = "ran";
         claims = [
@@ -362,9 +326,8 @@ let
           })
         ];
       };
-    })
+    } "t0")
     (mkKind {
-      name = "t1";
       below = [ "t0" ];
       resolve = c: _: {
         resources.t1 = "ran";
@@ -375,9 +338,8 @@ let
           })
         ];
       };
-    })
+    } "t1")
     (mkKind {
-      name = "t2";
       below = [ "t1" ];
       resolve = c: _: {
         resources.t2 = "ran";
@@ -388,28 +350,23 @@ let
           })
         ];
       };
-    })
+    } "t2")
   ];
 
-  bottomEmissionRun = resolveClaims {
-    kinds = bottomEmitter;
-    claims = [
-      (mkClaim {
-        kind = "t2";
-        subject = subjA;
-      })
-    ];
-  };
+  bottomEmissionRun = resolveClaims { } bottomEmitter [
+    (mkClaim {
+      kind = "t2";
+      subject = subjA;
+    })
+  ];
 
   # The same three-stratum shape with the bottom kind emitting nothing: the control that says the
   # cells above are about the stranded emission and not about the fixture being broken.
   quietBottom = mkKinds [
     (mkKind {
-      name = "t0";
       resolve = _: _: { resources.t0 = "ran"; };
-    })
+    } "t0")
     (mkKind {
-      name = "t1";
       below = [ "t0" ];
       resolve = c: _: {
         resources.t1 = "ran";
@@ -420,9 +377,8 @@ let
           })
         ];
       };
-    })
+    } "t1")
     (mkKind {
-      name = "t2";
       below = [ "t1" ];
       resolve = c: _: {
         resources.t2 = "ran";
@@ -433,18 +389,15 @@ let
           })
         ];
       };
-    })
+    } "t2")
   ];
 
-  quietBottomRun = resolveClaims {
-    kinds = quietBottom;
-    claims = [
-      (mkClaim {
-        kind = "t2";
-        subject = subjA;
-      })
-    ];
-  };
+  quietBottomRun = resolveClaims { } quietBottom [
+    (mkClaim {
+      kind = "t2";
+      subject = subjA;
+    })
+  ];
 
   # ── A REGISTRY WHOSE MEASURE IS NOT ITS RELATION'S RANK ──
   # The run reads each kind's own `depth`, and a minted kind updated with `//` keeps its tag, so a
@@ -461,15 +414,12 @@ let
     };
   };
 
-  flattenedRun = resolveClaims {
-    kinds = flattenedKinds;
-    claims = [
-      (mkClaim {
-        kind = "top";
-        subject = subjA;
-      })
-    ];
-  };
+  flattenedRun = resolveClaims { } flattenedKinds [
+    (mkClaim {
+      kind = "top";
+      subject = subjA;
+    })
+  ];
 
   # A registry holding a kind with no measure. Read where no refusal can follow it — a kind's
   # `depth` while a child is being built — so it must be decided as data.
@@ -492,60 +442,49 @@ let
   # writing one key have two authors and no merge rule between them.
   collidingKinds = mkKinds [
     (mkKind {
-      name = "dup";
       resolve = _: _: { resources.same = "mine"; };
+    } "dup")
+  ];
+
+  collisionRun = resolveClaims { } collidingKinds [
+    (mkClaim {
+      kind = "dup";
+      subject = subjA;
+    })
+    (mkClaim {
+      kind = "dup";
+      subject = subjB;
     })
   ];
 
-  collisionRun = resolveClaims {
-    kinds = collidingKinds;
-    claims = [
-      (mkClaim {
-        kind = "dup";
-        subject = subjA;
-      })
-      (mkClaim {
-        kind = "dup";
-        subject = subjB;
-      })
-    ];
-  };
-
-  singleContributorRun = resolveClaims {
-    kinds = collidingKinds;
-    claims = [
-      (mkClaim {
-        kind = "dup";
-        subject = subjA;
-      })
-    ];
-  };
+  singleContributorRun = resolveClaims { } collidingKinds [
+    (mkClaim {
+      kind = "dup";
+      subject = subjA;
+    })
+  ];
 
   # The same two claims under a kind that DOES declare a grouping and a merge: one group, one
   # author, no collision. Without this the refusal above reads as "two claims of one kind is an
   # error", which it is not.
   foldedKinds = mkKinds [
     (mkKind {
-      name = "dup";
       dedupKey = _: "one-group";
       fold = _: vs: builtins.concatStringsSep "+" vs;
       resolve = c: _: { resources.same = c.subject.id_hash; };
-    })
+    } "dup")
   ];
 
-  foldedRun = resolveClaims {
-    kinds = foldedKinds;
-    claims = [
-      (mkClaim {
-        kind = "dup";
-        subject = subjA;
-      })
-      (mkClaim {
-        kind = "dup";
-        subject = subjB;
-      })
-    ];
-  };
+  foldedRun = resolveClaims { } foldedKinds [
+    (mkClaim {
+      kind = "dup";
+      subject = subjA;
+    })
+    (mkClaim {
+      kind = "dup";
+      subject = subjB;
+    })
+  ];
 
   # ── FORGED KIND RECORDS: THE FIELDS THE RUN PROJECTS ──
   # `resolve`, `dedupKey` and `fold` are read at five places in a run, each of them a projection
@@ -575,15 +514,13 @@ let
     let
       registry = mkKinds [
         (mkKind {
-          name = "host";
           resolve = _: _: { resources.hostRes = "ran"; };
-        })
+        } "host")
         (forgedKind fields)
       ];
     in
-    resolveClaims {
-      kinds = registry;
-      claims = [
+    resolveClaims { } registry (
+      [
         (mkClaim {
           kind = "host";
           subject = subjA;
@@ -599,8 +536,8 @@ let
           ]
         else
           [ ]
-      );
-    };
+      )
+    );
 
   noResolve = {
     spawns = { };
@@ -670,24 +607,22 @@ let
   # an empty entry.
   withForgedKindSet =
     fields: claimed:
-    resolveClaims {
-      kinds = kindSetWithForged fields;
-      claims =
-        if claimed then
-          [
-            (mkClaim {
-              kind = "unused";
-              subject = subjA;
-            })
-          ]
-        else
-          [
-            (mkClaim {
-              kind = "leaf";
-              subject = subjB;
-            })
-          ];
-    };
+    resolveClaims { } (kindSetWithForged fields) (
+      if claimed then
+        [
+          (mkClaim {
+            kind = "unused";
+            subject = subjA;
+          })
+        ]
+      else
+        [
+          (mkClaim {
+            kind = "leaf";
+            subject = subjB;
+          })
+        ]
+    );
 
   entryNoResolve = {
     below = [ ];
@@ -813,23 +748,19 @@ let
     fields:
     mkKinds [
       (mkKind {
-        name = "host";
         resolve = _: _: { resources.hostRes = "ran"; };
-      })
+      } "host")
       (forgedEntry fields)
     ];
 
   runKindWith =
     fields:
-    resolveClaims {
-      kinds = kindWith fields;
-      claims = [
-        (mkClaim {
-          kind = "unused";
-          subject = subjA;
-        })
-      ];
-    };
+    resolveClaims { } (kindWith fields) [
+      (mkClaim {
+        kind = "unused";
+        subject = subjA;
+      })
+    ];
 
   runKindSetWith = fields: withForgedKindSet fields true;
 
@@ -839,51 +770,46 @@ let
   # meant hand-writing a marker record.
   runReturning =
     resolver:
-    resolveClaims {
-      kinds = mkKinds [
+    resolveClaims { }
+      (mkKinds [
         (mkKind {
-          name = "g";
           resolve = resolver;
-        })
-      ];
-      claims = [
+        } "g")
+      ])
+      [
         (mkClaim {
           kind = "g";
           subject = subjA;
         })
       ];
-    };
 
   # ── SUBJECT IDENTITY THAT IS PRESENT BUT NOT USABLE ──
   # `id_hash` becomes an attribute name in the result, so a non-string one is a type error where
   # the result is assembled — with no mention of the claim that supplied it.
   runWithSubject =
     subject:
-    resolveClaims {
-      kinds = mkKinds [
+    resolveClaims { }
+      (mkKinds [
         (mkKind {
-          name = "g";
           resolve = _: _: { resources.ok = 1; };
-        })
-      ];
-      claims = [
+        } "g")
+      ])
+      [
         (mkClaim {
           kind = "g";
           inherit subject;
         })
       ];
-    };
 
   runWithSubjectId =
     h:
-    resolveClaims {
-      kinds = mkKinds [
+    resolveClaims { }
+      (mkKinds [
         (mkKind {
-          name = "g";
           resolve = _: _: { resources.ok = 1; };
-        })
-      ];
-      claims = [
+        } "g")
+      ])
+      [
         (mkClaim {
           kind = "g";
           subject = {
@@ -892,7 +818,6 @@ let
           };
         })
       ];
-    };
 
   # ── A HAND-BUILT CLAIM DECLARING A VIOLATION THE CONSTRUCTOR WOULD HAVE REFUSED ──
   # `mkClaim` now refuses a shadowing payload where the author is, so the run's own reserved-key
@@ -1194,48 +1119,37 @@ in
     # Both are type errors on the wrong shape, and `tryEval` does not contain a type error — so
     # `didThrow` reporting true here is itself the evidence these are named refusals now.
     test-claims-that-are-not-a-list-refused = {
-      expr = didThrow (resolveClaims {
-        kinds = cascadeKinds;
-        claims = "not-a-list";
-      });
+      expr = didThrow (resolveClaims { } cascadeKinds "not-a-list");
       expected = true;
     };
     test-registry-holding-a-kind-with-no-depth-refused = {
-      expr = didThrow (resolveClaims {
-        kinds = undepthedKinds;
-        claims = [
+      expr = didThrow (
+        resolveClaims { } undepthedKinds [
           (mkClaim {
             kind = "top";
             subject = subjA;
           })
-        ];
-      });
+        ]
+      );
       expected = true;
     };
     test-registry-holding-a-kind-with-a-non-integer-depth-refused = {
-      expr = didThrow (resolveClaims {
-        kinds = nonIntegerDepth;
-        claims = [
+      expr = didThrow (
+        resolveClaims { } nonIntegerDepth [
           (mkClaim {
             kind = "top";
             subject = subjA;
           })
-        ];
-      });
+        ]
+      );
       expected = true;
     };
     test-registry-that-is-not-a-kind-set-at-all-refused = {
-      expr = didThrow (resolveClaims {
-        kinds = "nope";
-        claims = [ ];
-      });
+      expr = didThrow (resolveClaims { } "nope" [ ]);
       expected = true;
     };
     test-control-a-well-formed-registry-and-an-empty-claim-list-resolve = {
-      expr = succeeds (resolveClaims {
-        kinds = cascadeKinds;
-        claims = [ ];
-      });
+      expr = succeeds (resolveClaims { } cascadeKinds [ ]);
       expected = true;
     };
 
@@ -1745,63 +1659,62 @@ in
       expected = true;
     };
     test-a-dedupkey-returning-a-function-still-refuses = {
-      expr = didThrow (resolveClaims {
-        kinds = mkKinds [
-          (mkKind {
-            name = "g";
-            dedupKey = _: (x: x);
-            fold = _: vs: builtins.head vs;
-            resolve = _: _: { resources.ok = 1; };
-          })
-        ];
-        claims = [
-          (mkClaim {
-            kind = "g";
-            subject = subjA;
-          })
-        ];
-      });
+      expr = didThrow (
+        resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              dedupKey = _: (x: x);
+              fold = _: vs: builtins.head vs;
+              resolve = _: _: { resources.ok = 1; };
+            } "g")
+          ])
+          [
+            (mkClaim {
+              kind = "g";
+              subject = subjA;
+            })
+          ]
+      );
       expected = true;
     };
     # CONTROL — a dedupKey returning a plain non-string still refuses, and one returning a string
     # still runs, so the cell above is about the RENDERING and not about the check.
     test-control-a-dedupkey-returning-an-int-refuses = {
-      expr = didThrow (resolveClaims {
-        kinds = mkKinds [
-          (mkKind {
-            name = "g";
-            dedupKey = _: 42;
-            fold = _: vs: builtins.head vs;
-            resolve = _: _: { resources.ok = 1; };
-          })
-        ];
-        claims = [
-          (mkClaim {
-            kind = "g";
-            subject = subjA;
-          })
-        ];
-      });
-      expected = true;
-    };
-    test-control-a-dedupkey-returning-a-string-runs = {
-      expr =
-        (resolveClaims {
-          kinds = mkKinds [
+      expr = didThrow (
+        resolveClaims { }
+          (mkKinds [
             (mkKind {
-              name = "g";
-              dedupKey = _: "k";
+              dedupKey = _: 42;
               fold = _: vs: builtins.head vs;
               resolve = _: _: { resources.ok = 1; };
-            })
-          ];
-          claims = [
+            } "g")
+          ])
+          [
             (mkClaim {
               kind = "g";
               subject = subjA;
             })
-          ];
-        }).resources.g;
+          ]
+      );
+      expected = true;
+    };
+    test-control-a-dedupkey-returning-a-string-runs = {
+      expr =
+        (resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              dedupKey = _: "k";
+              fold = _: vs: builtins.head vs;
+              resolve = _: _: { resources.ok = 1; };
+            } "g")
+          ])
+          [
+            (mkClaim {
+              kind = "g";
+              subject = subjA;
+            })
+          ]
+        ).resources.g;
       expected = {
         ok = 1;
       };

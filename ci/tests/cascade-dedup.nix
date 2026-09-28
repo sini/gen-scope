@@ -25,17 +25,15 @@ let
   # An `item` kind: group by `c.group`, one resource key per group, fold = list (records order).
   itemKinds = mkKinds [
     (mkKind {
-      name = "item";
       dedupKey = c: c.group;
       fold = folds.list;
       resolve = c: _: { resources.${c.group} = c.tag; };
-    })
+    } "item")
   ];
   runItems =
     tags:
-    resolveClaims {
-      kinds = itemKinds;
-      claims = map (
+    resolveClaims { } itemKinds (
+      map (
         t:
         mkClaim {
           kind = "item";
@@ -43,26 +41,24 @@ let
           group = "g";
           tag = t;
         }
-      ) tags;
-    };
+      ) tags
+    );
 
   # A `same`-folded kind producing a group-CONSTANT resource key ⇒ a cross-group collision when two
   # distinct groups both write it.
   collideKinds = mkKinds [
     (mkKind {
-      name = "c";
       dedupKey = c: c.group;
       fold = folds.same;
       resolve = c: _: { resources.constant = c.v; };
-    })
+    } "c")
   ];
 
   # A fold-less kind: two claims writing the same resource key is a loud error.
   foldlessKinds = mkKinds [
     (mkKind {
-      name = "f";
       resolve = _: _: { resources.dup = 1; };
-    })
+    } "f")
   ];
 in
 {
@@ -121,9 +117,8 @@ in
 
     # ── no silent dedup — a `folds.same` conflict is a loud error ──
     test-folds-same-conflict-throws = {
-      expr = didThrow (resolveClaims {
-        kinds = collideKinds;
-        claims = [
+      expr = didThrow (
+        resolveClaims { } collideKinds [
           (mkClaim {
             kind = "c";
             subject = entry "x";
@@ -136,15 +131,14 @@ in
             group = "same-group";
             v = 2; # differs ⇒ folds.same throws
           })
-        ];
-      });
+        ]
+      );
       expected = true;
     };
     # ── a cross-group resource-key collision is a loud error ──
     test-cross-group-collision-throws = {
-      expr = didThrow (resolveClaims {
-        kinds = collideKinds;
-        claims = [
+      expr = didThrow (
+        resolveClaims { } collideKinds [
           (mkClaim {
             kind = "c";
             subject = entry "x";
@@ -157,15 +151,14 @@ in
             group = "g2"; # a distinct group writing the same "constant" key ⇒ collision
             v = 1;
           })
-        ];
-      });
+        ]
+      );
       expected = true;
     };
     # ── a fold-less duplicate resource key is a loud error ──
     test-foldless-duplicate-throws = {
-      expr = didThrow (resolveClaims {
-        kinds = foldlessKinds;
-        claims = [
+      expr = didThrow (
+        resolveClaims { } foldlessKinds [
           (mkClaim {
             kind = "f";
             subject = entry "x";
@@ -174,28 +167,28 @@ in
             kind = "f";
             subject = entry "y";
           })
-        ];
-      });
+        ]
+      );
       expected = true;
     };
     # A non-string dedupKey result is a loud error.
     test-nonstring-dedupkey-throws = {
-      expr = didThrow (resolveClaims {
-        kinds = mkKinds [
-          (mkKind {
-            name = "b";
-            dedupKey = _: 42;
-            fold = folds.same;
-            resolve = _: _: { resources.k = 1; };
-          })
-        ];
-        claims = [
-          (mkClaim {
-            kind = "b";
-            subject = entry "x";
-          })
-        ];
-      });
+      expr = didThrow (
+        resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              dedupKey = _: 42;
+              fold = folds.same;
+              resolve = _: _: { resources.k = 1; };
+            } "b")
+          ])
+          [
+            (mkClaim {
+              kind = "b";
+              subject = entry "x";
+            })
+          ]
+      );
       expected = true;
     };
   };

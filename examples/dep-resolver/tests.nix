@@ -55,10 +55,7 @@
 
   debug-works =
     let
-      debugResult = genScope.evalDebug {
-        scope = roots;
-        inherit attributes;
-      };
+      debugResult = genScope.evalDebug { } attributes roots;
     in
     debugResult.get "app@1.0" "depDepth";
 }

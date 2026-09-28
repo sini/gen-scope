@@ -62,7 +62,7 @@ let
     iterateBounded
     ;
 in
-builtins.mapAttrs door {
+builtins.mapAttrs door.record {
   # `settledBy` is asked once per member per round, of that member's OWN previous and next value.
   # The quantifier is `all` over the members and it lives HERE rather than on the caller's side,
   # because "did the round move anything" is a question about the round and not about a member: a

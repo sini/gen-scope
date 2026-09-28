@@ -15,9 +15,7 @@
   # Lookup a declaration name. Walks: local decls → imports → parent chain.
   lookup = genScope.paramAttr (
     self: id: name:
-    genScope.query {
-      dataFilter = node: node.decls.${name} or null;
-    } self id
+    genScope.query { } (node: node.decls.${name} or null) self id
   );
 
   # All visible declarations from this scope (local + imports + parent).
@@ -28,11 +26,23 @@
       local = builtins.removeAttrs node.decls [ "__edges" ];
       importIds = self.get id "imports";
       importedDecls = lib.foldl' (
-        acc: iid: genScope.shadow (builtins.removeAttrs (self.node iid).decls [ "__edges" ]) acc
+        acc: iid:
+        genScope.shadow {
+          inner = (builtins.removeAttrs (self.node iid).decls [ "__edges" ]);
+          outer = acc;
+        }
       ) { } importIds;
       parentDecls = if node.parent != null then self.get node.parent "visibleDecls" else { };
     in
-    genScope.shadow local (genScope.shadow importedDecls parentDecls);
+    genScope.shadow {
+      inner = local;
+      outer = (
+        genScope.shadow {
+          inner = importedDecls;
+          outer = parentDecls;
+        }
+      );
+    };
 
   # Count modules reachable from this scope.
   moduleCount = self: id: builtins.length (genScope.descendants self id);

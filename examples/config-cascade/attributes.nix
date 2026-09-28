@@ -10,7 +10,7 @@
 
   config = genScope.paramAttr (
     self: id: key:
-    genScope.query { dataFilter = node: node.decls.${key} or null; } self id
+    genScope.query { } (node: node.decls.${key} or null) self id
   );
 
   resolvedConfig =
@@ -20,16 +20,28 @@
       local = builtins.removeAttrs node.decls [ "__edges" ];
       importIds = self.get id "imports";
       importedConfigs = lib.foldl' (
-        acc: iid: genScope.shadow (self.get iid "resolvedConfig") acc
+        acc: iid:
+        genScope.shadow {
+          inner = (self.get iid "resolvedConfig");
+          outer = acc;
+        }
       ) { } importIds;
       parentConfig = if node.parent != null then self.get node.parent "resolvedConfig" else { };
     in
-    genScope.shadow local (genScope.shadow importedConfigs parentConfig);
+    genScope.shadow {
+      inner = local;
+      outer = (
+        genScope.shadow {
+          inner = importedConfigs;
+          outer = parentConfig;
+        }
+      );
+    };
 
   overriddenKeys =
     self: id:
     let
-      allResults = key: genScope.queryAll { dataFilter = node: node.decls.${key} or null; } self id;
+      allResults = key: genScope.queryAll { } (node: node.decls.${key} or null) self id;
       localKeys = builtins.filter (k: k != "__edges") (builtins.attrNames (self.node id).decls);
     in
     builtins.filter (key: builtins.length (allResults key) > 1) localKeys;

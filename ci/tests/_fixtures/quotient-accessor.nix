@@ -67,10 +67,7 @@ let
     );
   };
 
-  r = genScope.eval {
-    scope = roots;
-    attributes = base // decls;
-  };
+  r = genScope.eval { } (base // decls) roots;
 in
 {
   inherit r;
@@ -85,45 +82,52 @@ in
     k2 = 1;
   };
 
-  debug = genScope.evalDebug {
-    scope = roots;
-    attributes = base // decls;
-  };
+  debug = genScope.evalDebug { } (base // decls) roots;
 
   # The reuse path: the step now THROWS, so a value can only arrive from the prior.
-  warm = genScope.eval {
-    scope = roots;
-    attributes =
-      base
-      // decls
-      // {
-        enriched = circular { carrier = keySet 3; } (
-          _: _: _:
-          throw "quotient-accessor fixture: recomputed, not served"
-        );
-      };
-    prior = r;
-    decision = {
-      isClean = _: true;
-      reusable = _: [ "enriched" ];
-    };
-  };
+  warm =
+    genScope.eval
+      {
+        prior = r;
+        decision = {
+          isClean = _: true;
+          reusable = _: [ "enriched" ];
+        };
+      }
+      (
+        base
+        // decls
+        // {
+          enriched = circular { carrier = keySet 3; } (
+            _: _: _:
+            throw "quotient-accessor fixture: recomputed, not served"
+          );
+        }
+      )
+      roots;
 
   # Two nodes, so the child's record carries the co-located `_eval` cache.
-  tree = genScope.eval {
-    scope = genScope.buildRoots {
-      parentGraph = genScope.overlays [ (genScope.edge "kid" "p") ];
-      importGraph = genScope.empty;
-      decls = {
-        p = { };
-        kid = { };
-      };
-      types = { };
-    };
-    attributes = {
-      children = self: id: if id == "p" then { kid = self.node "kid"; } else { };
-      imports = _self: _id: [ ];
-      inherit (decls) enriched;
-    };
-  };
+  tree =
+    genScope.eval { }
+      {
+        children = self: id: if id == "p" then { kid = self.node "kid"; } else { };
+        imports = _self: _id: [ ];
+        inherit (decls) enriched;
+      }
+      (
+        genScope.buildRoots {
+          parentGraph = genScope.overlays [
+            (genScope.edge {
+              from = "kid";
+              to = "p";
+            })
+          ];
+          importGraph = genScope.empty;
+          decls = {
+            p = { };
+            kid = { };
+          };
+          types = { };
+        }
+      );
 }

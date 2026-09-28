@@ -46,7 +46,10 @@ let
   # caller fills, so a cell that wants a predictable identity in a refusal message cannot reach it
   # here. `mintModule` is the module before injection, and substituting one of its formals is how a
   # cell observes what the minting instance hands its driver.
-  mint = genScope.mintStrata;
+  #
+  # The entry is positional, `mintStrata kinds emitters` (den-hoag-7gp66 P2); the fixtures stay the
+  # two named values they always were, and this handle applies them in the entry's order.
+  mint = args: genScope.mintStrata args.kinds args.emitters;
   mintModule = import ../../../lib/mint.nix;
 
   # A substituted authority. Identity minting is `gen-identity`'s and stays there; what a cell needs
@@ -60,13 +63,15 @@ let
   # runs — the schedule, the seed, the per-stratum step — is visible only here, because the entry's
   # own result reports the schedule's LENGTH and never the schedule.
   withDriver =
-    stratify:
+    stratify: args:
     (mintModule {
       prelude = genPreludeLib;
       graph = genGraph;
       hashIdentity = stubIdentity;
       inherit stratify;
-    }).mintStrata;
+    }).mintStrata
+      args.kinds
+      args.emitters;
 
   mintUnderStubIdentity = withDriver genScope.stratify;
 

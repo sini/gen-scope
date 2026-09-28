@@ -99,7 +99,6 @@
 # NOT PROVED. It has a differential oracle rather than a proof, and the oracle is the honest form.
 { prelude }:
 let
-  door = import ./door.nix { inherit prelude; };
   leastModelLib = import ./least-model.nix { inherit prelude; };
 
   # The Gelfond–Lifschitz reduct. Rules with a negative literal in the guess are DELETED; the
@@ -211,10 +210,7 @@ let
   # stage uses is the parity the header states. Nothing else about `S` moves.
   stage =
     program: seed: guess:
-    leastModelLib.leastModel {
-      program = reduct program guess;
-      inherit seed;
-    };
+    leastModelLib.leastModel seed (reduct program guess);
 
   wellFoundedModel =
     { program, interpretation }:
@@ -321,5 +317,7 @@ in
     verdictNames
     Pos
     ;
-  wellFoundedModel = door "wellFoundedModel" wellFoundedModel;
+  # Positional (den-hoag-7gp66 P2, R7 rule 4): `wellFoundedModel interpretation program` — the
+  # program is the subject, the carried interpretation its configuration.
+  wellFoundedModel = interpretation: program: wellFoundedModel { inherit program interpretation; };
 }

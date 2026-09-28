@@ -14,18 +14,8 @@
 let
   # The front door and the semantics both take an interpretation; these cells are about the
   # un-interpreted case, so the empty one is written once here.
-  solve =
-    program:
-    genScope.solve {
-      inherit program;
-      interpretation = [ ];
-    };
-  wf =
-    program:
-    genScope.wellFoundedModel {
-      inherit program;
-      interpretation = [ ];
-    };
+  solve = program: genScope.solve [ ] program;
+  wf = program: genScope.wellFoundedModel [ ] program;
 
   inherit (genScope) verifiedDepth;
 
@@ -34,8 +24,8 @@ let
   # cross the bound.
   chain =
     n:
-    genScope.mkProgram {
-      rules = builtins.genList (
+    genScope.mkProgram (
+      builtins.genList (
         i:
         if i == 0 then
           { head = "a${toString i}"; }
@@ -44,27 +34,25 @@ let
             head = "a${toString i}";
             pos = [ "a${toString (i - 1)}" ];
           }
-      ) n;
-    };
+      ) n
+    );
 
   small = solve (chain 8);
   # Two atoms past the bound: the least chain whose condensation depth exceeds it.
   beyond = solve (chain (verifiedDepth.depth + 3));
 
   gated = wf (
-    genScope.mkProgram {
-      rules = [
-        { head = "on"; }
-        {
-          head = "u1";
-          neg = [ "u2" ];
-        }
-        {
-          head = "u2";
-          neg = [ "u1" ];
-        }
-      ];
-    }
+    genScope.mkProgram [
+      { head = "on"; }
+      {
+        head = "u1";
+        neg = [ "u2" ];
+      }
+      {
+        head = "u2";
+        neg = [ "u1" ];
+      }
+    ]
   );
   contributions = [
     {
@@ -84,12 +72,7 @@ let
       value = "second";
     }
   ];
-  folded = genScope.foldContributions {
-    model = gated;
-    inherit contributions;
-    op = acc: c: acc ++ [ c.value ];
-    init = [ ];
-  };
+  folded = genScope.foldContributions gated (acc: c: acc ++ [ c.value ]) [ ] contributions;
 in
 {
   flake.tests."engine-door" = {

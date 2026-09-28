@@ -38,7 +38,6 @@
 # and a caller that reads it gets a figure computed from the same door the contract publishes.
 { prelude, graph }:
 let
-  door = import ./door.nix { inherit prelude; };
   wellFoundedLib = import ./well-founded.nix { inherit prelude; };
   acceptanceLib = import ./acceptance.nix { inherit prelude; };
 
@@ -81,7 +80,7 @@ let
     let
       partition = graph.condensation program.dependency;
     in
-    wellFoundedLib.wellFoundedModel { inherit program interpretation; }
+    wellFoundedLib.wellFoundedModel interpretation program
     // {
       # Read from the door, reported as the door reports it.
       condensationDepth = partition.depth;
@@ -125,6 +124,24 @@ in
   inherit
     provenanceFor
     ;
-  solve = door "solve" solve;
-  foldContributions = door "foldContributions" foldContributions;
+  # Positional (den-hoag-7gp66 P2, R7 rule 4): configuration first, the subject last, so neither
+  # takes a record and neither carries a field check — the arity is structural.
+  #
+  # `solve interpretation program`: the program is what is solved, and the carried verdicts are the
+  # configuration the solving holds under — the order `wellFoundedModel` takes.
+  solve = interpretation: program: solve { inherit program interpretation; };
+  # `foldContributions model op init contributions`: the contributions are the folded subject; the
+  # model is the environment every gate is read against, and `op init` keep `foldl'`'s own order
+  # (R7's reference order), so the family's partial application `foldContributions model op init`
+  # is the fold waiting for its list.
+  foldContributions =
+    model: op: init: contributions:
+    foldContributions {
+      inherit
+        model
+        op
+        init
+        contributions
+        ;
+    };
 }

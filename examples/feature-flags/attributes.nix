@@ -3,9 +3,7 @@
 {
   flag = genScope.paramAttr (
     self: id: flagName:
-    genScope.query {
-      dataFilter = node: node.decls.${flagName} or null;
-    } self id
+    genScope.query { } (node: node.decls.${flagName} or null) self id
   );
 
   effectiveFlags =
@@ -14,7 +12,10 @@
       node = self.node id;
       parentFlags = if node.parent != null then self.get node.parent "effectiveFlags" else { };
     in
-    genScope.shadow (builtins.removeAttrs node.decls [ "__edges" ]) parentFlags;
+    genScope.shadow {
+      inner = (builtins.removeAttrs node.decls [ "__edges" ]);
+      outer = parentFlags;
+    };
 
   flagWithDeps = genScope.paramAttr (
     self: id: flagName:

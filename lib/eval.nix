@@ -2516,17 +2516,49 @@ let
 in
 {
   inherit
-    # The `nta` child identifier and its total decoder, published so a caller can predict the
-    # identifier a child is minted under and read one back; the evaluator mints and decodes with
-    # these same bindings, so the two cannot disagree.
-    mintNtaId
+    # The `nta` child identifier's total decoder, published so a caller can read an identifier back
+    # into the coordinates it was minted from; the minting door is below.
     decodeNta
     # The seam guard's reason, published so a cell can assert the MESSAGE rather than the fact of a
     # refusal. `tryEval` catches the throw and discards its text, so the validator is the only
     # CI-testable form of a guard whose message names the reader, the target and the relation.
     ;
-  eval = door "eval" eval;
-  evalDebug = door "evalDebug" evalDebug;
-  evalWarm = door "evalWarm" evalWarm;
-  seamAcquisitionDefect = door "seamAcquisitionDefect" seamAcquisitionDefect;
+  # THE DOORS (den-hoag-7gp66 P2, R7): options first, one closed set, then the operands.
+  #   eval      { decision?; declaredDependencies?; parseParent?; prior?; provenance?; } attributes scope
+  #   evalDebug { parseParent?; } attributes scope
+  # The scope is the subject — what is evaluated — and the attribute set is the grammar it is
+  # evaluated under, so the grammar comes first and `eval opts attributes` is an evaluator waiting
+  # for a scope.
+  eval = door.options "eval" [
+    "attributes"
+    "scope"
+  ] eval;
+  evalDebug = door.options "evalDebug" [
+    "attributes"
+    "scope"
+  ] evalDebug;
+  # `evalWarm { parseParent?; provenance?; } { scope; attributes; prior; decision; }` — R7 (a): the
+  # scope is the subject, and the grammar, the prior evaluation and the decision over it are three
+  # configuration operands with no order among them that a caller could read off the call, so they
+  # stay one open record, guarded against the options step (`optionsStep`).
+  evalWarm = door.chained "evalWarm" evalWarm;
+  # R7 (a)/(b): the reader and the target are two node identifiers of one sort, and the declared
+  # relation beside them has no place in an order between them.
+  seamAcquisitionDefect = door.record "seamAcquisitionDefect" seamAcquisitionDefect;
+  # `mintNtaId { host; name; group; key; }` — R7 (a): four strings with no order among them, named as
+  # the record `decodeNta` answers, so `decodeNta (mintNtaId t) == t` holds of one record shape. The
+  # evaluator mints through the positional core.
+  mintNtaId = prelude.door {
+    name = "gen-scope.mintNtaId";
+    required = [
+      "host"
+      "name"
+      "group"
+      "key"
+    ];
+    open = true;
+  } (t: mintNtaId t.host t.name t.group t.key);
+  # The unchecked core the cold fold delegates to: a door on that path would re-check an argument
+  # set the fold has just built.
+  cores = { inherit eval; };
 }

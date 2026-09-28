@@ -50,16 +50,14 @@ let
   chainKinds = mkKinds (
     [
       (mkKind {
-        name = "l0";
         resolve = _: _: { };
-      })
+      } "l0")
     ]
     ++
       map
         (
           n:
           mkKind {
-            name = "l${toString n}";
             below = [ "l${toString (n - 1)}" ];
             resolve = c: _: {
               claims = [
@@ -69,7 +67,7 @@ let
                 })
               ];
             };
-          }
+          } "l${toString n}"
         )
         [
           1
@@ -79,41 +77,33 @@ let
         ]
   );
 
-  chainRes = resolveClaims {
-    kinds = chainKinds;
-    claims = [
-      (mkClaim {
-        kind = "l4";
-        subject = subj;
-      })
-    ];
-  };
+  chainRes = resolveClaims { } chainKinds [
+    (mkClaim {
+      kind = "l4";
+      subject = subj;
+    })
+  ];
 
   # ── an emitted sub-claim that is malformed: the emission call site's own arms ──
   emitBadKinds =
     badClaim:
     mkKinds [
       (mkKind {
-        name = "b";
         resolve = _: _: { };
-      })
+      } "b")
       (mkKind {
-        name = "a";
         below = [ "b" ];
         resolve = _: _: { claims = [ badClaim ]; };
-      })
+      } "a")
     ];
   runEmit =
     badClaim:
-    resolveClaims {
-      kinds = emitBadKinds badClaim;
-      claims = [
-        (mkClaim {
-          kind = "a";
-          subject = subj;
-        })
-      ];
-    };
+    resolveClaims { } (emitBadKinds badClaim) [
+      (mkClaim {
+        kind = "a";
+        subject = subj;
+      })
+    ];
 
   # The reserved-key emission, hand-built for the reason in the header.
   handBuiltReservedEmission = {

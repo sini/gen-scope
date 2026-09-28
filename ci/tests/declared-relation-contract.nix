@@ -54,13 +54,17 @@ let
 
   foldWith =
     declaredDependencies:
-    genScope.foldEquations {
+    genScope.foldEquations { } {
       inherit scope declaredDependencies;
       schedule = { inherit equations; };
       parseParent = _: null;
     };
 
-  evalWith = declaredDependencies: genScope.eval { inherit scope attributes declaredDependencies; };
+  evalWith =
+    declaredDependencies:
+    genScope.eval {
+      inherit declaredDependencies;
+    } attributes scope;
 
   # THE SEEDS, both of them shapes a caller really produces.
   # (1) The bare relation — what every call site wrote before the contract existed.

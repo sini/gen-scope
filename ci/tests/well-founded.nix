@@ -14,34 +14,27 @@
 let
   # These cells are about the UN-INTERPRETED semantics, so the empty interpretation is written
   # once here rather than at every call. The interpreted case is ci/tests/interpretation.nix.
-  wf =
-    program:
-    genScope.wellFoundedModel {
-      inherit program;
-      interpretation = [ ];
-    };
+  wf = program: genScope.wellFoundedModel [ ] program;
 
-  oracle = genScope.mkProgram {
-    rules = [
-      { head = "t"; }
-      {
-        head = "u1";
-        neg = [ "u2" ];
-      }
-      {
-        head = "u2";
-        neg = [ "u1" ];
-      }
-      {
-        head = "c1";
-        pos = [ "c2" ];
-      }
-      {
-        head = "c2";
-        pos = [ "c1" ];
-      }
-    ];
-  };
+  oracle = genScope.mkProgram [
+    { head = "t"; }
+    {
+      head = "u1";
+      neg = [ "u2" ];
+    }
+    {
+      head = "u2";
+      neg = [ "u1" ];
+    }
+    {
+      head = "c1";
+      pos = [ "c2" ];
+    }
+    {
+      head = "c2";
+      pos = [ "c1" ];
+    }
+  ];
   m = wf oracle;
 
   # a0 a fact, a_i :- not a_{i-1}: a chain of negative edges, TOTAL at every atom, alternating
@@ -50,8 +43,8 @@ let
   negChain =
     d:
     wf (
-      genScope.mkProgram {
-        rules = builtins.genList (
+      genScope.mkProgram (
+        builtins.genList (
           i:
           if i == 0 then
             { head = "a${toString i}"; }
@@ -60,25 +53,23 @@ let
               head = "a${toString i}";
               neg = [ "a${toString (i - 1)}" ];
             }
-        ) (d + 1);
-      }
+        ) (d + 1)
+      )
     );
 
   # The stratified fragment: a program with no negative cycle, where the model must be total.
   stratified = wf (
-    genScope.mkProgram {
-      rules = [
-        { head = "p"; }
-        {
-          head = "q";
-          pos = [ "p" ];
-        }
-        {
-          head = "r";
-          neg = [ "q" ];
-        }
-      ];
-    }
+    genScope.mkProgram [
+      { head = "p"; }
+      {
+        head = "q";
+        pos = [ "p" ];
+      }
+      {
+        head = "r";
+        neg = [ "q" ];
+      }
+    ]
   );
 in
 {
@@ -138,12 +129,10 @@ in
     test-atoms-are-emitted-in-declaration-order = {
       expr =
         (wf (
-          genScope.mkProgram {
-            rules = [
-              { head = "zebra"; }
-              { head = "alpha"; }
-            ];
-          }
+          genScope.mkProgram [
+            { head = "zebra"; }
+            { head = "alpha"; }
+          ]
         )).trueAtoms;
       expected = [
         "zebra"

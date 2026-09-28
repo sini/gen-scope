@@ -29,7 +29,6 @@ let
   # `tree`: one child per level while the first definition carries `s` — same-kind growth whose key
   # set reads an evaluated attribute.
   tree = mkKind {
-    name = "tree";
     nta.sub =
       self: id:
       let
@@ -38,11 +37,10 @@ let
       {
         g = if isAttrs d && d ? s then { k = [ (addr 0 [ "s" ]) ]; } else { };
       };
-  };
+  } "tree";
 
   # `pick`: the key set is the host's evaluated `selector` — a value, which `spawnHandle` cannot read.
   pick = mkKind {
-    name = "pick";
     nta.hosts = self: id: {
       hosts = builtins.listToAttrs (
         map (k: {
@@ -56,11 +54,10 @@ let
         }) (self.get id "selector")
       );
     };
-  };
+  } "pick";
 
   # `fam`: group `second`'s KEY is group `first`'s child's evaluated `label` — interleaved families.
   fam = mkKind {
-    name = "fam";
     nta.fam =
       self: id:
       let
@@ -70,17 +67,26 @@ let
         first = if d ? first then { seed = [ (addr 0 [ "first" ]) ]; } else { };
         second =
           if d ? second then
-            { ${self.get (mintNtaId id "fam" "first" "seed") "label"} = [ (addr 0 [ "second" ]) ]; }
+            {
+              ${
+                self.get (mintNtaId {
+                  host = id;
+                  name = "fam";
+                  group = "first";
+                  key = "seed";
+                }) "label"
+              } =
+                [ (addr 0 [ "second" ]) ];
+            }
           else
             { };
       };
-  };
+  } "fam";
 
   # `nest`: the root grows one child per key of its first definition, and a child whose seed
   # carries `s` grows one grandchild under group `g` key `k` — the two depths at which a host reads
   # its own children through `getNta`.
   nest = mkKind {
-    name = "nest";
     nta.sub =
       self: id:
       let
@@ -95,16 +101,15 @@ let
           else
             { };
       };
-  };
+  } "nest";
 
   # `raw`: the builder is a parameter, so one kind carries every refusal and every address case. It
   # grows from the root only, so an enumeration over it is finite whatever the builder yields.
   rawWith =
     builder:
     mkKind {
-      name = "raw";
       nta.x = self: id: if id == "r" then builder self id else { };
-    };
+    } "raw";
 
   attributes = {
     children = _: _: { };
@@ -137,12 +142,7 @@ let
     nodeOrder = attrNames nodes;
   };
 
-  evalWith =
-    kinds: nodes:
-    genScope.eval {
-      scope = scopeOf kinds nodes;
-      inherit attributes;
-    };
+  evalWith = kinds: nodes: genScope.eval { } attributes (scopeOf kinds nodes);
 
   treeWith = data: evalWith (mkKinds [ tree ]) (root "tree" { defs = [ data ]; });
   pickScope =
@@ -161,12 +161,7 @@ let
         inherit selector;
       }
     );
-  pickWith =
-    selector:
-    genScope.eval {
-      scope = pickScope selector;
-      inherit attributes;
-    };
+  pickWith = selector: genScope.eval { } attributes (pickScope selector);
   rawRun =
     builder: evalWith (mkKinds [ (rawWith builder) ]) (root "raw" { defs = [ { s = { }; } ]; });
   rawNodes =
@@ -177,8 +172,8 @@ let
   # attributes a cell reads through; `evaluator` is `eval` or `evalDebug`.
   nestWith =
     evaluator: extra:
-    evaluator {
-      scope = scopeOf (mkKinds [ nest ]) (
+    evaluator { } (attributes // { v = self: id: (first self id).v; } // extra) (
+      scopeOf (mkKinds [ nest ]) (
         root "nest" {
           defs = [
             {
@@ -190,9 +185,8 @@ let
             }
           ];
         }
-      );
-      attributes = attributes // { v = self: id: (first self id).v; } // extra;
-    };
+      )
+    );
 
   # The host's equation for each of its `nest` children, by the child's coordinates: the attribute
   # a child reads through `getHostAt` (den-hoag-n6dh7 U2.0′).
@@ -203,7 +197,12 @@ let
 
   # The one `raw` child under group `g` key `k`, its seed the given list.
   seeded = seed: rawRun (_: _: { g.k = seed; });
-  child = mintNtaId "r" "x" "g" "k";
+  child = mintNtaId {
+    host = "r";
+    name = "x";
+    group = "g";
+    key = "k";
+  };
   seedOfChild = ev: (ev.node child).decls.seed;
 in
 {

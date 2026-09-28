@@ -141,6 +141,10 @@ let
     };
 in
 {
-  mkRule = door "mkRule" mkRule;
-  mkProgram = door "mkProgram" mkProgram;
+  # `mkRule { pos ? [ ]; neg ? [ ]; } head` (den-hoag-7gp66 P2, R7): the defaulted bodies are the
+  # one closed options set, first, and the head is the operand. A rule record inside `mkProgram`'s
+  # list is data and keeps its three fields.
+  mkRule = door.options "mkRule" [ "head" ] mkRule;
+  # `mkProgram rules`: one required operand, positional, so no field check remains.
+  mkProgram = rules: mkProgram { inherit rules; };
 }

@@ -11,14 +11,30 @@ let
     let
       node = self.node id;
       local = builtins.removeAttrs node.decls [ "__edges" ];
-      rFields = lib.foldl' (acc: rid: genScope.shadow acc (allFields self rid)) { } (
-        genScope.followEdge "R" self id
-      );
-      eFields = lib.foldl' (acc: eid: genScope.shadow acc (allFields self eid)) { } (
-        genScope.followEdge "E" self id
-      );
+      rFields = lib.foldl' (
+        acc: rid:
+        genScope.shadow {
+          inner = acc;
+          outer = (allFields self rid);
+        }
+      ) { } (genScope.followEdge "R" self id);
+      eFields = lib.foldl' (
+        acc: eid:
+        genScope.shadow {
+          inner = acc;
+          outer = (allFields self eid);
+        }
+      ) { } (genScope.followEdge "E" self id);
     in
-    genScope.shadow local (genScope.shadow rFields eFields);
+    genScope.shadow {
+      inner = local;
+      outer = (
+        genScope.shadow {
+          inner = rFields;
+          outer = eFields;
+        }
+      );
+    };
 in
 {
   fields = allFields;

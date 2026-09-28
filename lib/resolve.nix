@@ -296,9 +296,14 @@ let
     prelude.concatMap (collectFrom (_seen // { ${id} = true; })) directImporters;
 
   # Ambiguity detection (van Antwerpen §2.3).
+  # `queryAll`'s fields, named: the door built over it reads its contract off these formals.
   ambiguous =
-    args: self: id:
-    builtins.length (queryAll args self id) > 1;
+    {
+      dataFilter,
+      transitiveImports ? false,
+      _seen ? { },
+    }@args:
+    self: id: builtins.length (queryAll args self id) > 1;
 
   # Convenience: resolve single visible declaration from a scope.
   visibleFrom =
@@ -669,8 +674,6 @@ let
 in
 {
   inherit
-    shadow
-    ambiguous
     visibleFrom
     paramAttr
     collectImports
@@ -678,15 +681,34 @@ in
     followEdge
     collectByLabel
     ;
-  resolve = door "resolve" resolve;
-  query = door "query" query;
-  queryAll = door "queryAll" queryAll;
-  queryReverse = door "queryReverse" queryReverse;
-  inherit' = door "inherit'" inherit';
-  inheritAll = door "inheritAll" inheritAll;
-  inheritSet = door "inheritSet" inheritSet;
-  circular = door "circular" circular;
-  collectionAttr = door "collectionAttr" collectionAttr;
-  collect = door "collect" collect;
-  subtypeOf = door "subtypeOf" subtypeOf;
+  # THE DOORS (den-hoag-7gp66 P2, R7): options first, one closed set checked when `f opts` is formed,
+  # then the operands, then the protocol tail (`self id`), which stays positional and last (OQ5).
+  resolve = door.options "resolve" [ ] resolve;
+  query = door.options "query" [ "dataFilter" ] query;
+  queryAll = door.options "queryAll" [ "dataFilter" ] queryAll;
+  queryReverse = door.options "queryReverse" [ "dataFilter" ] queryReverse;
+  ambiguous = door.options "ambiguous" [ "dataFilter" ] ambiguous;
+  inherit' = door.options "inherit'" [ "resolve" ] inherit';
+  inheritAll = door.options "inheritAll" [ "extract" ] inheritAll;
+  inheritSet = door.options "inheritSet" [ "extract" ] inheritSet;
+  circular = door.options "circular" [ ] circular;
+  # `traverse` before `extract`: the targets are chosen, then read — the order `collectByLabel label
+  # extract` and `collectImports extract` already keep.
+  collectionAttr = door.options "collectionAttr" [
+    "traverse"
+    "extract"
+  ] collectionAttr;
+  collect = door.options "collect" [ ] collect;
+  subtypeOf = door.options "subtypeOf" [ ] subtypeOf;
+  # `shadow { inner; outer; }` (R7 (b)): two declaration sets of one sort, and which shadows which is
+  # the whole meaning, so each is named (Neron §5 Def. 1's own terms) rather than remembered by
+  # position. The positional core stays the library's own.
+  shadow = prelude.door {
+    name = "gen-scope.shadow";
+    required = [
+      "inner"
+      "outer"
+    ];
+    open = true;
+  } (r: shadow r.inner r.outer);
 }

@@ -80,7 +80,5 @@
 
   # --- Ambiguity --------------------------------------------------
 
-  name-not-ambiguous = genScope.ambiguous {
-    dataFilter = n: n.decls.name or null;
-  } result "NamedPoint";
+  name-not-ambiguous = genScope.ambiguous { } (n: n.decls.name or null) result "NamedPoint";
 }

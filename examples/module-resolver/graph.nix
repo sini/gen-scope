@@ -36,24 +36,42 @@ let
       "Std.Math"
       "Std.String"
     ])
-    (genScope.edge "App.Sub" "App")
+    (genScope.edge {
+      from = "App.Sub";
+      to = "App";
+    })
   ];
 
   # Import edges encode module imports.
   importGraph = genScope.overlays [
-    (genScope.edge "Std.String" "Std.Math")
-    (genScope.edge "App" "Std.String")
-    (genScope.edge "App.Sub" "Std.IO")
+    (genScope.edge {
+      from = "Std.String";
+      to = "Std.Math";
+    })
+    (genScope.edge {
+      from = "App";
+      to = "Std.String";
+    })
+    (genScope.edge {
+      from = "App.Sub";
+      to = "Std.IO";
+    })
     # Cyclic: Cycle1 ↔ Cycle2
-    (genScope.edge "Cycle1" "Cycle2")
-    (genScope.edge "Cycle2" "Cycle1")
+    (genScope.edge {
+      from = "Cycle1";
+      to = "Cycle2";
+    })
+    (genScope.edge {
+      from = "Cycle2";
+      to = "Cycle1";
+    })
   ];
 
   # A FLAT kind vocabulary: the names this graph's nodes are, with no order between them, so no
   # kind expands into another. Registering them is what gives the kind set a domain — an
   # unregistered spelling is refused rather than silently becoming a kind of its own.
   kinds = genScope.mkKinds (
-    map (name: genScope.mkKind { inherit name; }) [
+    map (name: genScope.mkKind { } name) [
       "root"
       "module"
     ]

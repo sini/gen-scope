@@ -29,12 +29,11 @@ let
   # produce any kind at all, including its own host's, and nothing would be able to say whether the
   # expansion terminates.
   kinds = genScope.mkKinds [
-    (genScope.mkKind { name = "primitive"; })
-    (genScope.mkKind { name = "record"; })
-    (genScope.mkKind { name = "class"; })
-    (genScope.mkKind { name = "env"; })
+    (genScope.mkKind { } "primitive")
+    (genScope.mkKind { } "record")
+    (genScope.mkKind { } "class")
+    (genScope.mkKind { } "env")
     (genScope.mkKind {
-      name = "root";
       below = [ "record" ];
       spawns.record = _self: _id: {
         "Pair<Num,String>" = {
@@ -46,7 +45,7 @@ let
           };
         };
       };
-    })
+    } "root")
   ];
 
   roots = genScope.buildRoots {
@@ -65,14 +64,23 @@ let
       # R = record field extension (van Antwerpen 2018 Fig. 4, 5)
       {
         label = "R";
-        graph = genScope.edge "NamedPoint" "Point2D";
+        graph = genScope.edge {
+          from = "NamedPoint";
+          to = "Point2D";
+        };
       }
       # E = class inheritance (Neron 2015 §3, Fig. 16)
       {
         label = "E";
         graph = genScope.overlays [
-          (genScope.edge "Circle" "Shape")
-          (genScope.edge "Rect" "Shape")
+          (genScope.edge {
+            from = "Circle";
+            to = "Shape";
+          })
+          (genScope.edge {
+            from = "Rect";
+            to = "Shape";
+          })
         ];
       }
     ];

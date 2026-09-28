@@ -41,12 +41,11 @@ let
       { };
 
   kinds = genScope.mkKinds [
-    (genScope.mkKind { name = "d"; })
+    (genScope.mkKind { } "d")
     (genScope.mkKind {
-      name = "t";
       below = [ "d" ];
       spawns.d = spawnOne;
-    })
+    } "t")
   ];
 
   scope = {
@@ -66,12 +65,7 @@ let
     owned = genScope.collectByLabel "owns" (_self: id: [ id ]);
   };
 
-  evalWith =
-    extra:
-    genScope.eval {
-      inherit scope;
-      attributes = attrs // extra;
-    };
+  evalWith = extra: genScope.eval { } (attrs // extra) scope;
 
   ev = evalWith { };
 

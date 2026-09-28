@@ -298,5 +298,6 @@ in
     mintAttachmentId
     parseParent
     ;
-  buildRoots = door "buildRoots" buildRoots;
+  # Every field defaulted: one closed options set and nothing after it (den-hoag-7gp66 P2).
+  buildRoots = door.options "buildRoots" [ ] buildRoots;
 }

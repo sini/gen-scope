@@ -26,12 +26,11 @@ let
   # a condition inside the body and becomes the reason the body runs at all. What is left in the
   # body is the genuine data condition.
   kinds = genScope.mkKinds [
-    (genScope.mkKind { name = "global"; })
-    (genScope.mkKind { name = "project"; })
-    (genScope.mkKind { name = "user"; })
-    (genScope.mkKind { name = "rollout"; })
+    (genScope.mkKind { } "global")
+    (genScope.mkKind { } "project")
+    (genScope.mkKind { } "user")
+    (genScope.mkKind { } "rollout")
     (genScope.mkKind {
-      name = "org";
       below = [ "rollout" ];
       spawns.rollout =
         self: id:
@@ -48,7 +47,7 @@ let
           }
         else
           { };
-    })
+    } "org")
   ];
 
   roots = genScope.buildRoots {
@@ -65,9 +64,18 @@ let
         "user:alice"
         "user:bob"
       ])
-      (genScope.edge "user:carol" "project:beta")
-      (genScope.edge "project:gamma" "org:widgets")
-      (genScope.edge "user:dave" "project:gamma")
+      (genScope.edge {
+        from = "user:carol";
+        to = "project:beta";
+      })
+      (genScope.edge {
+        from = "project:gamma";
+        to = "org:widgets";
+      })
+      (genScope.edge {
+        from = "user:dave";
+        to = "project:gamma";
+      })
     ];
     decls = {
       global = {

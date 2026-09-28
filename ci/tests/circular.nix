@@ -42,14 +42,13 @@ let
 
   evalWith =
     scope: attr:
-    genScope.eval {
-      inherit scope;
-      attributes = {
+    genScope.eval { } (
+      {
         children = _self: _id: { };
         imports = _self: _id: [ ];
       }
-      // attr;
-    };
+      // attr
+    ) scope;
 
   convergingResult = evalWith roots {
     counter = circular { carrier = upTo 10; } (

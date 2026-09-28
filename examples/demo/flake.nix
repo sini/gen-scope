@@ -28,7 +28,10 @@
           # Overlay: union of vertices and edges (commutative, associative, idempotent)
           g1 = genScope.overlay (genScope.vertex "a") (genScope.vertex "b");
           # Connect: overlay + cross-product edges from left to right
-          g2 = genScope.connect (genScope.vertex "a") (genScope.vertex "b");
+          g2 = genScope.connect {
+            from = (genScope.vertex "a");
+            to = (genScope.vertex "b");
+          };
         in
         {
           overlay-vertices = g1.vertices; # [ "a" "b" ]
@@ -119,7 +122,10 @@
           o = genScope.overlays [
             (genScope.vertex "isolated-1")
             (genScope.vertex "isolated-2")
-            (genScope.edge "linked-a" "linked-b")
+            (genScope.edge {
+              from = "linked-a";
+              to = "linked-b";
+            })
           ];
         in
         {
@@ -181,11 +187,17 @@
               "dept:pl"
               "dept:systems"
             ])
-            (genScope.edge "lab:types" "dept:pl")
+            (genScope.edge {
+              from = "lab:types";
+              to = "dept:pl";
+            })
           ];
 
           # PL department imports from math faculty (cross-scope visibility)
-          importGraph = genScope.edge "dept:pl" "faculty:math";
+          importGraph = genScope.edge {
+            from = "dept:pl";
+            to = "faculty:math";
+          };
 
           nodes = genScope.buildRoots {
             inherit parentGraph importGraph;
@@ -212,7 +224,7 @@
               };
             };
             kinds = genScope.mkKinds (
-              map (name: genScope.mkKind { inherit name; }) [
+              map (name: genScope.mkKind { } name) [
                 "institution"
                 "faculty"
                 "department"
@@ -263,12 +275,15 @@
               "a1"
               "a2"
             ])
-            (genScope.edge "a1x" "a1")
+            (genScope.edge {
+              from = "a1x";
+              to = "a1";
+            })
           ];
           nodes = genScope.buildRoots {
             inherit parentGraph;
             kinds = genScope.mkKinds (
-              map (name: genScope.mkKind { inherit name; }) [
+              map (name: genScope.mkKind { } name) [
                 "org"
                 "team"
                 "person"
@@ -284,13 +299,10 @@
               a1x = "pet";
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: _id: [ ];
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: _id: [ ];
+          } nodes;
         in
         {
           parent = genScope.parent result "a1"; # "a"
@@ -321,8 +333,22 @@
       nameResolution =
         let
           nodes = genScope.buildRoots {
-            parentGraph = genScope.overlay (genScope.edge "inner" "outer") (genScope.edge "deep" "inner");
-            importGraph = genScope.edge "inner" "lib";
+            parentGraph =
+              genScope.overlay
+                (genScope.edge {
+                  from = "inner";
+                  to = "outer";
+                })
+                (
+                  genScope.edge {
+                    from = "deep";
+                    to = "inner";
+                  }
+                );
+            importGraph = genScope.edge {
+              from = "inner";
+              to = "lib";
+            };
             decls = {
               outer = {
                 color = "blue";
@@ -338,26 +364,23 @@
               };
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: id: (_self.node id).decls.__edges.I or [ ];
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+          } nodes;
         in
         {
           # shadow (Neron §5 Def. 1): inner keys suppress outer
-          shadow-merge =
-            genScope.shadow
-              {
-                a = 1;
-                b = 2;
-              }
-              {
-                a = 99;
-                c = 3;
-              };
+          shadow-merge = genScope.shadow {
+            inner = {
+              a = 1;
+              b = 2;
+            };
+            outer = {
+              a = 99;
+              c = 3;
+            };
+          };
           # -> { a = 1; b = 2; c = 3; }
 
           # resolve: specificity ordering D < I < P
@@ -370,24 +393,16 @@
           # query: generalized combinator (van Antwerpen §2.1)
           # inner has local color=green, import color=red, parent color=blue
           # D < I means local green wins
-          query-inner-color = genScope.query {
-            dataFilter = n: n.decls.color or null;
-          } result "inner"; # -> "green"
+          query-inner-color = genScope.query { } (n: n.decls.color or null) result "inner"; # -> "green"
 
           # deep has no local color, no imports, walks parent to inner (green)
-          query-deep-inherits = genScope.query {
-            dataFilter = n: n.decls.color or null;
-          } result "deep"; # -> "green"
+          query-deep-inherits = genScope.query { } (n: n.decls.color or null) result "deep"; # -> "green"
 
           # Import-only query: tool comes from import (lib has tool)
-          query-import-tool = genScope.query {
-            dataFilter = n: n.decls.tool or null;
-          } result "inner"; # -> "hammer"
+          query-import-tool = genScope.query { } (n: n.decls.tool or null) result "inner"; # -> "hammer"
 
           # inherit': walks parent chain (Neron §2.3)
-          inherit-size = genScope.inherit' {
-            resolve = n: n.decls.size or null;
-          } result "deep"; # -> "large" (deep -> inner -> outer)
+          inherit-size = genScope.inherit' { } (n: n.decls.size or null) result "deep"; # -> "large" (deep -> inner -> outer)
         };
 
       # ===================================================================
@@ -397,8 +412,14 @@
       ambiguityDetection =
         let
           nodes = genScope.buildRoots {
-            parentGraph = genScope.edge "scope" "parent";
-            importGraph = genScope.edge "scope" "imported";
+            parentGraph = genScope.edge {
+              from = "scope";
+              to = "parent";
+            };
+            importGraph = genScope.edge {
+              from = "scope";
+              to = "imported";
+            };
             decls = {
               parent = {
                 name = "from-parent";
@@ -411,28 +432,19 @@
               };
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: id: (_self.node id).decls.__edges.I or [ ];
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+          } nodes;
         in
         {
           all-reachable = builtins.sort builtins.lessThan (
-            genScope.queryAll {
-              dataFilter = n: n.decls.name or null;
-            } result "scope"
+            genScope.queryAll { } (n: n.decls.name or null) result "scope"
           );
 
-          is-ambiguous = genScope.ambiguous {
-            dataFilter = n: n.decls.name or null;
-          } result "scope"; # -> true
+          is-ambiguous = genScope.ambiguous { } (n: n.decls.name or null) result "scope"; # -> true
 
-          not-ambiguous = genScope.ambiguous {
-            dataFilter = n: n.decls.name or null;
-          } result "parent"; # -> false
+          not-ambiguous = genScope.ambiguous { } (n: n.decls.name or null) result "parent"; # -> false
         };
 
       # ===================================================================
@@ -447,7 +459,18 @@
               "modB"
               "modC"
             ];
-            importGraph = genScope.overlay (genScope.edge "modA" "modB") (genScope.edge "modB" "modC");
+            importGraph =
+              genScope.overlay
+                (genScope.edge {
+                  from = "modA";
+                  to = "modB";
+                })
+                (
+                  genScope.edge {
+                    from = "modB";
+                    to = "modC";
+                  }
+                );
             decls = {
               modA = {
                 x = "local-A";
@@ -462,23 +485,17 @@
               };
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: id: (_self.node id).decls.__edges.I or [ ];
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+          } nodes;
         in
         {
-          non-transitive = genScope.query {
-            dataFilter = n: n.decls.z or null;
-          } result "modA";
+          non-transitive = genScope.query { } (n: n.decls.z or null) result "modA";
 
           transitive = genScope.query {
-            dataFilter = n: n.decls.z or null;
             transitiveImports = true;
-          } result "modA";
+          } (n: n.decls.z or null) result "modA";
 
           # Two declarers on one transitive route is an AMBIGUITY, and the query refuses by name.
           # `modB` and `modC` both declare `y`, so under transitive imports `modA`'s read has two
@@ -490,22 +507,19 @@
           transitive-ambiguity-refuses =
             (builtins.tryEval (
               genScope.query {
-                dataFilter = n: n.decls.y or null;
                 transitiveImports = true;
-              } result "modA"
+              } (n: n.decls.y or null) result "modA"
             )).success; # -> false
 
           # The remedy the refusal names: `queryAll` identifies ALL the resolutions without
           # shadowing (Neron 2015 Fig. 3, rule R) and leaves the choice at the call site.
           transitive-ambiguity-read-in-full = genScope.queryAll {
-            dataFilter = n: n.decls.y or null;
             transitiveImports = true;
-          } result "modA"; # -> [ "from-B" "from-C" ]
+          } (n: n.decls.y or null) result "modA"; # -> [ "from-B" "from-C" ]
 
           include-semantics = genScope.query {
-            dataFilter = n: n.decls.x or null;
             localShadowsImport = false;
-          } result "modA";
+          } (n: n.decls.x or null) result "modA";
         };
 
       # ===================================================================
@@ -519,7 +533,18 @@
               "a"
               "b"
             ];
-            importGraph = genScope.overlay (genScope.edge "a" "b") (genScope.edge "b" "a");
+            importGraph =
+              genScope.overlay
+                (genScope.edge {
+                  from = "a";
+                  to = "b";
+                })
+                (
+                  genScope.edge {
+                    from = "b";
+                    to = "a";
+                  }
+                );
             decls = {
               a = {
                 val = "from-a";
@@ -529,22 +554,15 @@
               };
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: id: (_self.node id).decls.__edges.I or [ ];
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+          } nodes;
         in
         {
-          a-resolves = genScope.query {
-            dataFilter = n: n.decls.val or null;
-          } result "a";
+          a-resolves = genScope.query { } (n: n.decls.val or null) result "a";
 
-          b-resolves = genScope.query {
-            dataFilter = n: n.decls.val or null;
-          } result "b";
+          b-resolves = genScope.query { } (n: n.decls.val or null) result "b";
         };
 
       # ===================================================================
@@ -562,7 +580,10 @@
               "platform"
               "frontend"
             ])
-            (genScope.edge "infra" "platform")
+            (genScope.edge {
+              from = "infra";
+              to = "platform";
+            })
           ];
           nodes = genScope.buildRoots {
             inherit parentGraph;
@@ -592,9 +613,7 @@
             imports = _self: _id: [ ];
 
             # Inherited: flows top-down via parent chain (Knuth 1968)
-            location = genScope.inherit' {
-              resolve = n: n.decls.location or null;
-            };
+            location = genScope.inherit' { } (n: n.decls.location or null);
 
             # Synthesized: rolls up bottom-up from children
             headcount =
@@ -618,10 +637,7 @@
             );
           };
 
-          r = genScope.eval {
-            scope = nodes;
-            inherit attributes;
-          };
+          r = genScope.eval { } attributes nodes;
         in
         {
           # Inherited attribute: location flows from company to all descendants
@@ -668,9 +684,8 @@
             # licenses it, and the substrate stamps the audit's kind and parent from the
             # declaration rather than from anything the builder writes.
             kinds = genScope.mkKinds [
-              (genScope.mkKind { name = "audit"; })
+              (genScope.mkKind { } "audit")
               (genScope.mkKind {
-                name = "department";
                 below = [ "audit" ];
                 spawns.audit =
                   self: id:
@@ -683,7 +698,7 @@
                       };
                     };
                   };
-              })
+              } "department")
             ];
             types = {
               "dept:eng" = "department";
@@ -692,15 +707,12 @@
             };
           };
 
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              # `children` SELECTS among the nodes the scope carries; the audit nodes are GROWN by
-              # `spawns.audit` on the `department` kind above.
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: _id: [ ];
-            };
-          };
+          result = genScope.eval { } {
+            # `children` SELECTS among the nodes the scope carries; the audit nodes are GROWN by
+            # `spawns.audit` on the `department` kind above.
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: _id: [ ];
+          } nodes;
         in
         {
           # Synthesized nodes exist for departments over threshold
@@ -732,43 +744,40 @@
               };
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: _id: { };
-              imports = _self: _id: [ ];
-              # The carrier is the integers 0…95 under the arithmetic order: bottom 0, and a height
-              # of 95, which is the length of that chain and so an upper bound on the strict
-              # ascents any step over it can take. The declaration is about the LATTICE, not about
-              # this step — this one converges in eleven — so a step rewritten to approach the
-              # target more slowly stays sound against the same declaration.
-              accuracy =
-                genScope.circular
-                  {
-                    carrier = {
-                      bottom = 0;
-                      leq = a: b: a <= b;
-                      height = 95;
-                      # Antisymmetric arithmetic order: not a quotient, and the required fourth
-                      # term says so.
-                      quotient = false;
-                    };
-                  }
-                  (
-                    self: id: prev:
+          result = genScope.eval { } {
+            children = _self: _id: { };
+            imports = _self: _id: [ ];
+            # The carrier is the integers 0…95 under the arithmetic order: bottom 0, and a height
+            # of 95, which is the length of that chain and so an upper bound on the strict
+            # ascents any step over it can take. The declaration is about the LATTICE, not about
+            # this step — this one converges in eleven — so a step rewritten to approach the
+            # target more slowly stays sound against the same declaration.
+            accuracy =
+              genScope.circular
+                {
+                  carrier = {
+                    bottom = 0;
+                    leq = a: b: a <= b;
+                    height = 95;
+                    # Antisymmetric arithmetic order: not a quotient, and the required fourth
+                    # term says so.
+                    quotient = false;
+                  };
+                }
+                (
+                  self: id: prev:
+                  let
+                    target = (self.node id).decls.target-accuracy;
+                  in
+                  if prev >= target then
+                    prev
+                  else
                     let
-                      target = (self.node id).decls.target-accuracy;
+                      next = prev + ((target - prev) * 30 / 100 + 1);
                     in
-                    if prev >= target then
-                      prev
-                    else
-                      let
-                        next = prev + ((target - prev) * 30 / 100 + 1);
-                      in
-                      if next > target then target else next
-                  );
-            };
-          };
+                    if next > target then target else next
+                );
+          } nodes;
         in
         {
           converged = result.get "system" "accuracy"; # -> 95
@@ -786,7 +795,18 @@
               "utils"
               "math"
             ];
-            importGraph = genScope.overlay (genScope.edge "app" "utils") (genScope.edge "app" "math");
+            importGraph =
+              genScope.overlay
+                (genScope.edge {
+                  from = "app";
+                  to = "utils";
+                })
+                (
+                  genScope.edge {
+                    from = "app";
+                    to = "math";
+                  }
+                );
             decls = {
               app = { };
               utils = {
@@ -803,14 +823,11 @@
               };
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: id: (_self.node id).decls.__edges.I or [ ];
-              available-fns = genScope.collectImports (self: importId: (self.node importId).decls.exports or [ ]);
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+            available-fns = genScope.collectImports (self: importId: (self.node importId).decls.exports or [ ]);
+          } nodes;
         in
         {
           app-fns = result.get "app" "available-fns";
@@ -846,13 +863,10 @@
               };
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: _id: [ ];
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: _id: [ ];
+          } nodes;
         in
         {
           is-subtype = genScope.subtypeOf { } result "point2d" "point3d"; # true
@@ -882,12 +896,18 @@
               # R = record field extension
               {
                 label = "R";
-                graph = genScope.edge "extRecord" "baseRecord";
+                graph = genScope.edge {
+                  from = "extRecord";
+                  to = "baseRecord";
+                };
               }
               # E = class inheritance
               {
                 label = "E";
-                graph = genScope.edge "classB" "classA";
+                graph = genScope.edge {
+                  from = "classB";
+                  to = "classA";
+                };
               }
             ];
             decls = {
@@ -906,15 +926,12 @@
               };
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: _id: [ ];
-              "edges-R" = _self: id: (_self.node id).decls.__edges.R or [ ];
-              "edges-E" = _self: id: (_self.node id).decls.__edges.E or [ ];
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: _id: [ ];
+            "edges-R" = _self: id: (_self.node id).decls.__edges.R or [ ];
+            "edges-E" = _self: id: (_self.node id).decls.__edges.E or [ ];
+          } nodes;
         in
         {
           # followEdge: get targets for a custom label
@@ -940,7 +957,10 @@
       scopedRelations =
         let
           nodes = genScope.buildRoots {
-            parentGraph = genScope.edge "inner" "outer";
+            parentGraph = genScope.edge {
+              from = "inner";
+              to = "outer";
+            };
             decls = {
               outer = {
                 x = 42;
@@ -955,29 +975,20 @@
               inner = { };
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: _id: [ ];
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: _id: [ ];
+          } nodes;
         in
         {
           # Value namespace (via decls)
-          value-x = genScope.query {
-            dataFilter = n: n.decls.x or null;
-          } result "inner"; # -> 42
+          value-x = genScope.query { } (n: n.decls.x or null) result "inner"; # -> 42
 
           # Type namespace (via decls.__typeRel)
-          type-x = genScope.query {
-            dataFilter = n: (n.decls.__typeRel or { }).x or null;
-          } result "inner"; # -> "Int"
+          type-x = genScope.query { } (n: (n.decls.__typeRel or { }).x or null) result "inner"; # -> "Int"
 
           # Doc namespace
-          doc-x = genScope.query {
-            dataFilter = n: (n.decls.__docRel or { }).x or null;
-          } result "inner"; # -> "The x coordinate"
+          doc-x = genScope.query { } (n: (n.decls.__docRel or { }).x or null) result "inner"; # -> "The x coordinate"
 
           # Direct decl access
           decl-via-node = (result.node "outer").decls.x; # -> 42
@@ -994,23 +1005,31 @@
               "a"
               "b"
             ];
-            importGraph = genScope.overlay (genScope.edge "a" "b") (genScope.edge "b" "a");
+            importGraph =
+              genScope.overlay
+                (genScope.edge {
+                  from = "a";
+                  to = "b";
+                })
+                (
+                  genScope.edge {
+                    from = "b";
+                    to = "a";
+                  }
+                );
           };
 
           # Intentionally cyclic: a.ping reads b.ping, b.ping reads a.ping
-          result = genScope.evalDebug {
-            scope = nodes;
-            attributes = {
-              children = _self: _id: { };
-              imports = _self: id: (_self.node id).decls.__edges.I or [ ];
-              ping =
-                self: id:
-                let
-                  other = builtins.head (self.get id "imports");
-                in
-                self.get other "ping";
-            };
-          };
+          result = genScope.evalDebug { } {
+            children = _self: _id: { };
+            imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+            ping =
+              self: id:
+              let
+                other = builtins.head (self.get id "imports");
+              in
+              self.get other "ping";
+          } nodes;
 
           # Try to evaluate -- will throw with structured cycle trace
           tried = builtins.tryEval (result.get "a" "ping");
@@ -1045,7 +1064,7 @@
               };
             };
             kinds = genScope.mkKinds (
-              map (name: genScope.mkKind { inherit name; }) [
+              map (name: genScope.mkKind { } name) [
                 "org"
                 "team"
               ]
@@ -1057,13 +1076,10 @@
               teamC = "team";
             };
           };
-          result = genScope.eval {
-            scope = nodes;
-            attributes = {
-              children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
-              imports = _self: _id: [ ];
-            };
-          };
+          result = genScope.eval { } {
+            children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
+            imports = _self: _id: [ ];
+          } nodes;
         in
         {
           # collect: iterate all nodes (global -- use sparingly)

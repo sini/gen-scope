@@ -1338,6 +1338,12 @@ in
     # formal, and no consumer needs a predicate the doors already decide.
     kindSetDefect
     ;
-  mkKind = door "mkKind" mkKind;
-  resolveClaims = door "resolveClaims" resolveClaims;
+  # Options first, then the operands (den-hoag-7gp66 P2, R7): `mkKind { below ? …; resolve ? …; … }
+  # name`, the name being what the kind IS; `resolveClaims { ctx ? … } kinds claims`, the claims the
+  # subject and the kind registry their configuration.
+  mkKind = door.options "mkKind" [ "name" ] mkKind;
+  resolveClaims = door.options "resolveClaims" [
+    "kinds"
+    "claims"
+  ] resolveClaims;
 }

@@ -21,45 +21,32 @@
 
   # Transitive imports: String imports Math, so App sees pi through chain.
   transitive-import = genScope.query {
-    dataFilter = n: n.decls.pi or null;
     transitiveImports = true;
-  } result "App";
+  } (n: n.decls.pi or null) result "App";
   # -> 3
 
   # Non-transitive (default): App cannot see Math's pi.
-  non-transitive = genScope.query {
-    dataFilter = n: n.decls.pi or null;
-  } result "App";
+  non-transitive = genScope.query { } (n: n.decls.pi or null) result "App";
   # -> null
 
   # --- Ambiguity detection (van Antwerpen 2018) -------------------
 
-  not-ambiguous = genScope.ambiguous {
-    dataFilter = n: n.decls.concat or null;
-  } result "Std.String";
+  not-ambiguous = genScope.ambiguous { } (n: n.decls.concat or null) result "Std.String";
   # -> false
 
-  shadow-no-ambiguity = genScope.ambiguous {
-    dataFilter = n: n.decls.format or null;
-  } result "App.Sub";
+  shadow-no-ambiguity = genScope.ambiguous { } (n: n.decls.format or null) result "App.Sub";
   # -> false
 
   # --- Cyclic imports (Neron 2015 §2.4, rule X) ------------------
 
-  cycle-safe-c1 = genScope.query {
-    dataFilter = n: n.decls.val or null;
-  } result "Cycle1";
+  cycle-safe-c1 = genScope.query { } (n: n.decls.val or null) result "Cycle1";
   # -> "c1"
 
-  cycle-safe-c2 = genScope.query {
-    dataFilter = n: n.decls.val or null;
-  } result "Cycle2";
+  cycle-safe-c2 = genScope.query { } (n: n.decls.val or null) result "Cycle2";
   # -> "c2"
 
   cycle-all-reachable = builtins.sort builtins.lessThan (
-    genScope.queryAll {
-      dataFilter = n: n.decls.val or null;
-    } result "Cycle1"
+    genScope.queryAll { } (n: n.decls.val or null) result "Cycle1"
   );
   # -> [ "c1" "c2" ]
 

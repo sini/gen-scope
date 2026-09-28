@@ -53,6 +53,6 @@ in
       hasPerm && !denied
     );
 
-    sensitivity = genScope.inherit' { resolve = node: node.decls.sensitivity or null; };
+    sensitivity = genScope.inherit' { } (node: node.decls.sensitivity or null);
   };
 }

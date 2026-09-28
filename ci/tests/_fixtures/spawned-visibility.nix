@@ -17,9 +17,8 @@
 { lib, genScope }:
 let
   spawnKinds = genScope.mkKinds [
-    (genScope.mkKind { name = "chaff"; })
+    (genScope.mkKind { } "chaff")
     (genScope.mkKind {
-      name = "quern";
       below = [ "chaff" ];
       spawns.chaff = _self: id: {
         winnow = {
@@ -33,7 +32,7 @@ let
           decls = { };
         };
       };
-    })
+    } "quern")
   ];
 
   nodes = {
@@ -66,14 +65,8 @@ let
     # The two resolver traversals under test, declared on the fixture so the cells read them as
     # ordinary attributes. The siblings gather is asserted on the DECLARED child: on a spawned
     # host the traversal inherits the sibling asymmetry and gathers something pre-fix too.
-    gather-children = genScope.collectionAttr {
-      traverse = "children";
-      extract = _self: id: [ id ];
-    };
-    gather-siblings = genScope.collectionAttr {
-      traverse = "siblings";
-      extract = _self: id: [ id ];
-    };
+    gather-children = genScope.collectionAttr { } "children" (_self: id: [ id ]);
+    gather-siblings = genScope.collectionAttr { } "siblings" (_self: id: [ id ]);
   };
 
   # Both spawned ids resolve through the parent: the spawn builder keys them under `millstone`.
@@ -81,21 +74,14 @@ let
 in
 {
   # Cold production evaluation — the visibility question needs no decision, no prior.
-  result = genScope.eval {
-    scope = roots;
-    inherit attributes;
-  };
+  result = genScope.eval { } attributes roots;
 
   # The debug pair varies exactly one thing, the `parseParent` formal: the composed read forces a
   # node acquisition at the spawned id, which the debug evaluator can only satisfy through it.
   debugWithParse = genScope.evalDebug {
-    scope = roots;
-    inherit attributes parseParent;
-  };
-  debugNoParse = genScope.evalDebug {
-    scope = roots;
-    inherit attributes;
-  };
+    inherit parseParent;
+  } attributes roots;
+  debugNoParse = genScope.evalDebug { } attributes roots;
 
   # ── THE MIS-POINTED PARENT: BOTH ARMS AND THE CONTROL ──
   # `parseParent` names an id and nothing obliges that id to resolve. The two shapes of that ONE
@@ -104,17 +90,12 @@ in
   # does not carry `winnow`; `nosuch` resolves to nothing. Three evaluations varying exactly the
   # one formal, so what separates them is the pointing and not the graph.
   misPointedToChildless = genScope.eval {
-    scope = roots;
-    inherit attributes;
     parseParent = id: if id == "winnow" then "husk" else nodes.${id}.parent or null;
-  };
+  } attributes roots;
   misPointedToUnresolvable = genScope.eval {
-    scope = roots;
-    inherit attributes;
     parseParent = id: if id == "winnow" then "nosuch" else nodes.${id}.parent or null;
-  };
+  } attributes roots;
   correctlyPointed = genScope.eval {
-    scope = roots;
-    inherit attributes parseParent;
-  };
+    inherit parseParent;
+  } attributes roots;
 }

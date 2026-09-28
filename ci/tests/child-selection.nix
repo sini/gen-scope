@@ -21,7 +21,7 @@ let
 
   # A FLAT kind vocabulary, which is what every shipped example registers: the names this graph's
   # nodes are, with no order between them.
-  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { } name) names);
 
   # ── THE CONFIG-CASCADE SHAPE, REPRODUCED ──
   # Measured at `examples/config-cascade/graph.nix`: a directory tree whose containment is
@@ -54,12 +54,9 @@ let
       infra = "dir";
     };
   };
-  dirResult = genScope.eval {
-    scope = dirScope;
-    attributes = {
-      children = _self: id: lib.filterAttrs (_: n: n.parent == id) dirScope.nodes;
-    };
-  };
+  dirResult = genScope.eval { } {
+    children = _self: id: lib.filterAttrs (_: n: n.parent == id) dirScope.nodes;
+  } dirScope;
 
   # ── THE TWO BODIES, OVER ONE SCOPE ──
   pairScope = {
@@ -82,12 +79,7 @@ let
       "kid"
     ];
   };
-  runWith =
-    children:
-    genScope.eval {
-      scope = pairScope;
-      attributes = { inherit children; };
-    };
+  runWith = children: genScope.eval { } { inherit children; } pairScope;
   selecting = runWith (_self: id: lib.filterAttrs (_: n: n.parent == id) pairScope.nodes);
   minting = runWith (
     _self: id:
@@ -127,9 +119,8 @@ let
       "kid"
     ];
     kinds = genScope.mkKinds [
-      (genScope.mkKind { name = "sub"; })
+      (genScope.mkKind { } "sub")
       (genScope.mkKind {
-        name = "container";
         below = [ "sub" ];
         # No `type` on the record: the substrate stamps `sub` from the key this builder is
         # declared under.
@@ -140,15 +131,12 @@ let
             decls = { };
           };
         };
-      })
+      } "container")
     ];
   };
-  spawnResult = genScope.eval {
-    scope = spawnScope;
-    attributes = {
-      children = _self: id: lib.filterAttrs (_: n: n.parent == id) spawnScope.nodes;
-    };
-  };
+  spawnResult = genScope.eval { } {
+    children = _self: id: lib.filterAttrs (_: n: n.parent == id) spawnScope.nodes;
+  } spawnScope;
 in
 {
   flake.tests."child-selection" = {

@@ -181,7 +181,10 @@ in
     test-kindless-scope-childrenIds-answers =
       let
         kindlessRoots = genScope.buildRoots {
-          parentGraph = genScope.edge "kid" "top";
+          parentGraph = genScope.edge {
+            from = "kid";
+            to = "top";
+          };
           importGraph = genScope.empty;
           decls = {
             top = { };
@@ -189,13 +192,10 @@ in
           };
           types = { };
         };
-        kindless = genScope.eval {
-          scope = kindlessRoots;
-          attributes = {
-            children = _self: id: lib.filterAttrs (_: n: n.parent == id) kindlessRoots.nodes;
-            imports = _self: _id: [ ];
-          };
-        };
+        kindless = genScope.eval { } {
+          children = _self: id: lib.filterAttrs (_: n: n.parent == id) kindlessRoots.nodes;
+          imports = _self: _id: [ ];
+        } kindlessRoots;
       in
       {
         expr = {

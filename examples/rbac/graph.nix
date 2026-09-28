@@ -25,7 +25,7 @@ let
   # kind expands into another. Registering them is what gives the kind set a domain — an
   # unregistered spelling is refused rather than silently becoming a kind of its own.
   kinds = genScope.mkKinds (
-    map (name: genScope.mkKind { inherit name; }) [
+    map (name: genScope.mkKind { } name) [
       "role"
       "user"
       "resource"
@@ -44,33 +44,63 @@ in
         "doc-1"
         "doc-2"
       ])
-      (genScope.edge "doc-3" "project-y")
+      (genScope.edge {
+        from = "doc-3";
+        to = "project-y";
+      })
     ];
     edgeGraphs = [
       # R = role inheritance (Neron 2015 §3, Fig. 16)
       {
         label = "R";
         graph = genScope.overlays [
-          (genScope.edge "editor" "viewer")
-          (genScope.edge "admin" "editor")
-          (genScope.edge "auditor" "viewer")
+          (genScope.edge {
+            from = "editor";
+            to = "viewer";
+          })
+          (genScope.edge {
+            from = "admin";
+            to = "editor";
+          })
+          (genScope.edge {
+            from = "auditor";
+            to = "viewer";
+          })
         ];
       }
       # A = role assignment (user -> role)
       {
         label = "A";
         graph = genScope.overlays [
-          (genScope.edge "alice" "admin")
-          (genScope.edge "bob" "editor")
-          (genScope.edge "bob" "auditor")
-          (genScope.edge "carol" "viewer")
-          (genScope.edge "dave" "editor")
+          (genScope.edge {
+            from = "alice";
+            to = "admin";
+          })
+          (genScope.edge {
+            from = "bob";
+            to = "editor";
+          })
+          (genScope.edge {
+            from = "bob";
+            to = "auditor";
+          })
+          (genScope.edge {
+            from = "carol";
+            to = "viewer";
+          })
+          (genScope.edge {
+            from = "dave";
+            to = "editor";
+          })
         ];
       }
       # D = deny override (user -> resource)
       {
         label = "D";
-        graph = genScope.edge "dave" "project-x";
+        graph = genScope.edge {
+          from = "dave";
+          to = "project-x";
+        };
       }
     ];
     decls = {

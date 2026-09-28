@@ -78,7 +78,7 @@ in
     test-control-the-library-is-reachable-and-a-shipped-entry-is-live = {
       expr = {
         mkClaim = builtins.isFunction genScope.mkClaim;
-        resolveClaims = builtins.isFunction genScope.resolveClaims;
+        resolveClaims = lib.isFunction genScope.resolveClaims; # a door: a functor, which `builtins.isFunction` does not read
       };
       expected = {
         mkClaim = true;
@@ -144,26 +144,27 @@ in
       };
     };
 
-    # ── THE ENTRY'S ARGUMENT RECORD ──
-    # The entry is a RECORD door (den-hoag-7gp66 P1, R5): its fields are `emitters` and `kinds`, a
-    # missing one is refused by name, catchably, and an extra one is admitted and never read. So the
-    # record is observed by what the door does, not by `functionArgs`, which the shared checks erase.
-    test-entry-argument-record-is-exactly-emitters-and-kinds = {
-      expr = map (f: (builtins.tryEval (mint (builtins.removeAttrs fixtureAdmitted [ f ]))).success) [
-        "emitters"
-        "kinds"
-      ];
-      expected = [
-        false
-        false
-      ];
+    # ── THE ENTRY'S OPERANDS ──
+    # The entry is positional (den-hoag-7gp66 P2, R7): `mintStrata kinds emitters`, the kind
+    # registry first and the emitters — what is minted — last. Its arity is the structure: one
+    # operand is an entry waiting for the emitters, and two answer the result record.
+    test-entry-takes-kinds-then-emitters = {
+      expr = {
+        waitsForEmitters = builtins.isFunction (genScope.mintStrata fixtureAdmitted.kinds);
+        answers = builtins.isAttrs (genScope.mintStrata fixtureAdmitted.kinds fixtureAdmitted.emitters);
+      };
+      expected = {
+        waitsForEmitters = true;
+        answers = true;
+      };
     };
     # The authority is injected by the library and never supplied by a caller: a caller-supplied
     # minter makes one minting authority a convention rather than a fact (ADR-0016 ruling 5). A
     # caller-supplied frozen set is refused on the neighbouring ground — a forgeable frozen set is a
     # rule authors must obey rather than a construction — and a stratum-0 seed would be that set
-    # under another name. Under R5 each is an extra field, admitted and never read: a throwing value
-    # in each place leaves the result unchanged, so none of them reaches the mint.
+    # under another name. The entry's two operands are the whole of what a caller supplies, so a
+    # value carried beside them in the fixture record never reaches the mint: a throwing value in
+    # each place leaves the result unchanged.
     test-entry-formals-admit-neither-the-authority-nor-a-frozen-set = {
       expr =
         mint (

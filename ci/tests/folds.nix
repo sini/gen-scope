@@ -187,13 +187,11 @@ let
     }:
     mkKinds [
       (mkKind {
-        name = "leaf";
         dedupKey = c: c.group;
         inherit fold;
         resolve = c: _: { resources.${c.group} = c.tag; };
-      })
+      } "leaf")
       (mkKind {
-        name = "top";
         below = [ "leaf" ];
         resolve = c: _: {
           claims = [
@@ -204,7 +202,7 @@ let
             })
           ];
         };
-      })
+      } "top")
     ];
 
   subjA = {
@@ -230,21 +228,13 @@ let
   # The run as the cascade schedules it: the fold sees the leaf stratum's fact set CLOSED.
   closed =
     spec:
-    resolveClaims {
-      kinds = aggKinds spec;
-      claims = [
-        leafRoot
-        topRoot
-      ];
-    };
+    resolveClaims { } (aggKinds spec) [
+      leafRoot
+      topRoot
+    ];
   # The same fold over the same registry, folding the fact set as it stood BEFORE the higher
   # stratum contributed. Nothing about the fold changes — only when it is allowed to answer.
-  early =
-    spec:
-    resolveClaims {
-      kinds = aggKinds spec;
-      claims = [ leafRoot ];
-    };
+  early = spec: resolveClaims { } (aggKinds spec) [ leafRoot ];
 
   listSpec = {
     fold = folds.list;

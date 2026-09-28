@@ -35,7 +35,6 @@ let
   kinds = mkKinds [
     # ── floor: connect (leaf) ──
     (mkKind {
-      name = "connect";
       dedupKey = c: "${c.subject.id_hash}->${c.to.id_hash}:${toString (c.port or "any")}";
       fold = folds.same; # duplicate edges must agree, provision once
       resolve = c: _ctx: {
@@ -49,11 +48,10 @@ let
           port = c.port or null;
         };
       };
-    })
+    } "connect")
 
     # ── leaf fabric: secret ──
     (mkKind {
-      name = "secret";
       dedupKey = c: c.shared or "private:${c.subject.id_hash}:${c.name}";
       fold = folds.byKey {
         generator = folds.same; # all claimants must agree on the generator
@@ -69,11 +67,10 @@ let
           key = c.subject.name;
         };
       };
-    })
+    } "secret")
 
     # ── leaf fabric: storage ──
     (mkKind {
-      name = "storage";
       dedupKey = c: c.claim or "provision:${c.subject.id_hash}:${c.path}";
       fold = folds.same; # a shared PV+PVC is provisioned once
       resolve = c: _ctx: {
@@ -86,11 +83,10 @@ let
           claim = c.claim or "pvc:${c.subject.name}:${c.path}";
         };
       };
-    })
+    } "storage")
 
     # ── composite: database (depth 1) ──
     (mkKind {
-      name = "database";
       below = [
         "secret"
         "connect"
@@ -120,11 +116,10 @@ let
           })
         ];
       };
-    })
+    } "database")
 
     # ── composite: route (depth 1) ──
     (mkKind {
-      name = "route";
       below = [
         "secret"
         "connect"
@@ -153,7 +148,7 @@ let
           consumeAs.env = "OIDC_CLIENT_SECRET";
         });
       };
-    })
+    } "route")
   ];
 
   # The canonical root-claim list: a sonarr route + database + shared api-key secret + storage
@@ -205,7 +200,9 @@ let
     })
   ];
 
-  resolution = genScope.resolveClaims { inherit kinds claims ctx; };
+  resolution = genScope.resolveClaims {
+    inherit ctx;
+  } kinds claims;
 in
 {
   inherit

@@ -24,41 +24,43 @@ let
       childKey = if plantRegistered then "b" else "warp";
       secondKey = if plantSibling then childKey else "weft";
     in
-    genScope.eval {
-      scope = genScope.buildRoots {
-        parentGraph = genScope.overlay (genScope.vertex "a") (genScope.vertex "b");
-        types.a = "host";
-        types.b = "leafOne";
-        decls.a = { };
-        decls.b = { };
-        kinds = genScope.mkKinds [
-          (genScope.mkKind { name = "leafOne"; })
-          (genScope.mkKind { name = "leafTwo"; })
-          (genScope.mkKind {
-            name = "host";
-            below = [
-              "leafOne"
-              "leafTwo"
-            ];
-            spawns.leafOne = _self: id: {
-              ${childKey} = {
-                id = childKey;
-                parent = id;
-                decls = { };
+    genScope.eval { }
+      {
+        children = _self: _id: { };
+      }
+      (
+        genScope.buildRoots {
+          parentGraph = genScope.overlay (genScope.vertex "a") (genScope.vertex "b");
+          types.a = "host";
+          types.b = "leafOne";
+          decls.a = { };
+          decls.b = { };
+          kinds = genScope.mkKinds [
+            (genScope.mkKind { } "leafOne")
+            (genScope.mkKind { } "leafTwo")
+            (genScope.mkKind {
+              below = [
+                "leafOne"
+                "leafTwo"
+              ];
+              spawns.leafOne = _self: id: {
+                ${childKey} = {
+                  id = childKey;
+                  parent = id;
+                  decls = { };
+                };
               };
-            };
-            spawns.leafTwo = _self: id: {
-              ${secondKey} = {
-                id = secondKey;
-                parent = id;
-                decls = { };
+              spawns.leafTwo = _self: id: {
+                ${secondKey} = {
+                  id = secondKey;
+                  parent = id;
+                  decls = { };
+                };
               };
-            };
-          })
-        ];
-      };
-      attributes.children = _self: _id: { };
-    };
+            } "host")
+          ];
+        }
+      );
 
   control = mkFixture { };
   plantedRegistered = mkFixture { plantRegistered = true; };

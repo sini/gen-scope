@@ -21,7 +21,7 @@ let
   # kind expands into another. Registering them is what gives the kind set a domain — an
   # unregistered spelling is refused rather than silently becoming a kind of its own.
   kinds = genScope.mkKinds (
-    map (name: genScope.mkKind { inherit name; }) [
+    map (name: genScope.mkKind { } name) [
       "root"
       "dir"
       "env"
@@ -47,7 +47,10 @@ in
       ])
     ];
     importGraph = genScope.overlays [
-      (genScope.edge "api" "shared")
+      (genScope.edge {
+        from = "api";
+        to = "shared";
+      })
     ];
     decls = {
       global = {

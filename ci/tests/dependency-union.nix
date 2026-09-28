@@ -35,7 +35,7 @@
 let
   inherit (genScope) foldEquations;
 
-  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { } name) names);
 
   # Four nodes, one containment edge. `kid` is `host`'s child, so it is in the structural relation
   # for `host`; `alpha` and `solo` are in no structural relation at all, which is what lets one of
@@ -47,7 +47,10 @@ let
   # first-occurrence order from a canonical one.
   roots = genScope.buildRoots {
     kinds = flatKinds [ "host" ];
-    parentGraph = genScope.edge "kid" "host";
+    parentGraph = genScope.edge {
+      from = "kid";
+      to = "host";
+    };
     decls = {
       host = {
         v = 10;
@@ -93,7 +96,7 @@ let
 
   fold =
     declaredDependencies:
-    foldEquations {
+    foldEquations { } {
       scope = roots;
       inherit schedule declaredDependencies;
       parseParent = id: roots.nodes.${id}.parent or null;

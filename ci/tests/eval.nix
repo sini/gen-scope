@@ -2,7 +2,7 @@
 let
   # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
   # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
-  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { } name) names);
 
   # Minimal graph: two roots, a and b
   roots = genScope.buildRoots {
@@ -10,7 +10,10 @@ let
       "host"
       "user"
     ];
-    parentGraph = genScope.edge "child" "parent";
+    parentGraph = genScope.edge {
+      from = "child";
+      to = "parent";
+    };
     importGraph = genScope.empty;
     decls = {
       parent = {
@@ -27,26 +30,28 @@ let
     };
   };
 
-  result = genScope.eval {
-    scope = roots;
-    attributes = {
-      children =
-        self: id:
-        let
-          node = self.node id;
-        in
-        lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-      imports = self: id: [ ];
-      greeting = self: id: "hello-${id}";
-      declX = self: id: (self.node id).decls.x or 0;
-    };
-    parseParent =
-      id:
-      let
-        node = roots.nodes.${id} or null;
-      in
-      if node != null then node.parent else null;
-  };
+  result =
+    genScope.eval
+      {
+        parseParent =
+          id:
+          let
+            node = roots.nodes.${id} or null;
+          in
+          if node != null then node.parent else null;
+      }
+      {
+        children =
+          self: id:
+          let
+            node = self.node id;
+          in
+          lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+        imports = self: id: [ ];
+        greeting = self: id: "hello-${id}";
+        declX = self: id: (self.node id).decls.x or 0;
+      }
+      roots;
 
   # Single root, no children
   singleRoots = genScope.buildRoots {
@@ -63,14 +68,11 @@ let
     };
   };
 
-  singleResult = genScope.eval {
-    scope = singleRoots;
-    attributes = {
-      children = self: id: { };
-      imports = self: id: [ ];
-      value = self: id: (self.node id).decls.val or 0;
-    };
-  };
+  singleResult = genScope.eval { } {
+    children = self: id: { };
+    imports = self: id: [ ];
+    value = self: id: (self.node id).decls.val or 0;
+  } singleRoots;
 
   # ── THE UNDECLARED CONTAINMENT RELATION VERSUS THE GRAPH THAT HAS NO CHILDREN ──
   # Two different answers that used to be the same one. `chainScope` is a real containment chain
@@ -80,8 +82,14 @@ let
   # whose materialization the undeclared arm used to imitate — must keep answering.
   chainScope = genScope.buildRoots {
     parentGraph = genScope.overlays [
-      (genScope.edge "a" "root")
-      (genScope.edge "c" "a")
+      (genScope.edge {
+        from = "a";
+        to = "root";
+      })
+      (genScope.edge {
+        from = "c";
+        to = "a";
+      })
     ];
     decls = {
       root = { };
@@ -105,18 +113,13 @@ let
     scope: _self: id:
     lib.filterAttrs (_: n: n.parent == id) scope.nodes;
 
-  chainDeclared = genScope.eval {
-    scope = chainScope;
-    attributes.children = declaredChildren chainScope;
-  };
-  chainUndeclared = genScope.eval {
-    scope = chainScope;
-    attributes = { };
-  };
-  flatDeclared = genScope.eval {
-    scope = flatScope;
-    attributes.children = declaredChildren flatScope;
-  };
+  chainDeclared = genScope.eval { } {
+    children = declaredChildren chainScope;
+  } chainScope;
+  chainUndeclared = genScope.eval { } { } chainScope;
+  flatDeclared = genScope.eval { } {
+    children = declaredChildren flatScope;
+  } flatScope;
 in
 {
   flake.tests."eval" = {
@@ -305,13 +308,10 @@ in
           attributes = {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots;
           };
-          result = genScope.eval {
-            scope = {
-              nodes = roots;
-              # A hand-built scope states its own order at the site.
-              nodeOrder = builtins.attrNames roots;
-            };
-            inherit attributes;
+          result = genScope.eval { } attributes {
+            nodes = roots;
+            # A hand-built scope states its own order at the site.
+            nodeOrder = builtins.attrNames roots;
           };
         in
         builtins.sort builtins.lessThan (builtins.attrNames (result.subtreeOf "env:prod"));
@@ -347,13 +347,10 @@ in
           attributes = {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots;
           };
-          result = genScope.eval {
-            scope = {
-              nodes = roots;
-              # A hand-built scope states its own order at the site.
-              nodeOrder = builtins.attrNames roots;
-            };
-            inherit attributes;
+          result = genScope.eval { } attributes {
+            nodes = roots;
+            # A hand-built scope states its own order at the site.
+            nodeOrder = builtins.attrNames roots;
           };
         in
         builtins.sort builtins.lessThan (builtins.attrNames (result.nodesOfType "host"));
@@ -403,13 +400,10 @@ in
           attributes = {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots;
           };
-          result = genScope.eval {
-            scope = {
-              nodes = roots;
-              # A hand-built scope states its own order at the site.
-              nodeOrder = builtins.attrNames roots;
-            };
-            inherit attributes;
+          result = genScope.eval { } attributes {
+            nodes = roots;
+            # A hand-built scope states its own order at the site.
+            nodeOrder = builtins.attrNames roots;
           };
         in
         builtins.sort builtins.lessThan (
@@ -470,12 +464,7 @@ in
         val = self: id: (self.node id).decls.v or 0;
       };
       # The same program, evaluated with attribute functions that answer with the prior values.
-      priorOf =
-        roots: attributes:
-        genScope.eval {
-          scope = roots;
-          inherit attributes;
-        };
+      priorOf = roots: attributes: genScope.eval { } attributes roots;
       allClean =
         names:
         genScope.mkDecision {
@@ -492,7 +481,7 @@ in
       # clean + named reusable ⇒ served from the prior, fn NEVER forced (poison doesn't throw)
       test-warm-serves-clean-no-force = {
         expr =
-          (genScope.evalWarm {
+          (genScope.evalWarm { } {
             scope = nRoots;
             attributes = poison;
             prior = priorOf nRoots (poison // { boom = self: id: "cached"; });
@@ -506,7 +495,7 @@ in
       test-dirty-recomputes = {
         expr =
           (builtins.tryEval (
-            (genScope.evalWarm {
+            (genScope.evalWarm { } {
               scope = nRoots;
               attributes = poison;
               prior = priorOf nRoots (poison // { boom = self: id: "cached"; });
@@ -524,7 +513,7 @@ in
       test-warm-missing-attr-falls-through = {
         expr =
           (builtins.tryEval (
-            (genScope.evalWarm {
+            (genScope.evalWarm { } {
               scope = nRoots;
               attributes = poison;
               prior = priorOf nRoots (poison // { boom = self: id: "cached"; });
@@ -538,7 +527,7 @@ in
       # the prior's value is served verbatim (not the fresh computation)
       test-warm-serves-prior-value = {
         expr =
-          (genScope.evalWarm {
+          (genScope.evalWarm { } {
             scope = nRoots;
             attributes = poison;
             prior = priorOf nRoots (poison // { val = self: id: 99; });
@@ -565,7 +554,7 @@ in
               val = self: id: if id == "b" then (self.get "a" "val") + 1 else (self.node id).decls.base;
             };
           in
-          (genScope.evalWarm {
+          (genScope.evalWarm { } {
             scope = abRoots;
             attributes = attrs;
             prior = priorOf abRoots (attrs // { val = self: id: 99; });
@@ -592,7 +581,7 @@ in
               children = selectChildren pRoots.nodes;
               label = self: id: "fresh-${id}";
             };
-            w = genScope.evalWarm {
+            w = genScope.evalWarm { } {
               scope = pRoots;
               attributes = attrs;
               prior = priorOf pRoots (
@@ -652,7 +641,7 @@ in
             };
             readUnder =
               relName:
-              (genScope.evalWarm {
+              (genScope.evalWarm { } {
                 scope = iRoots;
                 attributes = attrsUnder relName;
                 prior = priorOf iRoots (priorUnder relName);
@@ -680,9 +669,8 @@ in
         expr =
           let
             spawnKinds = genScope.mkKinds [
-              (genScope.mkKind { name = "leaf"; })
+              (genScope.mkKind { } "leaf")
               (genScope.mkKind {
-                name = "host";
                 below = [ "leaf" ];
                 spawns.leaf = _self: id: {
                   g = {
@@ -691,7 +679,7 @@ in
                     decls = { };
                   };
                 };
-              })
+              } "host")
             ];
             pRoots = {
               nodes.p = {
@@ -707,7 +695,7 @@ in
               children = _self: _id: { };
               label = self: id: "fresh-${id}";
             };
-            w = genScope.evalWarm {
+            w = genScope.evalWarm { } {
               scope = pRoots;
               attributes = attrs;
               prior = priorOf pRoots (attrs // { label = self: id: "stale-${id}"; });
@@ -730,7 +718,7 @@ in
               a = self: id: "fresh-a";
               b = self: id: "fresh-b";
             };
-            w = genScope.evalWarm {
+            w = genScope.evalWarm { } {
               scope = nnRoots;
               attributes = attrs;
               prior = priorOf nnRoots (
@@ -763,7 +751,7 @@ in
               };
             };
           in
-          (genScope.evalWarm {
+          (genScope.evalWarm { } {
             scope = r;
             attributes = poison;
             prior = null;
@@ -772,14 +760,11 @@ in
             "n"
             "val";
         expected =
-          (genScope.eval {
-            scope = mkRoots {
-              n = {
-                v = 7;
-              };
+          (genScope.eval { } poison (mkRoots {
+            n = {
+              v = 7;
             };
-            attributes = poison;
-          }).get
+          })).get
             "n"
             "val";
       };

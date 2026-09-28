@@ -14,15 +14,17 @@ let
     types = { };
   };
 
-  debugResult = evalDebug {
-    inherit scope;
-    attributes = {
-      children = self: id: { };
-      imports = self: id: [ ];
-      value = self: id: (self.node id).decls.val or 0;
-    };
-    parseParent = _: null;
-  };
+  debugResult =
+    evalDebug
+      {
+        parseParent = _: null;
+      }
+      {
+        children = self: id: { };
+        imports = self: id: [ ];
+        value = self: id: (self.node id).decls.val or 0;
+      }
+      scope;
 
   # Cycle case: a.x depends on a.y depends on a.x
   cycleRoots = genScope.buildRoots {
@@ -34,16 +36,18 @@ let
     types = { };
   };
 
-  cycleResult = evalDebug {
-    scope = cycleRoots;
-    attributes = {
-      children = self: id: { };
-      imports = self: id: [ ];
-      x = self: id: self.get id "y";
-      y = self: id: self.get id "x";
-    };
-    parseParent = _: null;
-  };
+  cycleResult =
+    evalDebug
+      {
+        parseParent = _: null;
+      }
+      {
+        children = self: id: { };
+        imports = self: id: [ ];
+        x = self: id: self.get id "y";
+        y = self: id: self.get id "x";
+      }
+      cycleRoots;
 
   # Indirect cycle: a.p → b.q → a.p
   indirectRoots = genScope.buildRoots {
@@ -59,16 +63,18 @@ let
     types = { };
   };
 
-  indirectResult = evalDebug {
-    scope = indirectRoots;
-    attributes = {
-      children = self: id: { };
-      imports = self: id: [ ];
-      p = self: id: self.get "b" "q";
-      q = self: id: self.get "a" "p";
-    };
-    parseParent = _: null;
-  };
+  indirectResult =
+    evalDebug
+      {
+        parseParent = _: null;
+      }
+      {
+        children = self: id: { };
+        imports = self: id: [ ];
+        p = self: id: self.get "b" "q";
+        q = self: id: self.get "a" "p";
+      }
+      indirectRoots;
 in
 {
   flake.tests."eval-debug" = {

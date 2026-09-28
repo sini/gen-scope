@@ -11,10 +11,19 @@ let
 
   # Graph: a imports b, b imports c. Parent: a → root.
   roots = genScope.buildRoots {
-    parentGraph = genScope.edge "a" "root";
+    parentGraph = genScope.edge {
+      from = "a";
+      to = "root";
+    };
     importGraph = genScope.overlays [
-      (genScope.edge "a" "b")
-      (genScope.edge "b" "c")
+      (genScope.edge {
+        from = "a";
+        to = "b";
+      })
+      (genScope.edge {
+        from = "b";
+        to = "c";
+      })
     ];
     decls = {
       root = {
@@ -32,49 +41,56 @@ let
     types = { };
   };
 
-  result = genScope.eval {
-    scope = roots;
-    attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-      imports = self: id: (self.node id).decls.__edges.I or [ ];
-      resolved = query {
-        dataFilter = node: node.decls.val or null;
-      };
-    };
-    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
-  };
+  result =
+    genScope.eval
+      {
+        parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
+      }
+      {
+        children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+        imports = self: id: (self.node id).decls.__edges.I or [ ];
+        resolved = query { } (node: node.decls.val or null);
+      }
+      roots;
 
-  resultTransitive = genScope.eval {
-    scope = roots;
-    attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-      imports = self: id: (self.node id).decls.__edges.I or [ ];
-      resolved = query {
-        dataFilter = node: node.decls.val or null;
-        transitiveImports = true;
-      };
-    };
-    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
-  };
+  resultTransitive =
+    genScope.eval
+      {
+        parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
+      }
+      {
+        children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+        imports = self: id: (self.node id).decls.__edges.I or [ ];
+        resolved = query {
+          transitiveImports = true;
+        } (node: node.decls.val or null);
+      }
+      roots;
 
-  resultAll = genScope.eval {
-    scope = roots;
-    attributes = {
-      children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-      imports = self: id: (self.node id).decls.__edges.I or [ ];
-      all-vals = queryAll {
-        dataFilter = node: node.decls.val or null;
-      };
-    };
-    parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
-  };
+  resultAll =
+    genScope.eval
+      {
+        parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
+      }
+      {
+        children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+        imports = self: id: (self.node id).decls.__edges.I or [ ];
+        all-vals = queryAll { } (node: node.decls.val or null);
+      }
+      roots;
 
   # Ambiguity: node imports two nodes with same key
   ambRoots = genScope.buildRoots {
     parentGraph = genScope.empty;
     importGraph = genScope.overlays [
-      (genScope.edge "x" "y")
-      (genScope.edge "x" "z")
+      (genScope.edge {
+        from = "x";
+        to = "y";
+      })
+      (genScope.edge {
+        from = "x";
+        to = "z";
+      })
     ];
     decls = {
       x = { };
@@ -88,24 +104,28 @@ let
     types = { };
   };
 
-  ambResult = genScope.eval {
-    scope = ambRoots;
-    attributes = {
-      children = self: id: { };
-      imports = self: id: (self.node id).decls.__edges.I or [ ];
-      is-ambiguous = ambiguous {
-        dataFilter = node: node.decls.val or null;
-      };
-    };
-  };
+  ambResult = genScope.eval { } {
+    children = self: id: { };
+    imports = self: id: (self.node id).decls.__edges.I or [ ];
+    is-ambiguous = ambiguous { } (node: node.decls.val or null);
+  } ambRoots;
 
   # Reverse (neededBy): b and c import a; d imports b.
   revRoots = genScope.buildRoots {
     parentGraph = genScope.empty;
     importGraph = genScope.overlays [
-      (genScope.edge "b" "a")
-      (genScope.edge "c" "a")
-      (genScope.edge "d" "b")
+      (genScope.edge {
+        from = "b";
+        to = "a";
+      })
+      (genScope.edge {
+        from = "c";
+        to = "a";
+      })
+      (genScope.edge {
+        from = "d";
+        to = "b";
+      })
     ];
     decls = {
       a = { };
@@ -122,20 +142,14 @@ let
     types = { };
   };
 
-  revResult = genScope.eval {
-    scope = revRoots;
-    attributes = {
-      children = self: id: { };
-      imports = self: id: (self.node id).decls.__edges.I or [ ];
-      needed-by = queryReverse {
-        dataFilter = node: node.decls.tag or null;
-      };
-      needed-by-trans = queryReverse {
-        dataFilter = node: node.decls.tag or null;
-        transitive = true;
-      };
-    };
-  };
+  revResult = genScope.eval { } {
+    children = self: id: { };
+    imports = self: id: (self.node id).decls.__edges.I or [ ];
+    needed-by = queryReverse { } (node: node.decls.tag or null);
+    needed-by-trans = queryReverse {
+      transitive = true;
+    } (node: node.decls.tag or null);
+  } revRoots;
 
   # NESTED reverse fixture — the one on which the materialization walk and the codepoint
   # key order DISAGREE, which is what makes the order tests below discriminating.
@@ -186,32 +200,31 @@ let
     };
   };
 
-  nestedResult = genScope.eval {
-    scope = {
-      nodes = nestedNodes;
-      # A hand-built scope states its own order at the site. `children` selects among the nodes
-      # the scope carries, so the contained pair is registered here too and what distinguishes
-      # them from `r` and `t` is their POSITION in the declared order, not their absence from it.
-      nodeOrder = [
-        "r"
-        "t"
-        "mid"
-        "alpha"
-      ];
-    };
-    attributes = {
-      children = _self: id: lib.filterAttrs (_: n: n.parent == id) nestedNodes;
-      imports = self: id: (self.node id).decls.imports or [ ];
-      needed-by = queryReverse {
-        dataFilter = node: node.decls.tag or null;
+  nestedResult =
+    genScope.eval
+      {
+        parseParent = id: nestedNodes.${id}.parent or null;
+      }
+      {
+        children = _self: id: lib.filterAttrs (_: n: n.parent == id) nestedNodes;
+        imports = self: id: (self.node id).decls.imports or [ ];
+        needed-by = queryReverse { } (node: node.decls.tag or null);
+        needed-by-trans = queryReverse {
+          transitive = true;
+        } (node: node.decls.tag or null);
+      }
+      {
+        nodes = nestedNodes;
+        # A hand-built scope states its own order at the site. `children` selects among the nodes
+        # the scope carries, so the contained pair is registered here too and what distinguishes
+        # them from `r` and `t` is their POSITION in the declared order, not their absence from it.
+        nodeOrder = [
+          "r"
+          "t"
+          "mid"
+          "alpha"
+        ];
       };
-      needed-by-trans = queryReverse {
-        dataFilter = node: node.decls.tag or null;
-        transitive = true;
-      };
-    };
-    parseParent = id: nestedNodes.${id}.parent or null;
-  };
 in
 {
   flake.tests."query" = {

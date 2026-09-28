@@ -60,9 +60,8 @@ let
   # spawn exercises one comparison, and a chain is what the rank being a natural-number measure
   # actually buys.
   kinds = mkKinds [
-    (mkKind { name = "endpoint"; })
+    (mkKind { } "endpoint")
     (mkKind {
-      name = "member";
       below = [ "endpoint" ];
       spawns.endpoint = self: id: {
         "${id}-ep" = {
@@ -73,9 +72,8 @@ let
           };
         };
       };
-    })
+    } "member")
     (mkKind {
-      name = "cluster";
       below = [ "member" ];
       spawns.member =
         self: id:
@@ -84,7 +82,7 @@ let
           parent = id;
           decls = spec;
         }) (self.node id).decls.members;
-    })
+    } "cluster")
   ];
 
   # The whole grammar is ONE declared root. Everything else below it arrives through the spawn
@@ -182,12 +180,7 @@ let
     closure = circular { carrier = attrCarrier; } f;
   };
 
-  evalWith =
-    attrCarrier: f:
-    eval {
-      inherit scope;
-      attributes = attributesWith attrCarrier f;
-    };
+  evalWith = attrCarrier: f: eval { } (attributesWith attrCarrier f) scope;
 
   ev = evalWith carrier step;
 
@@ -235,7 +228,7 @@ let
   # source, and a source is not an endpoint a constructor can check.
   spawnedRef = genGraph.mkSpawnedNodeRef;
 
-  ctx = foldEquations {
+  ctx = foldEquations { } {
     inherit scope;
     schedule = { inherit equations; };
     parseParent = id: scope.nodes.${id}.parent or null;

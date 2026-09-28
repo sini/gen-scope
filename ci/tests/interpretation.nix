@@ -37,15 +37,10 @@ let
     forceFields
     ;
 
-  program = rules: mkProgram { inherit rules; };
+  program = rules: mkProgram rules;
 
   # The shipped surface, under an interpretation given as the parameter's own list form.
-  shipped =
-    rules: interpretation:
-    genScope.wellFoundedModel {
-      program = program rules;
-      inherit interpretation;
-    };
+  shipped = rules: interpretation: genScope.wellFoundedModel interpretation (program rules);
 
   carry = verdict: atoms: map (atom: { inherit atom verdict; }) atoms;
   undef = carry "undefined";
@@ -72,12 +67,7 @@ let
       p = program rules;
       tSet = prelude.genAttrs T (_: true);
       uSet = prelude.genAttrs U (_: true);
-      stage =
-        seed: guess:
-        (leastModel {
-          program = reduct p guess;
-          inherit seed;
-        }).derived;
+      stage = seed: guess: (leastModel seed (reduct p guess)).derived;
       base = p.atoms ++ prelude.filter (a: !(prelude.elem a p.atoms)) (T ++ U);
       step =
         acc:
@@ -513,10 +503,7 @@ in
     test-an-empty-program-with-a-non-empty-interpretation-reports-and-stamps = {
       expr =
         let
-          r = genScope.solve {
-            program = mkProgram { rules = [ ]; };
-            interpretation = undef [ "x" ] ++ true' [ "y" ];
-          };
+          r = genScope.solve (undef [ "x" ] ++ true' [ "y" ]) (mkProgram [ ]);
         in
         {
           inherit (r)

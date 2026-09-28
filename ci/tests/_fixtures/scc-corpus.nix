@@ -60,14 +60,13 @@ let
   run =
     attrs: target:
     let
-      r = genScope.eval {
-        inherit scope;
-        attributes = {
+      r = genScope.eval { } (
+        {
           children = _self: _id: { };
           imports = _self: _id: [ ];
         }
-        // attrs;
-      };
+        // attrs
+      ) scope;
     in
     if (attrs.${target}.carrier.quotient or false) == true then
       (r.getRepresentative "n" target).representative
@@ -891,7 +890,12 @@ in
   lifetime =
     let
       scope2 = genScope.buildRoots {
-        parentGraph = genScope.overlays [ (genScope.edge "c" "p") ];
+        parentGraph = genScope.overlays [
+          (genScope.edge {
+            from = "c";
+            to = "p";
+          })
+        ];
         importGraph = genScope.empty;
         decls = {
           p = { };
@@ -901,22 +905,19 @@ in
       };
       evalWith =
         step:
-        (genScope.eval {
-          scope = scope2;
-          attributes = {
-            children = self: id: if id == "p" then { c = self.node "c"; } else { };
-            imports = _self: _id: [ ];
-            plain = _self: _id: 3;
-            circ = genScope.circular {
-              carrier = {
-                bottom = 0;
-                leq = x: y: x <= y;
-                height = 3;
-                quotient = false;
-              };
-            } step;
-          };
-        }).get
+        (genScope.eval { } {
+          children = self: id: if id == "p" then { c = self.node "c"; } else { };
+          imports = _self: _id: [ ];
+          plain = _self: _id: 3;
+          circ = genScope.circular {
+            carrier = {
+              bottom = 0;
+              leq = x: y: x <= y;
+              height = 3;
+              quotient = false;
+            };
+          } step;
+        } scope2).get
           "p"
           "circ";
     in

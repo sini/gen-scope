@@ -4,7 +4,12 @@
 { genScope, ... }:
 let
   S = genScope;
-  roots = S.buildRoots { parentGraph = S.edge "b" "a"; };
+  roots = S.buildRoots {
+    parentGraph = S.edge {
+      from = "b";
+      to = "a";
+    };
+  };
   attributes = {
     x = self: id: 1;
     children =
@@ -13,15 +18,10 @@ let
         if id == "a" then [ ] else [ "b" ]
       );
   };
-  self = S.eval {
-    scope = roots;
-    inherit attributes;
-  };
+  self = S.eval { } attributes roots;
   debug = S.evalDebug {
-    scope = roots;
-    inherit attributes;
     parseParent = id: if id == "b" then "a" else null;
-  };
+  } attributes roots;
 in
 {
   flake.tests.identifier-doors = {
@@ -49,31 +49,17 @@ in
       expr = builtins.attrNames (S.nodesByType self "t");
       expected = [ ];
     };
-    # The string guards live in the door bodies. The record check is the one wrapper at the export
-    # (den-hoag-7gp66 P1, `lib/door.nix`), and it erases the native formals, so the published door's
-    # fields are observed by what it does: each is required, and refused catchably when missing.
-    test-mintStrata-requires-its-published-fields = {
-      expr =
-        map
-          (
-            f:
-            (builtins.tryEval (
-              S.mintStrata (
-                builtins.removeAttrs {
-                  emitters = [ ];
-                  kinds = { };
-                } [ f ]
-              )
-            )).success
-          )
-          [
-            "emitters"
-            "kinds"
-          ];
-      expected = [
-        false
-        false
-      ];
+    # The string guards live in the door bodies. The entry is positional (den-hoag-7gp66 P2, R7):
+    # `mintStrata kinds emitters`, so its operands are its arity rather than a record's fields.
+    test-mintStrata-takes-kinds-then-emitters = {
+      expr = {
+        waitsForEmitters = builtins.isFunction (S.mintStrata { });
+        answers = builtins.isAttrs (S.mintStrata { } [ ]);
+      };
+      expected = {
+        waitsForEmitters = true;
+        answers = true;
+      };
     };
   };
 }

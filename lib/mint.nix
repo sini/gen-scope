@@ -234,8 +234,6 @@ let
   # colliding with anything.
   mintKey = "identity";
 
-  door = import ./door.nix { inherit prelude; };
-
   # ── THE TWO REFUSAL TEXTS ──
   # Each names the coordinates that let a reader find the construction rather than the symptom: the
   # first the relatum, its label, the kind being minted and the emitting pass; the second the
@@ -255,261 +253,270 @@ let
     in
     "gen-scope.mintStrata: conflicting contributions to identity '${identity}' at key '${key}' (${first}, ${second})";
 in
-builtins.mapAttrs door {
-  mintStrata =
-    { emitters, kinds }:
-    let
-      # ── THE SCHEDULE: THE DISTINCT DECLARED PASSES, ASCENDING ──
-      # Not a range over the declared maximum and not a topological sort. Ascending, because pass N's
-      # predecessors are passes 0 … N-1. Deduplicated, because the driver walks each member once and
-      # a member appearing twice would re-select and re-settle the same items. Derived from the
-      # declaration rather than enumerated, so a program declaring passes 0 and 1000000 runs two
-      # strata instead of a million empty ones — which removes the cost without introducing a number
-      # anywhere.
-      schedule = sort ascending (unique (map (e: e.pass) emitters));
+# `mintStrata kinds emitters` (den-hoag-7gp66 P2, R7 rule 4): the emitters are what is minted, so they
+# are the subject and go last; the kind registry is the configuration they are minted under. Both
+# are positional, so no field check remains on the entry — each EMITTER is still a closed record,
+# checked by name below.
+builtins.mapAttrs
+  (
+    _: impl: kinds: emitters:
+    impl { inherit emitters kinds; }
+  )
+  {
+    mintStrata =
+      { emitters, kinds }:
+      let
+        # ── THE SCHEDULE: THE DISTINCT DECLARED PASSES, ASCENDING ──
+        # Not a range over the declared maximum and not a topological sort. Ascending, because pass N's
+        # predecessors are passes 0 … N-1. Deduplicated, because the driver walks each member once and
+        # a member appearing twice would re-select and re-settle the same items. Derived from the
+        # declaration rather than enumerated, so a program declaring passes 0 and 1000000 runs two
+        # strata instead of a million empty ones — which removes the cost without introducing a number
+        # anywhere.
+        schedule = sort ascending (unique (map (e: e.pass) emitters));
 
-      # An emitter declares its own pass; the placement never reads its position in the list.
-      stratumOf = e: e.pass;
+        # An emitter declares its own pass; the placement never reads its position in the list.
+        stratumOf = e: e.pass;
 
-      # A total order inside one stratum, on the emitter's OWN declared strings. Within a pass the
-      # merge is unordered by construction, so this decides nothing about meaning — it decides only
-      # that the settled sequence is a function of the program rather than of the order a caller
-      # happened to write it in.
-      within =
-        a: b: if a.identifier != b.identifier then a.identifier < b.identifier else a.site < b.site;
+        # A total order inside one stratum, on the emitter's OWN declared strings. Within a pass the
+        # merge is unordered by construction, so this decides nothing about meaning — it decides only
+        # that the settled sequence is a function of the program rather than of the order a caller
+        # happened to write it in.
+        within =
+          a: b: if a.identifier != b.identifier then a.identifier < b.identifier else a.site < b.site;
 
-      # The driver requires a way to name an item and requires it to be total. The site description
-      # is that name, and it is the same string a conflicting-contribution refusal reports.
-      describe = e: e.site;
+        # The driver requires a way to name an item and requires it to be total. The site description
+        # is that name, and it is the same string a conflicting-contribution refusal reports.
+        describe = e: e.site;
 
-      # The placement is computed ONCE over the emitter list rather than re-scanning it at each
-      # stratum: a scan per stratum turns a per-emitter constant into a cost that is the emitter
-      # count times the schedule length, and the engine's bar is thousands of nodes. This is a cost
-      # argument and not a refusal — no schedule is inadmissible for being long.
-      byPass = groupBy (e: toString e.pass) emitters;
-      itemsAt = stratum: sort within (byPass.${toString stratum} or [ ]);
+        # The placement is computed ONCE over the emitter list rather than re-scanning it at each
+        # stratum: a scan per stratum turns a per-emitter constant into a cost that is the emitter
+        # count times the schedule length, and the engine's bar is thousands of nodes. This is a cost
+        # argument and not a refusal — no schedule is inadmissible for being long.
+        byPass = groupBy (e: toString e.pass) emitters;
+        itemsAt = stratum: sort within (byPass.${toString stratum} or [ ]);
 
-      # ── ONE EMITTER'S MINT ──
-      # `frozen` holds what strictly earlier strata settled. Every relatum is looked up in it and an
-      # identifier with no entry is refused by name; a same-pass relatum misses for the same reason a
-      # nonexistent one does, which is what makes a cycle unwritable rather than detected.
-      #
-      # ★ THE SECOND FORMAL IS A CLOSED PATTERN, NOT A BARE NAME (den-hoag-mintone-silent-drop-1wjov).
-      # An `e:` binding lets `inherit (e) …` pick five names out of however many the caller supplied,
-      # so a sixth field — a kind-option contribution smuggled onto an emitter, say — passes through
-      # unread and unremarked. The pattern names exactly the six fields an emitter carries — the five
-      # read here plus `pass`, which `itemsAt` already used to place this emitter in its stratum but
-      # which still rides on the record `mintOne` receives. A caller's seventh field never reaches it:
-      # `identifiersOf` refuses it by name, catchably, before anything is scheduled.
-      mintOne =
-        frozen:
-        {
-          pass,
-          identifier,
-          kind,
-          relata,
-          content,
-          site,
-        }:
-        let
-          valueOf =
-            label:
-            if label == identifierKey then
-              identifier
-            else
-              let
-                relatum = relata.${label};
-              in
-              frozen.${relatum} or (throw (unresolvedRelatum relatum label kind pass));
-        in
-        {
-          inherit
-            identifier
-            kind
-            relata
-            content
-            site
-            ;
-          identity = hashIdentity kind ([ identifierKey ] ++ attrNames relata) valueOf;
-        };
-
-      # ── THE ACCUMULATION ──
-      # One round per scheduled stratum. Each round mints its stratum against everything strictly
-      # earlier has settled and adds what it settled to the set the next round will see, which is
-      # the stratum-by-stratum construction the theory names.
-      accumulate =
-        acc:
-        let
-          stratum = head acc.pending;
-          settled = map (mintOne acc.frozen) (itemsAt stratum);
-        in
-        {
-          pending = tail acc.pending;
-          frozen = acc.frozen // listToAttrs (map (r: nameValuePair r.identifier r.identity) settled);
-          byStratum = acc.byStratum // {
-            ${toString stratum} = settled;
-          };
-        };
-
-      accumulated = iterateBounded forceFields accumulate {
-        pending = schedule;
-        frozen = { };
-        byStratum = { };
-      } schedule;
-
-      # ── THE DRIVER'S PER-STRATUM STEP ──
-      # `emitted` is empty at every stratum and that is structural rather than incidental: a stratum
-      # does not produce emitters. What varies per stratum is what each emitter mints, which is a
-      # function of the frozen set; WHICH emitters exist is fixed before the first stratum runs. If a
-      # stratum could emit an emitter carrying a fresh declared pass, the schedule computed at the
-      # start would be incomplete and the run's boundedness would be delivering silence.
-      #
-      # ★ `items` IS DECLARED AND NOT READ, AND THE REASON IS SHARING RATHER THAN OVERSIGHT. Nothing
-      # is emitted, so the pool the driver selects from is the seed at every round and its selection
-      # is this instance's own `itemsAt` applied to the same fixed list — the two agree by
-      # construction. The mint for a stratum has to exist BEFORE the driver asks for it, because the
-      # next stratum's frozen set is built from it; re-deriving it from `items` here would compute
-      # every mint a second time. The formal stays because the record's shape is the driver's.
-      #
-      # ★ AND THE STRATUM'S OUTPUT IS FORCED THROUGH HERE. The driver's per-round discipline reaches
-      # the accumulator's fields, which for a list is the spine, so a refusal living inside an
-      # element would survive the run. Forcing it in the round that produced it is what puts the
-      # refusal at the pass that caused it.
-      advance =
-        { stratum, items }:
-        {
-          emitted = [ ];
-          settled =
-            let
-              produced = accumulated.byStratum.${toString stratum};
-            in
-            builtins.deepSeq produced produced;
-        };
-
-      run = stratify {
-        inherit
-          schedule
-          stratumOf
-          within
-          advance
-          describe
-          ;
-        seed = emitters;
-      };
-
-      # ── THE MERGE ──
-      # Every contribution to one identifier, in schedule order with the within-stratum order inside
-      # it. The identity is checked first because it is the mint: contributions that disagree about
-      # WHICH node they are describing have not reached the question of what its content is.
-      mergeGroup =
-        records:
-        let
-          first = head records;
-          disagreeing = filter (r: r.identity != first.identity) records;
-
-          contributed =
-            foldl'
-              (
-                acc: r:
-                foldl' (
-                  a: key:
-                  let
-                    next =
-                      if a.content ? ${key} then
-                        (
-                          if a.content.${key} == r.content.${key} then
-                            a
-                          else
-                            throw (conflictingContribution first.identity key a.sites.${key} r.site)
-                        )
-                      else
-                        {
-                          content = a.content // {
-                            ${key} = r.content.${key};
-                          };
-                          sites = a.sites // {
-                            ${key} = r.site;
-                          };
-                        };
-                  in
-                  builtins.seq (forceFields next) next
-                ) acc (attrNames r.content)
-              )
-              {
-                content = { };
-                sites = { };
-              }
-              records;
-        in
-        if disagreeing != [ ] then
-          throw (conflictingContribution first.identity mintKey first.site (head disagreeing).site)
-        else
+        # ── ONE EMITTER'S MINT ──
+        # `frozen` holds what strictly earlier strata settled. Every relatum is looked up in it and an
+        # identifier with no entry is refused by name; a same-pass relatum misses for the same reason a
+        # nonexistent one does, which is what makes a cycle unwritable rather than detected.
+        #
+        # ★ THE SECOND FORMAL IS A CLOSED PATTERN, NOT A BARE NAME (den-hoag-mintone-silent-drop-1wjov).
+        # An `e:` binding lets `inherit (e) …` pick five names out of however many the caller supplied,
+        # so a sixth field — a kind-option contribution smuggled onto an emitter, say — passes through
+        # unread and unremarked. The pattern names exactly the six fields an emitter carries — the five
+        # read here plus `pass`, which `itemsAt` already used to place this emitter in its stratum but
+        # which still rides on the record `mintOne` receives. A caller's seventh field never reaches it:
+        # `identifiersOf` refuses it by name, catchably, before anything is scheduled.
+        mintOne =
+          frozen:
           {
-            inherit (first)
-              identity
+            pass,
+            identifier,
+            kind,
+            relata,
+            content,
+            site,
+          }:
+          let
+            valueOf =
+              label:
+              if label == identifierKey then
+                identifier
+              else
+                let
+                  relatum = relata.${label};
+                in
+                frozen.${relatum} or (throw (unresolvedRelatum relatum label kind pass));
+          in
+          {
+            inherit
+              identifier
               kind
               relata
+              content
+              site
               ;
-            inherit (contributed) content;
-            # `sites` names every contributing record's site, computed directly from `records`
-            # rather than reused from `contributed.sites`: that accumulator writes a content key's
-            # site only on the fold branch that first sees the key (mint.nix:381-397 above), so a
-            # second agreeing producer's site is unrecoverable from it even read as-is. `records`
-            # is the full agreeing group at this point — a disagreement has already thrown above —
-            # so this enumerates every producer, in the group's own schedule/within order.
-            sites = map (r: r.site) records;
+            identity = hashIdentity kind ([ identifierKey ] ++ attrNames relata) valueOf;
           };
 
-      merged = mapAttrs (_: mergeGroup) (groupBy (r: r.identifier) run.settled);
+        # ── THE ACCUMULATION ──
+        # One round per scheduled stratum. Each round mints its stratum against everything strictly
+        # earlier has settled and adds what it settled to the set the next round will see, which is
+        # the stratum-by-stratum construction the theory names.
+        accumulate =
+          acc:
+          let
+            stratum = head acc.pending;
+            settled = map (mintOne acc.frozen) (itemsAt stratum);
+          in
+          {
+            pending = tail acc.pending;
+            frozen = acc.frozen // listToAttrs (map (r: nameValuePair r.identifier r.identity) settled);
+            byStratum = acc.byStratum // {
+              ${toString stratum} = settled;
+            };
+          };
 
-      # One node plus one edge per relatum, each edge carrying the label that keyed the identity.
-      # Emitted in the node map's own key order with each node's labels in theirs, so the sequence is
-      # a function of the program rather than of the order the strata happened to settle in.
-      result = {
-        nodes = mapAttrs (_: node: {
-          inherit (node)
-            identity
-            kind
-            content
+        accumulated = iterateBounded forceFields accumulate {
+          pending = schedule;
+          frozen = { };
+          byStratum = { };
+        } schedule;
+
+        # ── THE DRIVER'S PER-STRATUM STEP ──
+        # `emitted` is empty at every stratum and that is structural rather than incidental: a stratum
+        # does not produce emitters. What varies per stratum is what each emitter mints, which is a
+        # function of the frozen set; WHICH emitters exist is fixed before the first stratum runs. If a
+        # stratum could emit an emitter carrying a fresh declared pass, the schedule computed at the
+        # start would be incomplete and the run's boundedness would be delivering silence.
+        #
+        # ★ `items` IS DECLARED AND NOT READ, AND THE REASON IS SHARING RATHER THAN OVERSIGHT. Nothing
+        # is emitted, so the pool the driver selects from is the seed at every round and its selection
+        # is this instance's own `itemsAt` applied to the same fixed list — the two agree by
+        # construction. The mint for a stratum has to exist BEFORE the driver asks for it, because the
+        # next stratum's frozen set is built from it; re-deriving it from `items` here would compute
+        # every mint a second time. The formal stays because the record's shape is the driver's.
+        #
+        # ★ AND THE STRATUM'S OUTPUT IS FORCED THROUGH HERE. The driver's per-round discipline reaches
+        # the accumulator's fields, which for a list is the spine, so a refusal living inside an
+        # element would survive the run. Forcing it in the round that produced it is what puts the
+        # refusal at the pass that caused it.
+        advance =
+          { stratum, items }:
+          {
+            emitted = [ ];
+            settled =
+              let
+                produced = accumulated.byStratum.${toString stratum};
+              in
+              builtins.deepSeq produced produced;
+          };
+
+        run = stratify {
+          inherit
+            schedule
+            stratumOf
+            within
+            advance
+            describe
             ;
-        }) merged;
+          seed = emitters;
+        };
 
-        edges = concatMap (
-          identifier:
-          map (label: {
-            from = identifier;
-            to = merged.${identifier}.relata.${label};
-            inherit label;
-          }) (attrNames merged.${identifier}.relata)
-        ) (attrNames merged);
+        # ── THE MERGE ──
+        # Every contribution to one identifier, in schedule order with the within-stratum order inside
+        # it. The identity is checked first because it is the mint: contributions that disagree about
+        # WHICH node they are describing have not reached the question of what its content is.
+        mergeGroup =
+          records:
+          let
+            first = head records;
+            disagreeing = filter (r: r.identity != first.identity) records;
 
-        # A sibling of `nodes`, not a fourth field on it: `sites.<identifier>` is the ordered list
-        # of every settled record's site that contributed to that identifier's collapse. Provenance
-        # is the graph's own contribution set (ADR-0010 §2), so it is recoverable here rather than
-        # folded into the closed `{ identity; kind; content; }` node record above.
-        sites = mapAttrs (_: node: node.sites) merged;
+            contributed =
+              foldl'
+                (
+                  acc: r:
+                  foldl' (
+                    a: key:
+                    let
+                      next =
+                        if a.content ? ${key} then
+                          (
+                            if a.content.${key} == r.content.${key} then
+                              a
+                            else
+                              throw (conflictingContribution first.identity key a.sites.${key} r.site)
+                          )
+                        else
+                          {
+                            content = a.content // {
+                              ${key} = r.content.${key};
+                            };
+                            sites = a.sites // {
+                              ${key} = r.site;
+                            };
+                          };
+                    in
+                    builtins.seq (forceFields next) next
+                  ) acc (attrNames r.content)
+                )
+                {
+                  content = { };
+                  sites = { };
+                }
+                records;
+          in
+          if disagreeing != [ ] then
+            throw (conflictingContribution first.identity mintKey first.site (head disagreeing).site)
+          else
+            {
+              inherit (first)
+                identity
+                kind
+                relata
+                ;
+              inherit (contributed) content;
+              # `sites` names every contributing record's site, computed directly from `records`
+              # rather than reused from `contributed.sites`: that accumulator writes a content key's
+              # site only on the fold branch that first sees the key (mint.nix:381-397 above), so a
+              # second agreeing producer's site is unrecoverable from it even read as-is. `records`
+              # is the full agreeing group at this point — a disagreement has already thrown above —
+              # so this enumerates every producer, in the group's own schedule/within order.
+              sites = map (r: r.site) records;
+            };
 
-        # The driver's own two, carried rather than re-derived. `unrun` is the list the driver
-        # returned — not filtered, not re-typed, not replaced by a constant. On every run it is empty
-        # by theorem, because the schedule is derived FROM the declared passes and no emitter's pass
-        # can fall outside it; it is carried because the driver's result carries it, and it is a fact
-        # a caller may read rather than a channel anything here depends on.
-        inherit (run) strata unrun;
-      };
-    in
-    # The schema stratum is forced and never read, and the forcing establishes LESS than a reader
-    # might take from it, so its reach is stated. `seq` forces to weak head normal form, which
-    # establishes that `kinds` is a VALUE this call received rather than a fixpoint it participates
-    # in — the property the argument boundary exists for. It does NOT establish that every option
-    # inside it evaluated: measured on this construction, a throw AS the kinds value fires while a
-    # throw as one option inside it passes. That gap is not closed here, because what is owed is
-    # dataflow and not a check: the entry is outside the fixpoint that produces kind options and
-    # holds no handle with which to re-open one, so contributing an option after minting has begun is
-    # not a refused contribution but an expression with nowhere to attach. Deepening the forcing
-    # would buy a different property — that the caller's options are total — which is the caller's
-    # own and is not what the argument boundary is for.
-    #
-    # The emitters' names are checked after `kinds` and before anything is scheduled, because the
-    # schedule's own ordering compares identifiers and would abort on a record first.
-    builtins.seq kinds (builtins.seq (identifiersOf emitters) (builtins.deepSeq result result));
-}
+        merged = mapAttrs (_: mergeGroup) (groupBy (r: r.identifier) run.settled);
+
+        # One node plus one edge per relatum, each edge carrying the label that keyed the identity.
+        # Emitted in the node map's own key order with each node's labels in theirs, so the sequence is
+        # a function of the program rather than of the order the strata happened to settle in.
+        result = {
+          nodes = mapAttrs (_: node: {
+            inherit (node)
+              identity
+              kind
+              content
+              ;
+          }) merged;
+
+          edges = concatMap (
+            identifier:
+            map (label: {
+              from = identifier;
+              to = merged.${identifier}.relata.${label};
+              inherit label;
+            }) (attrNames merged.${identifier}.relata)
+          ) (attrNames merged);
+
+          # A sibling of `nodes`, not a fourth field on it: `sites.<identifier>` is the ordered list
+          # of every settled record's site that contributed to that identifier's collapse. Provenance
+          # is the graph's own contribution set (ADR-0010 §2), so it is recoverable here rather than
+          # folded into the closed `{ identity; kind; content; }` node record above.
+          sites = mapAttrs (_: node: node.sites) merged;
+
+          # The driver's own two, carried rather than re-derived. `unrun` is the list the driver
+          # returned — not filtered, not re-typed, not replaced by a constant. On every run it is empty
+          # by theorem, because the schedule is derived FROM the declared passes and no emitter's pass
+          # can fall outside it; it is carried because the driver's result carries it, and it is a fact
+          # a caller may read rather than a channel anything here depends on.
+          inherit (run) strata unrun;
+        };
+      in
+      # The schema stratum is forced and never read, and the forcing establishes LESS than a reader
+      # might take from it, so its reach is stated. `seq` forces to weak head normal form, which
+      # establishes that `kinds` is a VALUE this call received rather than a fixpoint it participates
+      # in — the property the argument boundary exists for. It does NOT establish that every option
+      # inside it evaluated: measured on this construction, a throw AS the kinds value fires while a
+      # throw as one option inside it passes. That gap is not closed here, because what is owed is
+      # dataflow and not a check: the entry is outside the fixpoint that produces kind options and
+      # holds no handle with which to re-open one, so contributing an option after minting has begun is
+      # not a refused contribution but an expression with nowhere to attach. Deepening the forcing
+      # would buy a different property — that the caller's options are total — which is the caller's
+      # own and is not what the argument boundary is for.
+      #
+      # The emitters' names are checked after `kinds` and before anything is scheduled, because the
+      # schedule's own ordering compares identifiers and would abort on a record first.
+      builtins.seq kinds (builtins.seq (identifiersOf emitters) (builtins.deepSeq result result));
+  }

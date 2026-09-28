@@ -46,32 +46,29 @@ let
 
   run =
     dscTable: target:
-    (genScope.eval {
-      inherit scope;
-      attributes = {
-        children = _self: _id: { };
-        imports = _self: _id: [ ];
-        x = circular { carrier = num 0 4; } (
-          self: id: _prev:
-          if id == "drv" then
-            (
-              let
-                c = self.get "drv" "x";
-              in
-              if c >= 4 then 4 else c + 1
-            )
-          else if id == "dsc" then
-            dscTable (self.get "drv" "x")
-          else
-            (
-              let
-                t = self.get "tgt" "x";
-              in
-              if t >= 1 then 1 else (if self.get "dsc" "x" >= 3 then 1 else 0)
-            )
-        );
-      };
-    }).get
+    (genScope.eval { } {
+      children = _self: _id: { };
+      imports = _self: _id: [ ];
+      x = circular { carrier = num 0 4; } (
+        self: id: _prev:
+        if id == "drv" then
+          (
+            let
+              c = self.get "drv" "x";
+            in
+            if c >= 4 then 4 else c + 1
+          )
+        else if id == "dsc" then
+          dscTable (self.get "drv" "x")
+        else
+          (
+            let
+              t = self.get "tgt" "x";
+            in
+            if t >= 1 then 1 else (if self.get "dsc" "x" >= 3 then 1 else 0)
+          )
+      );
+    } scope).get
       target
       "x";
 

@@ -237,39 +237,33 @@ in
 {
   flake.tests.entry.test-standalone-entry-constructs-its-siblings =
     let
-      chain = entry.mkProgram {
-        rules = [
-          { head = "a0"; }
+      chain = entry.mkProgram [
+        { head = "a0"; }
+        {
+          head = "a1";
+          pos = [ "a0" ];
+        }
+      ];
+      minted =
+        entry.mintStrata
           {
-            head = "a1";
-            pos = [ "a0" ];
+            widget = { };
           }
-        ];
-      };
-      minted = entry.mintStrata {
-        emitters = [
-          {
-            pass = 0;
-            identifier = "a";
-            kind = "widget";
-            relata = { };
-            content = { };
-            site = "s";
-          }
-        ];
-        kinds = {
-          widget = { };
-        };
-      };
+          [
+            {
+              pass = 0;
+              identifier = "a";
+              kind = "widget";
+              relata = { };
+              content = { };
+              site = "s";
+            }
+          ];
     in
     {
       expr = {
-        prelude = (entry.mkProgram { rules = [ { head = "a"; } ]; }).atoms;
-        graph =
-          (entry.solve {
-            program = chain;
-            interpretation = [ ];
-          }).condensationDepth;
+        prelude = (entry.mkProgram [ { head = "a"; } ]).atoms;
+        graph = (entry.solve [ ] chain).condensationDepth;
         # ★ THE PREFIX, NOT `isString` — a corrupted `hashIdentity` returning a constant string of
         # the wrong shape (e.g. `""`) would still satisfy `isString`. `mint.nix`'s own IDENTITY
         # vocabulary states the output shape as `"<kind>:" + digest`; the prefix is what a caller

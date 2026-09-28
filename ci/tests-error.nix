@@ -72,11 +72,20 @@ let
   collide =
     labels:
     genScope.buildRoots {
-      parentGraph = genScope.edge "a" "root";
-      importGraph = genScope.edge "a" "lib1";
+      parentGraph = genScope.edge {
+        from = "a";
+        to = "root";
+      };
+      importGraph = genScope.edge {
+        from = "a";
+        to = "lib1";
+      };
       edgeGraphs = map (label: {
         inherit label;
-        graph = genScope.edge "a" "HIJACKED";
+        graph = genScope.edge {
+          from = "a";
+          to = "HIJACKED";
+        };
       }) labels;
     };
 
@@ -97,15 +106,12 @@ let
 
   kinds = mkKinds [
     (mkKind {
-      name = "l";
       resolve = _: _: { };
-    })
+    } "l")
     (mkKind {
-      name = "sibling";
       resolve = _: _: { };
-    })
+    } "sibling")
     (mkKind {
-      name = "t";
       below = [ "l" ];
       resolve = c: _: {
         claims = [
@@ -115,10 +121,10 @@ let
           })
         ];
       };
-    })
+    } "t")
   ];
 
-  run = claims: resolveClaims { inherit kinds claims; };
+  run = claims: resolveClaims { } kinds claims;
 
   # The reserved-key arm is reachable only through a record the constructor did not build: it
   # refuses a shadowing payload itself, at the site the author wrote. A fixture built with
@@ -144,26 +150,21 @@ let
     bad:
     mkKinds [
       (mkKind {
-        name = "b";
         resolve = _: _: { };
-      })
+      } "b")
       (mkKind {
-        name = "a";
         below = [ "b" ];
         resolve = _: _: { claims = [ bad ]; };
-      })
+      } "a")
     ];
   runEmit =
     bad:
-    resolveClaims {
-      kinds = emitKinds bad;
-      claims = [
-        (mkClaim {
-          kind = "a";
-          subject = subjA;
-        })
-      ];
-    };
+    resolveClaims { } (emitKinds bad) [
+      (mkClaim {
+        kind = "a";
+        subject = subjA;
+      })
+    ];
 
   # Hand-built for the same reason `handBuiltShadowingClaim` is: the constructor refuses a
   # shadowing payload where the author writes it, so a fixture built with `mkClaim` would refuse
@@ -418,15 +419,12 @@ in
     # control for that sits in `#tests`, where a kind with no resolver registers and ranks), and the
     # demand is refused with a message saying which of the two vocabularies the kind belongs to.
     test-a-claim-on-a-kind-with-no-resolver-is-refused-at-the-run = {
-      expr = resolveClaims {
-        kinds = mkKinds [ (mkKind { name = "structural"; }) ];
-        claims = [
-          (mkClaim {
-            kind = "structural";
-            subject = subjA;
-          })
-        ];
-      };
+      expr = resolveClaims { } (mkKinds [ (mkKind { } "structural") ]) [
+        (mkClaim {
+          kind = "structural";
+          subject = subjA;
+        })
+      ];
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.resolveClaims: kind 'structural' at path [0] declares no `resolve`, so it cannot answer a demand — it is a registered kind and not a demand kind";
@@ -435,20 +433,19 @@ in
     # An explicit null and an omitted field are one case, which is the sentinel's whole cost and its
     # whole point: nothing legitimate is collapsed, because null is not a resolver on any reading.
     test-an-explicitly-null-resolver-is-refused-the-same-way = {
-      expr = resolveClaims {
-        kinds = mkKinds [
-          (mkKind {
-            name = "structural";
-            resolve = null;
-          })
-        ];
-        claims = [
-          (mkClaim {
-            kind = "structural";
-            subject = subjA;
-          })
-        ];
-      };
+      expr =
+        resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              resolve = null;
+            } "structural")
+          ])
+          [
+            (mkClaim {
+              kind = "structural";
+              subject = subjA;
+            })
+          ];
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.resolveClaims: kind 'structural' at path [0] declares no `resolve`, so it cannot answer a demand — it is a registered kind and not a demand kind";
@@ -460,10 +457,9 @@ in
     # difference between an expansion that is checked and one that cannot be written.
     test-a-spawn-outside-the-hosts-below-set-is-refused-at-construction = {
       expr = mkKind {
-        name = "host";
         below = [ "low" ];
         spawns.sideways = _self: _id: { };
-      };
+      } "host";
       expectedError = {
         type = "ThrownError";
         msg = exactly ''gen-scope.mkKind: kind 'host' declares a spawn producing kind(s) ["sideways"] that its `below` set ["low"] does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there.'';
@@ -474,9 +470,8 @@ in
     # that the order is what licenses it.
     test-a-spawn-with-no-below-at-all-is-refused = {
       expr = mkKind {
-        name = "host";
         spawns.child = _self: _id: { };
-      };
+      } "host";
       expectedError = {
         type = "ThrownError";
         msg = exactly ''gen-scope.mkKind: kind 'host' declares a spawn producing kind(s) ["child"] that its `below` set [] does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there.'';
@@ -488,9 +483,8 @@ in
     # same field.
     test-constructor-refuses-a-resolve-that-cannot-be-applied = {
       expr = mkKind {
-        name = "k";
         resolve = 5;
-      };
+      } "k";
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.mkKind: kind 'k' declares a `resolve` that cannot be applied (it is a int)";
@@ -501,10 +495,9 @@ in
     # everything, and the fix would read as green while having broken the door.
     test-constructor-still-refuses-dedupKey-without-fold-control = {
       expr = mkKind {
-        name = "k";
         resolve = _: { };
         dedupKey = _: "d";
-      };
+      } "k";
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.mkKind: kind 'k' declares `dedupKey` without `fold` (a fold is required to merge grouped fragments)";
@@ -538,22 +531,19 @@ in
     # `name` field — because the key is what a claim's `kind` resolves through, and on a forged
     # record the two need not agree.
     test-pass-through-door-names-the-entry-key-and-the-missing-field = {
-      expr = resolveClaims {
+      expr = resolveClaims { } {
         kinds = {
-          kinds = {
-            l = {
-              _type = "gen-scope/kind";
-              name = "l";
-              below = [ ];
-              depth = 0;
-              belowKinds = { };
-              dedupKey = null;
-              fold = null;
-            };
+          l = {
+            _type = "gen-scope/kind";
+            name = "l";
+            below = [ ];
+            depth = 0;
+            belowKinds = { };
+            dedupKey = null;
+            fold = null;
           };
         };
-        claims = [ ];
-      };
+      } [ ];
       expectedError = {
         type = "ThrownError";
         msg = exactly ''gen-scope.resolveClaims: the kind set holds entries that are not minted kinds: ["`l` carries no `resolve` field"]'';
@@ -700,11 +690,10 @@ in
     test-a-dedupkey-that-cannot-be-applied-says-so = {
       expr = mkKinds [
         (mkKind {
-          name = "l";
           resolve = _: _: { };
           dedupKey = 42;
           fold = _: _: { };
-        })
+        } "l")
       ];
       expectedError = {
         type = "ThrownError";
@@ -714,11 +703,10 @@ in
     test-a-fold-that-cannot-be-applied-says-so = {
       expr = mkKinds [
         (mkKind {
-          name = "l";
           resolve = _: _: { };
           dedupKey = _: "k";
           fold = 42;
-        })
+        } "l")
       ];
       expectedError = {
         type = "ThrownError";
@@ -730,44 +718,42 @@ in
     # Both halves. What the evaluator would have said instead — "expected a set but found a list" —
     # names no library, no kind and no path, and for the silent half it says nothing at all.
     test-a-result-that-is-not-a-set-names-the-kind-and-the-path = {
-      expr = resolveClaims {
-        kinds = mkKinds [
-          (mkKind {
-            name = "g";
-            resolve = _: _: [ 1 ];
-          })
-        ];
-        claims = [
-          (mkClaim {
-            kind = "g";
-            subject = {
-              id_hash = "id-a";
-            };
-          })
-        ];
-      };
+      expr =
+        resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              resolve = _: _: [ 1 ];
+            } "g")
+          ])
+          [
+            (mkClaim {
+              kind = "g";
+              subject = {
+                id_hash = "id-a";
+              };
+            })
+          ];
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.resolveClaims: kind 'g' at path [0] returned a list rather than an attribute set";
       };
     };
     test-a-container-of-the-wrong-type-names-which-container = {
-      expr = resolveClaims {
-        kinds = mkKinds [
-          (mkKind {
-            name = "g";
-            resolve = _: _: { resources = [ 1 ]; };
-          })
-        ];
-        claims = [
-          (mkClaim {
-            kind = "g";
-            subject = {
-              id_hash = "id-a";
-            };
-          })
-        ];
-      };
+      expr =
+        resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              resolve = _: _: { resources = [ 1 ]; };
+            } "g")
+          ])
+          [
+            (mkClaim {
+              kind = "g";
+              subject = {
+                id_hash = "id-a";
+              };
+            })
+          ];
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.resolveClaims: kind 'g' at path [0] returned a `resources` that is a list rather than an attribute set";
@@ -778,22 +764,21 @@ in
     # spell tell them which one — a boolean says a resolver was refused and leaves them to find out
     # which of its keys this library does not read.
     test-an-unrecognised-result-key-names-the-key-and-the-closed-set = {
-      expr = resolveClaims {
-        kinds = mkKinds [
-          (mkKind {
-            name = "g";
-            resolve = _: _: { resourcez.ok = 1; };
-          })
-        ];
-        claims = [
-          (mkClaim {
-            kind = "g";
-            subject = {
-              id_hash = "id-a";
-            };
-          })
-        ];
-      };
+      expr =
+        resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              resolve = _: _: { resourcez.ok = 1; };
+            } "g")
+          ])
+          [
+            (mkClaim {
+              kind = "g";
+              subject = {
+                id_hash = "id-a";
+              };
+            })
+          ];
       expectedError = {
         type = "ThrownError";
         msg = exactly ''gen-scope.resolveClaims: kind 'g' at path [0] returned unrecognised result key(s) ["resourcez"]: this record is closed to ["resources","wiring","claims"], and a key outside that set is read by nothing here — correct the spelling or drop it'';
@@ -802,23 +787,22 @@ in
     # An identity that is present but cannot be an attribute name is named as such, distinctly from
     # one that is absent — two different bugs for the caller.
     test-an-unusable-id-hash-is-named-distinctly-from-a-missing-one = {
-      expr = resolveClaims {
-        kinds = mkKinds [
-          (mkKind {
-            name = "g";
-            resolve = _: _: { };
-          })
-        ];
-        claims = [
-          (mkClaim {
-            kind = "g";
-            subject = {
-              id_hash = [ 1 ];
-              name = "s";
-            };
-          })
-        ];
-      };
+      expr =
+        resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              resolve = _: _: { };
+            } "g")
+          ])
+          [
+            (mkClaim {
+              kind = "g";
+              subject = {
+                id_hash = [ 1 ];
+                name = "s";
+              };
+            })
+          ];
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.resolveClaims: claim at path [0] (kind 'g') has a subject whose id_hash is a list rather than a string (renders as 's')";
@@ -831,22 +815,21 @@ in
     # uncatchable class left open, and it is asserted here rather than described, because a bound
     # nothing measures is a bound nobody notices closing or widening.
     test-a-wrong-arity-resolver-is-not-refused-and-this-is-the-bound = {
-      expr = resolveClaims {
-        kinds = mkKinds [
-          (mkKind {
-            name = "l";
-            resolve = x: x;
-          })
-        ];
-        claims = [
-          (mkClaim {
-            kind = "l";
-            subject = {
-              id_hash = "id-a";
-            };
-          })
-        ];
-      };
+      expr =
+        resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              resolve = x: x;
+            } "l")
+          ])
+          [
+            (mkClaim {
+              kind = "l";
+              subject = {
+                id_hash = "id-a";
+              };
+            })
+          ];
       # ★ `tryEval` does NOT hold this — that is the whole reason the class matters — but
       # nix-unit's `expectedError` catches at a level `tryEval` does not reach, which is what
       # makes the bound assertable instead of merely described.
@@ -1206,7 +1189,10 @@ in
   # example shapes would leave gaps, and the count is whatever the predicate has.
   config.flake.testsError.vertex-order-refusals =
     let
-      pg = genScope.edge "a" "root";
+      pg = genScope.edge {
+        from = "a";
+        to = "root";
+      };
       built = genScope.buildRoots { parentGraph = pg; };
       attrs = {
         children = _self: _id: { };
@@ -1239,11 +1225,17 @@ in
             edgeGraphs = [
               {
                 label = "M";
-                graph = genScope.edge "n" "m";
+                graph = genScope.edge {
+                  from = "n";
+                  to = "m";
+                };
               }
               {
                 label = "M";
-                graph = genScope.edge "d" "c";
+                graph = genScope.edge {
+                  from = "d";
+                  to = "c";
+                };
               }
             ];
           }).nodeOrder;
@@ -1256,11 +1248,7 @@ in
       # O14, limb 1 — a bare NODE MAP where the record belongs. This is the shape that used to be
       # served silently on every enumerating read.
       test-O14-a-node-map-is-refused-with-the-conjunct-named = {
-        expr =
-          (genScope.eval {
-            scope = built.nodes;
-            attributes = attrs;
-          }).allNodeIds;
+        expr = (genScope.eval { } attrs built.nodes).allNodeIds;
         expectedError = {
           type = "ThrownError";
           msg = scopeRefusal "eval" "received an attrset with no `nodes`";
@@ -1271,16 +1259,14 @@ in
       # Its key set is IDENTICAL to the record's, so only the TYPE discriminates.
       test-O14-the-adversarial-node-map-is-refused-on-type = {
         expr =
-          (genScope.eval {
-            scope =
-              (genScope.buildRoots {
-                parentGraph = genScope.overlays [
-                  (genScope.vertex "nodes")
-                  (genScope.vertex "nodeOrder")
-                ];
-              }).nodes;
-            attributes = attrs;
-          }).allNodeIds;
+          (genScope.eval { } attrs (
+            (genScope.buildRoots {
+              parentGraph = genScope.overlays [
+                (genScope.vertex "nodes")
+                (genScope.vertex "nodeOrder")
+              ];
+            }).nodes
+          )).allNodeIds;
         expectedError = {
           type = "ThrownError";
           msg = scopeRefusal "eval" "received an attrset whose `nodeOrder` is a set, not a list";
@@ -1289,11 +1275,7 @@ in
 
       # O14, limb 3 — not an attrset at all.
       test-O14-a-non-attrset-is-refused-with-its-type-named = {
-        expr =
-          (genScope.eval {
-            scope = [ ];
-            attributes = attrs;
-          }).allNodeIds;
+        expr = (genScope.eval { } attrs [ ]).allNodeIds;
         expectedError = {
           type = "ThrownError";
           msg = scopeRefusal "eval" "received a list";
@@ -1302,12 +1284,7 @@ in
 
       # O14 — the refusal is the ENTRY's, so the message names the entry the caller wrote.
       test-O14-the-message-names-the-entry-that-was-called = {
-        expr =
-          (genScope.evalDebug {
-            scope = built.nodes;
-            attributes = attrs;
-          }).node
-            "a";
+        expr = (genScope.evalDebug { } attrs built.nodes).node "a";
         expectedError = {
           type = "ThrownError";
           msg = scopeRefusal "evalDebug" "received an attrset with no `nodes`";
@@ -1353,31 +1330,28 @@ in
       # key it refuses rather than stopping at the first, and the registered sibling is absent from
       # that list, so the cell reads the PREDICATE and not merely the throw.
       test-a-minted-child-names-the-host-the-keys-and-the-ground = {
-        expr = genScope.childrenIds (genScope.eval {
-          scope = selectionScope;
-          attributes = {
-            children =
-              _self: id:
-              if id == "host" then
-                {
-                  alpha = {
-                    id = "alpha";
-                    type = "t";
-                    parent = "host";
-                    decls = { };
-                  };
-                  zeta = {
-                    id = "zeta";
-                    type = "t";
-                    parent = "host";
-                    decls = { };
-                  };
-                  inherit (selectionScope.nodes) kid;
-                }
-              else
-                { };
-          };
-        }) "host";
+        expr = genScope.childrenIds (genScope.eval { } {
+          children =
+            _self: id:
+            if id == "host" then
+              {
+                alpha = {
+                  id = "alpha";
+                  type = "t";
+                  parent = "host";
+                  decls = { };
+                };
+                zeta = {
+                  id = "zeta";
+                  type = "t";
+                  parent = "host";
+                  decls = { };
+                };
+                inherit (selectionScope.nodes) kid;
+              }
+            else
+              { };
+        } selectionScope) "host";
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope: node 'host' declares child(ren) [\"alpha\",\"zeta\"] that the scope does not carry. `children` SELECTS among the nodes the scope already registered — it is not a growth channel, and a record under an unregistered key is a node minted while the attribute is read, whose kind nothing can have checked descends its host's. Growth is the spawn channel's: declare it on the host's kind as `mkKind { spawns = { <produced-kind> = builder; }; }` with the produced kind named in that kind's `below`. To keep a node here, register it in the scope and select it.";
@@ -1390,10 +1364,9 @@ in
       test-G1-a-self-spawning-declaration-cannot-be-minted = {
         expr = builtins.seq (mkKinds [
           (mkKind {
-            name = "a";
             below = [ "a" ];
             spawns.a = _self: _id: { };
-          })
+          } "a")
         ]) null;
         expectedError = {
           type = "ThrownError";
@@ -1404,13 +1377,11 @@ in
       test-G2-a-two-cycle-misses-at-its-first-member = {
         expr = builtins.seq (mkKinds [
           (mkKind {
-            name = "a";
             below = [ "b" ];
-          })
+          } "a")
           (mkKind {
-            name = "b";
             below = [ "a" ];
-          })
+          } "b")
         ]) null;
         expectedError = {
           type = "ThrownError";
@@ -1419,7 +1390,7 @@ in
       };
       # The attribute-set form is retired by name, pointing at the list form.
       test-the-attribute-set-form-is-refused-by-name = {
-        expr = builtins.seq (mkKinds { a = mkKind { name = "a"; }; }) null;
+        expr = builtins.seq (mkKinds { a = mkKind { } "a"; }) null;
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope.mkKinds: expected a LIST of kind declarations, not an attribute set. Kinds are minted in list order, each against the kinds declared before it, and an attribute set has no order to mint in: list the declarations with every kind after the kinds its `below` names.";
@@ -1524,11 +1495,7 @@ in
   config.flake.testsError.interpretation-refusals =
     let
       solveWith =
-        interpretation:
-        (genScope.wellFoundedModel {
-          program = genScope.mkProgram { rules = [ ]; };
-          inherit interpretation;
-        }).trueAtoms;
+        interpretation: (genScope.wellFoundedModel interpretation (genScope.mkProgram [ ])).trueAtoms;
     in
     {
       test-an-inconsistent-interpretation-names-the-atom-and-both-verdicts = {
@@ -1603,28 +1570,31 @@ in
       lowHigh =
         spawn:
         genScope.mkKinds [
-          (genScope.mkKind { name = "low"; })
+          (genScope.mkKind { } "low")
           (genScope.mkKind {
-            name = "high";
             below = [ "low" ];
             spawns.low = spawn;
-          })
+          } "high")
         ];
       runWith =
         kinds: attributes:
         builtins.deepSeq
-          (genScope.eval {
-            scope = genScope.buildRoots {
-              inherit kinds;
-              parentGraph = genScope.vertex "h";
-              types.h = "high";
-            };
-            attributes = {
-              children = _self: _id: { };
-              imports = _self: _id: [ ];
-            }
-            // attributes;
-          }).allNodes
+          (genScope.eval { }
+            (
+              {
+                children = _self: _id: { };
+                imports = _self: _id: [ ];
+              }
+              // attributes
+            )
+            (
+              genScope.buildRoots {
+                inherit kinds;
+                parentGraph = genScope.vertex "h";
+                types.h = "high";
+              }
+            )
+          ).allNodes
           null;
     in
     {
@@ -1647,7 +1617,7 @@ in
           builtins.deepSeq
             (genScope.buildRoots {
               parentGraph = genScope.vertex "n";
-              kinds = genScope.mkKinds [ (genScope.mkKind { name = "host"; }) ];
+              kinds = genScope.mkKinds [ (genScope.mkKind { } "host") ];
               types.n = "gost";
             }).nodes
             null;
@@ -1694,8 +1664,12 @@ in
       test-a-hand-built-scope-with-an-unregistered-kind-is-refused = {
         expr =
           builtins.deepSeq
-            (genScope.eval {
-              scope = {
+            (genScope.eval { }
+              {
+                children = _self: _id: { };
+                imports = _self: _id: [ ];
+              }
+              {
                 nodes.n = {
                   id = "n";
                   parent = null;
@@ -1703,13 +1677,9 @@ in
                   decls = { };
                 };
                 nodeOrder = [ "n" ];
-                kinds = genScope.mkKinds [ (genScope.mkKind { name = "high"; }) ];
-              };
-              attributes = {
-                children = _self: _id: { };
-                imports = _self: _id: [ ];
-              };
-            }).allNodes
+                kinds = genScope.mkKinds [ (genScope.mkKind { } "high") ];
+              }
+            ).allNodes
             null;
         expectedError = {
           type = "ThrownError";
@@ -1729,30 +1699,33 @@ in
     test-a-spawned-key-colliding-with-a-registered-node-is-refused-by-name = {
       expr =
         builtins.deepSeq
-          (genScope.eval {
-            scope = genScope.buildRoots {
-              parentGraph = genScope.overlay (genScope.vertex "a") (genScope.vertex "b");
-              types.a = "host";
-              types.b = "leaf";
-              decls.a = { };
-              decls.b = { };
-              kinds = genScope.mkKinds [
-                (genScope.mkKind { name = "leaf"; })
-                (genScope.mkKind {
-                  name = "host";
-                  below = [ "leaf" ];
-                  spawns.leaf = _self: id: {
-                    b = {
-                      id = "b";
-                      parent = id;
-                      decls = { };
+          (genScope.eval { }
+            {
+              children = _self: _id: { };
+            }
+            (
+              genScope.buildRoots {
+                parentGraph = genScope.overlay (genScope.vertex "a") (genScope.vertex "b");
+                types.a = "host";
+                types.b = "leaf";
+                decls.a = { };
+                decls.b = { };
+                kinds = genScope.mkKinds [
+                  (genScope.mkKind { } "leaf")
+                  (genScope.mkKind {
+                    below = [ "leaf" ];
+                    spawns.leaf = _self: id: {
+                      b = {
+                        id = "b";
+                        parent = id;
+                        decls = { };
+                      };
                     };
-                  };
-                })
-              ];
-            };
-            attributes.children = _self: _id: { };
-          }).allNodes
+                  } "host")
+                ];
+              }
+            )
+          ).allNodes
           null;
       expectedError = {
         type = "ThrownError";
@@ -1764,39 +1737,42 @@ in
     test-a-spawned-key-colliding-with-a-sibling-spawn-is-refused-by-name = {
       expr =
         builtins.deepSeq
-          (genScope.eval {
-            scope = genScope.buildRoots {
-              parentGraph = genScope.vertex "a";
-              types.a = "host";
-              decls.a = { };
-              kinds = genScope.mkKinds [
-                (genScope.mkKind { name = "leafOne"; })
-                (genScope.mkKind { name = "leafTwo"; })
-                (genScope.mkKind {
-                  name = "host";
-                  below = [
-                    "leafOne"
-                    "leafTwo"
-                  ];
-                  spawns.leafOne = _self: id: {
-                    shared = {
-                      id = "shared";
-                      parent = id;
-                      decls = { };
+          (genScope.eval { }
+            {
+              children = _self: _id: { };
+            }
+            (
+              genScope.buildRoots {
+                parentGraph = genScope.vertex "a";
+                types.a = "host";
+                decls.a = { };
+                kinds = genScope.mkKinds [
+                  (genScope.mkKind { } "leafOne")
+                  (genScope.mkKind { } "leafTwo")
+                  (genScope.mkKind {
+                    below = [
+                      "leafOne"
+                      "leafTwo"
+                    ];
+                    spawns.leafOne = _self: id: {
+                      shared = {
+                        id = "shared";
+                        parent = id;
+                        decls = { };
+                      };
                     };
-                  };
-                  spawns.leafTwo = _self: id: {
-                    shared = {
-                      id = "shared";
-                      parent = id;
-                      decls = { };
+                    spawns.leafTwo = _self: id: {
+                      shared = {
+                        id = "shared";
+                        parent = id;
+                        decls = { };
+                      };
                     };
-                  };
-                })
-              ];
-            };
-            attributes.children = _self: _id: { };
-          }).allNodes
+                  } "host")
+                ];
+              }
+            )
+          ).allNodes
           null;
       expectedError = {
         type = "ThrownError";
@@ -1824,19 +1800,21 @@ in
       # DEMAND on the demand path — the texts below survive that relocation byte-identically.
       run =
         carrierArg: f:
-        (genScope.eval {
-          scope = genScope.buildRoots {
-            parentGraph = genScope.vertex "n";
-            importGraph = genScope.empty;
-            decls.n = { };
-            types = { };
-          };
-          attributes = {
+        (genScope.eval { }
+          {
             children = _self: _id: { };
             imports = _self: _id: [ ];
             probe = circular carrierArg f;
-          };
-        }).get
+          }
+          (
+            genScope.buildRoots {
+              parentGraph = genScope.vertex "n";
+              importGraph = genScope.empty;
+              decls.n = { };
+              types = { };
+            }
+          )
+        ).get
           "n"
           "probe";
       ascending = {
@@ -2567,9 +2545,8 @@ in
       # may not be a fixed point of its own iterate.
       test-a-circular-spawn-builder-is-refused-at-registration = {
         expr = mkKinds [
-          (mkKind { name = "ep"; })
+          (mkKind { } "ep")
           (mkKind {
-            name = "host";
             below = [ "ep" ];
             spawns.ep =
               circular
@@ -2585,7 +2562,7 @@ in
                   _self: _id: _prev:
                   { }
                 );
-          })
+          } "host")
         ];
         expectedError = {
           type = "ThrownError";
@@ -2656,8 +2633,14 @@ in
     let
       chainScope = genScope.buildRoots {
         parentGraph = genScope.overlays [
-          (genScope.edge "a" "root")
-          (genScope.edge "c" "a")
+          (genScope.edge {
+            from = "a";
+            to = "root";
+          })
+          (genScope.edge {
+            from = "c";
+            to = "a";
+          })
         ];
         decls = {
           root = { };
@@ -2668,13 +2651,7 @@ in
     in
     {
       test-materialization-without-a-children-attribute-refuses-by-name = {
-        expr = builtins.attrNames (
-          (genScope.eval {
-            scope = chainScope;
-            attributes = { };
-          }).subtreeOf
-            "root"
-        );
+        expr = builtins.attrNames ((genScope.eval { } { } chainScope).subtreeOf "root");
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope: cannot descend from 'root': this evaluation declares no `children` attribute, so there is no containment relation to walk and a materialization would answer the entry points alone — a partial tree with nothing marking it partial. A node that genuinely has no children is a declared `children` answering `{ }`, which is a different answer and stays available. Declare `children`, or read the node set through `scope.nodeOrder`, which needs no descent.";
@@ -2690,10 +2667,13 @@ in
   # entry unchanged, and the `trace.<id> or default` opt-out) is in `tests/fold-equations.nix`.
   config.flake.testsError.fold-equations-refusals =
     let
-      sealCtx = genScope.foldEquations {
+      sealCtx = genScope.foldEquations { } {
         scope = genScope.buildRoots {
-          kinds = genScope.mkKinds [ (genScope.mkKind { name = "host"; }) ];
-          parentGraph = genScope.edge "kid" "top";
+          kinds = genScope.mkKinds [ (genScope.mkKind { } "host") ];
+          parentGraph = genScope.edge {
+            from = "kid";
+            to = "top";
+          };
           decls = {
             top = { };
             kid = { };
@@ -2752,31 +2732,27 @@ in
   config.flake.testsError.least-model-refusals =
     let
       # `q :- a.` — the smallest program whose answer moves with the starting set.
-      unary = genScope.mkProgram {
-        rules = [
-          {
-            head = "q";
-            pos = [ "a" ];
-          }
-        ];
-      };
+      unary = genScope.mkProgram [
+        {
+          head = "q";
+          pos = [ "a" ];
+        }
+      ];
       # The same program plus an UNRELATED binary rule. That rule is the whole of the difference:
       # it mentions neither `a` nor `q`, and it is what routes the door to the round arm.
-      conj = genScope.mkProgram {
-        rules = [
-          {
-            head = "q";
-            pos = [ "a" ];
-          }
-          {
-            head = "z";
-            pos = [
-              "m"
-              "n"
-            ];
-          }
-        ];
-      };
+      conj = genScope.mkProgram [
+        {
+          head = "q";
+          pos = [ "a" ];
+        }
+        {
+          head = "z";
+          pos = [
+            "m"
+            "n"
+          ];
+        }
+      ];
       # The payload refusal is a function of the SEED ALONE, so the two arms owe the same string.
       # It is written once here for that reason and not to save a line: two literals would be
       # equally satisfied by two arms that refuse DIFFERENTLY, which is the shape this row closes.
@@ -2785,11 +2761,8 @@ in
     {
       test-the-round-arm-refuses-a-seed-carrying-a-value = {
         expr = genScope.leastModelRounds {
-          program = conj;
-          seed = {
-            a = 42;
-          };
-        };
+          a = 42;
+        } conj;
         expectedError = {
           type = "ThrownError";
           msg = exactly payloadRefusal;
@@ -2798,11 +2771,8 @@ in
 
       test-the-closure-arm-refuses-the-same-seed-with-the-same-message = {
         expr = genScope.leastModelUnary {
-          program = unary;
-          seed = {
-            a = 42;
-          };
-        };
+          a = 42;
+        } unary;
         expectedError = {
           type = "ThrownError";
           msg = exactly payloadRefusal;
@@ -2813,10 +2783,7 @@ in
       # raised the EVALUATOR's `expected a set but found a list`, which is a `TypeError` that
       # `tryEval` does not contain and no cell could observe.
       test-a-non-set-seed-is-refused-by-name = {
-        expr = genScope.leastModelUnary {
-          program = unary;
-          seed = [ "a" ];
-        };
+        expr = genScope.leastModelUnary [ "a" ] unary;
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope: the seed is a list rather than a set of ground atoms — `lfp_{⊇S} T_P` is taken over subsets of the Herbrand base, and a starting set is written as an attribute set whose every value is `true`";
@@ -2827,11 +2794,8 @@ in
       # the PROGRAM refusal, because fixing the seed would not make this arm answer.
       test-a-directly-bound-closure-arm-names-the-PROGRAM-before-the-seed = {
         expr = genScope.leastModelUnary {
-          program = conj;
-          seed = {
-            a = 42;
-          };
-        };
+          a = 42;
+        } conj;
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope: leastModelUnary is unary-only: the rule for 'z' has a positive body of arity 2";
@@ -2877,7 +2841,7 @@ in
       # `foldEquations`, on a BARE relation — the shape every caller wrote before the contract
       # existed, and the one a consumer reaches for by habit.
       test-foldEquations-refuses-an-uncontracted-relation-by-name = {
-        expr = genScope.foldEquations {
+        expr = genScope.foldEquations { } {
           scope = contractScope;
           parseParent = _: null;
           schedule.equations = {
@@ -2903,10 +2867,8 @@ in
       test-eval-refuses-a-forged-relation-by-name = {
         expr =
           (genScope.eval {
-            scope = contractScope;
-            inherit attributes;
             declaredDependencies = forged;
-          }).get
+          } attributes contractScope).get
             "solo"
             "self-v";
         expectedError = {
@@ -2941,30 +2903,27 @@ in
 
       # G4: `mkKind` BUILDS this, and what it builds is a declaration the fold cannot mint.
       selfNaming = genScope.mkKind {
-        name = "k";
         below = [ "k" ];
         spawns.k = spawnOf "i";
-      };
+      } "k";
       declarationRegistry = {
         kinds.k = selfNaming;
       };
 
       # G3: two registries built from disagreeing declarations, merged with `//`.
       okKinds = genScope.mkKinds [
-        (genScope.mkKind { name = "item"; })
+        (genScope.mkKind { } "item")
         (genScope.mkKind {
-          name = "k";
           below = [ "item" ];
           spawns.item = spawnOf "i";
-        })
+        } "k")
       ];
       upKinds = genScope.mkKinds [
-        (genScope.mkKind { name = "k"; })
+        (genScope.mkKind { } "k")
         (genScope.mkKind {
-          name = "item";
           below = [ "k" ];
           spawns.k = spawnOf "i";
-        })
+        } "item")
       ];
       merged = okKinds // {
         kinds = okKinds.kinds // {
@@ -3018,11 +2977,7 @@ in
     {
       # G4 — the EVALUATOR, on a hand-built registry of declarations: a TYPE refusal naming it.
       test-G4-eval-refuses-a-registry-of-declarations-by-name = {
-        expr =
-          (genScope.eval {
-            scope = handBuilt declarationRegistry;
-            inherit attributes;
-          }).allNodeIds;
+        expr = (genScope.eval { } attributes (handBuilt declarationRegistry)).allNodeIds;
         expectedError = {
           type = "ThrownError";
           msg = exactly (registryRefusal "eval" declarationDetail);
@@ -3031,11 +2986,7 @@ in
 
       # And on a NON-attrset, where the type is all there is to name.
       test-eval-names-the-type-of-a-registry-that-is-not-an-attrset = {
-        expr =
-          (genScope.eval {
-            scope = handBuilt [ selfNaming ];
-            inherit attributes;
-          }).allNodeIds;
+        expr = (genScope.eval { } attributes (handBuilt [ selfNaming ])).allNodeIds;
         expectedError = {
           type = "ThrownError";
           msg = exactly (registryRefusal "eval" "received a list");
@@ -3044,11 +2995,7 @@ in
 
       # G3 / C1 — the merge, refused by name at the evaluator's door.
       test-G3-eval-refuses-a-merge-filing-two-kinds-under-one-name = {
-        expr =
-          (genScope.eval {
-            scope = handBuilt merged;
-            inherit attributes;
-          }).allNodeIds;
+        expr = (genScope.eval { } attributes (handBuilt merged)).allNodeIds;
         expectedError = {
           type = "ThrownError";
           msg = exactly (registryRefusal "eval" mergeDetail);
@@ -3057,11 +3004,7 @@ in
 
       # C4 — the evaluator's own refusal of a spawn key with no resolved kind to stamp.
       test-C4-a-spawn-with-no-resolved-kind-names-host-key-and-kind = {
-        expr =
-          (genScope.eval {
-            scope = handBuilt edited;
-            inherit attributes;
-          }).allNodeIds;
+        expr = (genScope.eval { } attributes (handBuilt edited)).allNodeIds;
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope: node 'root' of kind 'k' spawns 'extra', and its kind resolves no kind 'extra' in its `below`: the kind record was updated after `mkKinds` minted it. A spawned node's kind is the minted record its host's kind resolved, so a spawn with none has no kind to stamp. Declare the kinds through `mkKinds` rather than editing a minted kind.";
@@ -3128,12 +3071,7 @@ in
       # `allNodeIds` throw this entry's OWN materialization refusal first and would pin this cell to
       # that message instead. Only a read that reaches a node reaches the registry.
       test-G4-evalDebug-refuses-a-registry-of-declarations-under-its-own-name = {
-        expr =
-          (genScope.evalDebug {
-            scope = handBuilt declarationRegistry;
-            inherit attributes;
-          }).node
-            "root";
+        expr = (genScope.evalDebug { } attributes (handBuilt declarationRegistry)).node "root";
         expectedError = {
           type = "ThrownError";
           msg = exactly (registryRefusal "evalDebug" declarationDetail);
@@ -3151,7 +3089,12 @@ in
   config.flake.testsError.identifier-door-refusals =
     let
       S = genScope;
-      roots = S.buildRoots { parentGraph = S.edge "b" "a"; };
+      roots = S.buildRoots {
+        parentGraph = S.edge {
+          from = "b";
+          to = "a";
+        };
+      };
       attributes = {
         x = self: id: 1;
         children =
@@ -3162,16 +3105,11 @@ in
         imports = self: id: [ ];
         "edges-I" = self: id: [ ];
       };
-      self = S.eval {
-        scope = roots;
-        inherit attributes;
-      };
+      self = S.eval { } attributes roots;
       debug = S.evalDebug {
-        scope = roots;
-        inherit attributes;
         parseParent = id: if id == "b" then "a" else null;
-      };
-      warm = S.evalWarm {
+      } attributes roots;
+      warm = S.evalWarm { } {
         scope = roots;
         inherit attributes;
         prior = self;
@@ -3185,27 +3123,24 @@ in
       };
       mint =
         ident: relatum:
-        S.mintStrata {
-          kinds = { };
-          emitters = [
-            {
-              pass = 0;
-              identifier = "pewter";
-              kind = "thimble";
-              relata = { };
-              content = { };
-              site = "p0";
-            }
-            {
-              pass = 1;
-              identifier = ident;
-              kind = "basting";
-              relata.warp = relatum;
-              content = { };
-              site = "p1";
-            }
-          ];
-        };
+        S.mintStrata { } [
+          {
+            pass = 0;
+            identifier = "pewter";
+            kind = "thimble";
+            relata = { };
+            content = { };
+            site = "p0";
+          }
+          {
+            pass = 1;
+            identifier = ident;
+            kind = "basting";
+            relata.warp = relatum;
+            content = { };
+            site = "p1";
+          }
+        ];
       refused = who: noun: {
         type = "ThrownError";
         msg = exactly "gen-scope.${who}: got set, expected ${noun} (a string)";
@@ -3300,7 +3235,7 @@ in
     let
       fx = import ./tests/_fixtures/nta.nix { inherit genScope; };
       inherit (genScope) mintNtaId;
-      k = mkKind { name = "t"; };
+      k = mkKind { } "t";
       loop =
         circular
           {
@@ -3329,25 +3264,22 @@ in
       # ── item 1 · the declaration ladder, in order ──
       test-an-nta-that-is-not-an-attribute-set-is-refused = {
         expr = mkKind {
-          name = "t";
           nta = 3;
-        };
+        } "t";
         expectedError = err "gen-scope.mkKind: nta: kind 't' declares an `nta` that is a int rather than an attribute set of builders keyed by NTA name";
       };
       # The circular arm precedes the applicability arm: a circular declaration is not `callable`,
       # so under `spawns`' order this message could never fire.
       test-a-circular-nta-builder-is-refused-as-circular = {
         expr = mkKind {
-          name = "t";
           nta.c = loop;
-        };
+        } "t";
         expectedError = err "gen-scope.mkKind: nta: kind 't' declares NTA(s) [\"c\"] whose builder is a circular declaration. An `nta` builder computes the NODE SET, and a node set that is a fixed point of its own iterate is the per-step growth the spawn-read restriction refuses. A child's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function.";
       };
       test-an-nta-builder-that-cannot-be-applied-is-refused = {
         expr = mkKind {
-          name = "t";
           nta.c = 3;
-        };
+        } "t";
         expectedError = err "gen-scope.mkKind: nta: kind 't' declares NTA(s) [\"c\"] whose builder cannot be applied";
       };
 
@@ -3445,22 +3377,45 @@ in
 
       # ── item 5 · an identifier the product does not carry ──
       test-an-absent-group-is-not-reachable = {
-        expr = (fx.seeded [ (fx.addr 0 [ "s" ]) ]).node (mintNtaId "r" "x" "nog" "k");
-        expectedError = err "gen-scope.nta: node '${mintNtaId "r" "x" "nog" "k"}' not reachable: NTA 'x' on host 'r' yields no group 'nog'";
+        expr = (fx.seeded [ (fx.addr 0 [ "s" ]) ]).node (mintNtaId {
+          host = "r";
+          name = "x";
+          group = "nog";
+          key = "k";
+        });
+        expectedError = err "gen-scope.nta: node '${
+          mintNtaId {
+            host = "r";
+            name = "x";
+            group = "nog";
+            key = "k";
+          }
+        }' not reachable: NTA 'x' on host 'r' yields no group 'nog'";
       };
       test-an-absent-key-is-not-reachable = {
-        expr = (fx.seeded [ (fx.addr 0 [ "s" ]) ]).node (mintNtaId "r" "x" "g" "nokey");
-        expectedError = err "gen-scope.nta: node '${mintNtaId "r" "x" "g" "nokey"}' not reachable: NTA 'x' on host 'r' yields group 'g' with no key 'nokey'";
+        expr = (fx.seeded [ (fx.addr 0 [ "s" ]) ]).node (mintNtaId {
+          host = "r";
+          name = "x";
+          group = "g";
+          key = "nokey";
+        });
+        expectedError = err "gen-scope.nta: node '${
+          mintNtaId {
+            host = "r";
+            name = "x";
+            group = "g";
+            key = "nokey";
+          }
+        }' not reachable: NTA 'x' on host 'r' yields group 'g' with no key 'nokey'";
       };
 
       # ── item 6 · the carriage ──
       test-a-key-shared-across-the-halves-is-refused-at-enumeration = {
         expr =
-          (genScope.eval {
-            scope = fx.scopeOf (mkKinds [
-              (mkKind { name = "leaf"; })
+          (genScope.eval { } fx.attributes (
+            fx.scopeOf (mkKinds [
+              (mkKind { } "leaf")
               (mkKind {
-                name = "raw";
                 below = [ "leaf" ];
                 spawns.leaf = _: _: {
                   ${c} = {
@@ -3469,20 +3424,19 @@ in
                   };
                 };
                 nta.x = _: id: if id == "r" then { g.k = [ (fx.addr 0 [ "s" ]) ]; } else { };
-              })
-            ]) (fx.root "raw" { defs = [ { s = { }; } ]; });
-            inherit (fx) attributes;
-          }).allNodeIds;
+              } "raw")
+            ]) (fx.root "raw" { defs = [ { s = { }; } ]; })
+          )).allNodeIds;
         expectedError = err "gen-scope.nta: node 'r' carries an `nta` child '${c}' under a key its `children` or `derived-children` also carries. The three halves compose into one child map, and a shared key would discard one record silently. An `nta` identifier is minted by the substrate, so the other half chose it: choose a key that is not an `nta` identifier.";
       };
       test-a-hand-written-nta-children-is-refused = {
         expr =
-          (genScope.eval {
-            scope = fx.scopeOf (mkKinds [ fx.tree ]) (fx.root "tree" { defs = [ { } ]; });
-            attributes = fx.attributes // {
+          (genScope.eval { } (
+            fx.attributes
+            // {
               nta-children = _: _: { };
-            };
-          }).get
+            }
+          ) (fx.scopeOf (mkKinds [ fx.tree ]) (fx.root "tree" { defs = [ { } ]; }))).get
             "r"
             "defs";
         expectedError = err "gen-scope.eval: nta: `attributes` declares `nta-children` directly. An `nta` is declared on the KIND it grows from — `mkKind { nta = { <name> = builder; }; }` — so its children are stamped with the host's kind and minted from the host's coordinates. Move the builder onto its host kind's `nta`.";
@@ -3548,7 +3502,14 @@ in
           }).get
             "r"
             "reads";
-        expectedError = err "gen-scope.nta: `getNta`: NTA 'sub' on host '${mintNtaId "r" "sub" "g" "a"}' yields group 'g' with no key 'nokey'";
+        expectedError = err "gen-scope.nta: `getNta`: NTA 'sub' on host '${
+          mintNtaId {
+            host = "r";
+            name = "sub";
+            group = "g";
+            key = "a";
+          }
+        }' yields group 'g' with no key 'nokey'";
       };
       test-an-unknown-attribute-is-refused-by-get = {
         expr = read genScope.eval (self: _: self.getNta "sub" "g" "b" "nosuch");
@@ -3564,20 +3525,20 @@ in
       };
       test-a-reader-in-an-evaluation-running-no-nta-is-unbound = {
         expr =
-          (genScope.eval {
-            scope = {
+          (genScope.eval { }
+            {
+              children = _: _: { };
+              reads = self: _: self.getNta "sub" "g" "b" "v";
+            }
+            {
               nodes.r = {
                 id = "r";
                 parent = null;
                 decls = { };
               };
               nodeOrder = [ "r" ];
-            };
-            attributes = {
-              children = _: _: { };
-              reads = self: _: self.getNta "sub" "g" "b" "v";
-            };
-          }).get
+            }
+          ).get
             "r"
             "reads";
         expectedError = err unbound;
@@ -3643,7 +3604,14 @@ in
           // extra
         );
       viaGetNta = evaluator: body: (withBody evaluator body { }).get "r" "reads";
-      byId = evaluator: body: (withBody evaluator body { }).get (mintNtaId "r" "sub" "g" "b") "hx";
+      byId =
+        evaluator: body:
+        (withBody evaluator body { }).get (mintNtaId {
+          host = "r";
+          name = "sub";
+          group = "g";
+          key = "b";
+        }) "hx";
       atGrandchild =
         evaluator: body:
         (withBody evaluator body {
@@ -3666,23 +3634,28 @@ in
       noEntry =
         host: a: key:
         "gen-scope.nta: `getHostAt`: host '${host}' attribute '${a}' carries no entry at NTA 'sub' group 'g' key '${key}'";
-      hostA = mintNtaId "r" "sub" "g" "a";
+      hostA = mintNtaId {
+        host = "r";
+        name = "sub";
+        group = "g";
+        key = "a";
+      };
       noNta =
         evaluator:
-        (evaluator {
-          scope = {
+        (evaluator { }
+          {
+            children = _: _: { };
+            reads = self: _: self.getHostAt "pos";
+          }
+          {
             nodes.r = {
               id = "r";
               parent = null;
               decls = { };
             };
             nodeOrder = [ "r" ];
-          };
-          attributes = {
-            children = _: _: { };
-            reads = self: _: self.getHostAt "pos";
-          };
-        }).get
+          }
+        ).get
           "r"
           "reads";
     in
@@ -3711,13 +3684,13 @@ in
               };
             };
           in
-          (genScope.eval {
-            scope = fx.scopeOf (genScope.mkKinds [ fx.tree ]) nodes;
-            attributes = fx.attributes // {
+          (genScope.eval { } (
+            fx.attributes
+            // {
               children = _: id: if id == "r" then { inherit (nodes) c; } else { };
               reads = self: _: self.getHostAt "pos";
-            };
-          }).get
+            }
+          ) (fx.scopeOf (genScope.mkKinds [ fx.tree ]) nodes)).get
             "c"
             "reads";
         expectedError = err unbound;
@@ -3847,22 +3820,15 @@ in
       };
     };
 
-  # den-hoag-7gp66 P1: the closed doors' shared checks, each message pinned to the byte on the real
-  # path. Per door: a missing required field and a non-set argument refused naming the door; an
-  # unknown field refused on an options or mixed door; an extra field ADMITTED on a record door (R5's
-  # stated price); and the valid call admitted. An admission is observed as the door reading a field
-  # (`reached:<field>`, `tests/_fixtures/doors.nix`) or returning (`admitted`), never as a refusal.
-  config.flake.testsError.doors =
+  # den-hoag-7gp66 P2: every door's refusals, each message pinned to the byte on the real path, over
+  # the door table (`ci/doors.nix`). Per OPTIONS step: an unknown option and a non-set argument
+  # refused naming the door. Per RECORD step: a missing field and a non-set argument refused naming
+  # the door, and — behind an options step — each of that step's names given on the record refused
+  # by name (`optionsStep`, G10). Catchability and the admitting halves are `tests/door-checks.nix`.
+  config.flake.testsError.door-checks =
     let
-      doors = import ./tests/_fixtures/doors.nix;
+      F = import ./doors.nix { inherit genScope genGraph; };
       names = ns: builtins.concatStringsSep ", " (map (n: "'${n}'") ns);
-      admitted = door: args: {
-        expr = builtins.seq (door args) (throw "admitted");
-        expectedError = {
-          type = "ThrownError";
-          msg = "^(admitted|reached:.*)$";
-        };
-      };
       thrown = expr: msg: {
         inherit expr;
         expectedError = {
@@ -3870,39 +3836,49 @@ in
           msg = exactly msg;
         };
       };
-      cells =
+      optionCells =
         name: d:
         let
-          door = genScope.${name};
-          checkedBy = if d.class == "options" then "checkOptions" else "checkRequired";
-          nonSet =
-            if d.class == "options" then
-              "${d.door}: the options must be an attrset, not a int (accepted: ${names d.accepted}) (in prelude.checkOptions)"
-            else
-              "${d.door}: the argument must be an attrset, not a int (required: ${names d.required}) (in prelude.checkRequired)";
+          door = "gen-scope.${name}";
         in
         {
-          "test-${name}-valid-call-admitted" = admitted door d.args;
-          "test-${name}-non-set-refused" = thrown (door 1) nonSet;
+          "test-${name}-options-unknown-refused" =
+            thrown (genScope.${name} { unknownField = 1; })
+              "${door}: 'unknownField' is not an option of this door; the options are closed (accepted: ${names d.optional}) (in prelude.checkOptions)";
+          "test-${name}-options-non-set-refused" =
+            thrown (genScope.${name} 1)
+              "${door}: the options must be an attrset, not a int (accepted: ${names d.optional}) (in prelude.checkOptions)";
+        };
+      recordCells =
+        name: d:
+        let
+          door = "gen-scope.${name}";
+        in
+        {
+          "test-${name}-record-missing-field-refused" =
+            thrown (d.step (builtins.removeAttrs d.good [ d.drop ]))
+              "${door}: required field '${d.drop}' is missing (required: ${names d.required}) (in prelude.checkRequired)";
+          "test-${name}-record-non-set-refused" =
+            thrown (d.step 1) "${door}: the argument must be an attrset, not a int (required: ${names d.required}) (in prelude.checkRequired)";
         }
         // (
-          if d.class == "options" then
+          if d ? guardedBy then
+            builtins.listToAttrs (
+              map (o: {
+                name = "test-${name}-record-misplaced-option-${o}-refused";
+                value =
+                  thrown (d.step (d.good // { ${o} = null; }))
+                    "${door}: '${o}' is an option of gen-scope.${d.guardedBy}, not a field of this record (in prelude.checkGuarded)";
+              }) F.options.${d.guardedBy}.optional
+            )
+          else
             { }
-          else
-            {
-              "test-${name}-missing-field-refused" =
-                thrown (door d.withoutMissing) "${d.door}: required field '${d.missing}' is missing (required: ${names d.required}) (in prelude.${checkedBy})";
-            }
-        )
-        // (
-          if d.class == "record" then
-            { "test-${name}-extra-field-admitted" = admitted door d.withUnknown; }
-          else
-            {
-              "test-${name}-unknown-field-refused" =
-                thrown (door d.withUnknown) "${d.door}: '${d.unknown}' is not an option of this door; the options are closed (accepted: ${names d.accepted}) (in prelude.checkOptions)";
-            }
         );
     in
-    builtins.foldl' (acc: name: acc // cells name doors.${name}) { } (builtins.attrNames doors);
+    builtins.foldl' (acc: name: acc // optionCells name F.options.${name}) { } (
+      builtins.attrNames F.options
+    )
+    // builtins.foldl' (acc: name: acc // recordCells name F.records.${name}) { } (
+      builtins.attrNames F.records
+    );
 }

@@ -11,10 +11,7 @@
       genScope = gen-scope.lib;
       inherit (import ./graph.nix { inherit genScope; }) roots;
       attributes = import ./attributes.nix { inherit genScope lib roots; };
-      result = genScope.eval {
-        scope = roots;
-        inherit attributes;
-      };
+      result = genScope.eval { } attributes roots;
     in
     {
       tests = import ./tests.nix { inherit genScope lib result; };

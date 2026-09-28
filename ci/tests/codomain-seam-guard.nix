@@ -29,8 +29,14 @@ let
   # edge that no structural containment supplies and that only a declaration can license.
   scope = buildRoots {
     parentGraph = genScope.overlays [
-      (genScope.edge "a" "root")
-      (genScope.edge "b" "root")
+      (genScope.edge {
+        from = "a";
+        to = "root";
+      })
+      (genScope.edge {
+        from = "b";
+        to = "root";
+      })
     ];
     decls = {
       root.v = 0;
@@ -83,7 +89,7 @@ let
 
   foldWith =
     declaredDependencies:
-    foldEquations {
+    foldEquations { } {
       inherit scope declaredDependencies;
       schedule = { inherit equations; };
       parseParent = id: scope.nodes.${id}.parent or null;
@@ -98,7 +104,7 @@ let
   # unarmed. This is the seeded defect measured passing, and it is also the guardless-entry case —
   # a query entry point acquires a record with no body behind it, so there is no reader whose
   # declaration a guard could consult.
-  unarmedEv = eval { inherit scope attributes; };
+  unarmedEv = eval { } attributes scope;
 
   # ── THE CIRCULAR DEMAND PATHS, AND THERE ARE TWO OF THEM ──
   # A circular attribute's step is a body too, and it does not reach the substrate through the
@@ -130,7 +136,7 @@ let
         peer-reach = circular { carrier = carrierWith quotient; } peerStep;
       };
     in
-    foldEquations {
+    foldEquations { } {
       inherit scope declaredDependencies;
       parseParent = id: scope.nodes.${id}.parent or null;
       schedule.equations = builtins.mapAttrs (name: compute: {

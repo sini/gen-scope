@@ -113,12 +113,14 @@ let
   # way by all three, so the walk is a shared constant rather than a term under test.
   dedup =
     if arm == "inheritSet" then
-      resolveLib.inheritSet { inherit extract eq; }
+      resolveLib.inheritSet {
+        inherit eq;
+      } extract
     else if arm == "linear-control" then
       (
         self: id:
         let
-          all = resolveLib.inheritAll { inherit extract; } self id;
+          all = resolveLib.inheritAll { } extract self id;
           idx = builtins.genList (i: i) (builtins.length all);
         in
         builtins.concatMap (
@@ -133,22 +135,24 @@ let
       (
         self: id:
         let
-          all = resolveLib.inheritAll { inherit extract; } self id;
+          all = resolveLib.inheritAll { } extract self id;
         in
         builtins.foldl' (acc: x: if builtins.any (y: eq y x) acc then acc else acc ++ [ x ]) [ ] all
       )
     else
       throw "resolve-inherit-set: unknown arm '${arm}'";
 
-  result = evalLib.eval {
-    inherit scope;
-    attributes = {
-      children = _self: i: prelude.filterAttrs (_: node: node.parent == i) scope.nodes;
-      imports = _self: _i: [ ];
-      supp-set = dedup;
-    };
-    parseParent = i: (scope.nodes.${i} or { parent = null; }).parent;
-  };
+  result =
+    evalLib.eval
+      {
+        parseParent = i: (scope.nodes.${i} or { parent = null; }).parent;
+      }
+      {
+        children = _self: i: prelude.filterAttrs (_: node: node.parent == i) scope.nodes;
+        imports = _self: _i: [ ];
+        supp-set = dedup;
+      }
+      scope;
   out = result.get "leaf" "supp-set";
   nd = builtins.length out;
 in

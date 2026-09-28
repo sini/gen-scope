@@ -25,10 +25,7 @@
         roots
         ;
       inherit (import ./attributes.nix { inherit genScope lib roots; }) attributes;
-      result = genScope.eval {
-        scope = roots;
-        inherit attributes;
-      };
+      result = genScope.eval { } attributes roots;
       resolveOn = host: user: result.get "host:${host}" "resolveUser" user;
     in
     {

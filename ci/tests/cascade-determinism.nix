@@ -27,14 +27,13 @@ let
   # inputs. Values pass straight through — the engine adds nothing.
   simpleKinds = mkKinds [
     (mkKind {
-      name = "leaf";
       resolve = c: _: {
         resources.${c.subject.name} = {
           tag = c.tag;
         };
         wiring.env.${c.subject.name} = c.tag;
       };
-    })
+    } "leaf")
   ];
   buildClaims =
     tags:
@@ -46,28 +45,19 @@ let
         tag = t;
       }
     ) tags;
-  resA = resolveClaims {
-    kinds = simpleKinds;
-    claims = buildClaims [
-      "x"
-      "y"
-    ];
-  };
-  resB = resolveClaims {
-    kinds = simpleKinds;
-    claims = buildClaims [
-      "x"
-      "y"
-    ];
-  };
+  resA = resolveClaims { } simpleKinds (buildClaims [
+    "x"
+    "y"
+  ]);
+  resB = resolveClaims { } simpleKinds (buildClaims [
+    "x"
+    "y"
+  ]);
   # Same kinds, DIFFERENT claims — the arming comparand for the two equality cells.
-  resC = resolveClaims {
-    kinds = simpleKinds;
-    claims = buildClaims [
-      "x"
-      "z"
-    ];
-  };
+  resC = resolveClaims { } simpleKinds (buildClaims [
+    "x"
+    "z"
+  ]);
 in
 {
   flake.tests.cascade-determinism = {
@@ -139,13 +129,10 @@ in
     test-order-significant = {
       expr =
         map (c: c.subject.rendered)
-          (resolveClaims {
-            kinds = simpleKinds;
-            claims = buildClaims [
-              "y"
-              "x"
-            ];
-          }).trace.claims;
+          (resolveClaims { } simpleKinds (buildClaims [
+            "y"
+            "x"
+          ])).trace.claims;
       expected = [
         "y"
         "x"

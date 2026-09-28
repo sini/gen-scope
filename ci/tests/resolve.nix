@@ -20,31 +20,33 @@ let
     }:
     let
       roots = genScope.buildRoots { inherit parentGraph decls; };
-      result = genScope.eval {
-        scope = roots;
-        attributes = {
-          children = _self: i: lib.filterAttrs (_: n: n.parent == i) roots.nodes;
-          imports = _self: _i: [ ];
-          ${attrName} = attr;
-        };
-        parseParent = i: (roots.nodes.${i} or { parent = null; }).parent;
-      };
+      result =
+        genScope.eval
+          {
+            parseParent = i: (roots.nodes.${i} or { parent = null; }).parent;
+          }
+          {
+            children = _self: i: lib.filterAttrs (_: n: n.parent == i) roots.nodes;
+            imports = _self: _i: [ ];
+            ${attrName} = attr;
+          }
+          roots;
     in
     result.get id attrName;
 in
 {
   flake.tests."resolve" = {
     test-shadow-inner-wins = {
-      expr =
-        shadow
-          {
-            a = 1;
-            b = 2;
-          }
-          {
-            a = 99;
-            c = 3;
-          };
+      expr = shadow {
+        inner = {
+          a = 1;
+          b = 2;
+        };
+        outer = {
+          a = 99;
+          c = 3;
+        };
+      };
       expected = {
         a = 1;
         b = 2;
@@ -53,7 +55,14 @@ in
     };
 
     test-shadow-disjoint = {
-      expr = shadow { x = 1; } { y = 2; };
+      expr = shadow {
+        inner = {
+          x = 1;
+        };
+        outer = {
+          y = 2;
+        };
+      };
       expected = {
         x = 1;
         y = 2;
@@ -61,21 +70,38 @@ in
     };
 
     test-shadow-identical = {
-      expr = shadow { a = 1; } { a = 1; };
+      expr = shadow {
+        inner = {
+          a = 1;
+        };
+        outer = {
+          a = 1;
+        };
+      };
       expected = {
         a = 1;
       };
     };
 
     test-shadow-empty-inner = {
-      expr = shadow { } { a = 1; };
+      expr = shadow {
+        inner = { };
+        outer = {
+          a = 1;
+        };
+      };
       expected = {
         a = 1;
       };
     };
 
     test-shadow-empty-outer = {
-      expr = shadow { a = 1; } { };
+      expr = shadow {
+        inner = {
+          a = 1;
+        };
+        outer = { };
+      };
       expected = {
         a = 1;
       };
@@ -131,7 +157,10 @@ in
     test-inherit-walks-parent =
       let
         roots = genScope.buildRoots {
-          parentGraph = genScope.edge "child" "parent";
+          parentGraph = genScope.edge {
+            from = "child";
+            to = "parent";
+          };
           importGraph = genScope.empty;
           decls = {
             parent = {
@@ -141,17 +170,17 @@ in
           };
           types = { };
         };
-        result = genScope.eval {
-          scope = roots;
-          attributes = {
-            children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-            imports = self: id: [ ];
-            resolved-val = inherit' {
-              resolve = node: node.decls.val or null;
-            };
-          };
-          parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
-        };
+        result =
+          genScope.eval
+            {
+              parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
+            }
+            {
+              children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+              imports = self: id: [ ];
+              resolved-val = inherit' { } (node: node.decls.val or null);
+            }
+            roots;
       in
       {
         expr = result.get "child" "resolved-val";
@@ -162,8 +191,14 @@ in
       let
         roots = genScope.buildRoots {
           parentGraph = genScope.overlays [
-            (genScope.edge "c" "b")
-            (genScope.edge "b" "a")
+            (genScope.edge {
+              from = "c";
+              to = "b";
+            })
+            (genScope.edge {
+              from = "b";
+              to = "a";
+            })
           ];
           importGraph = genScope.empty;
           decls = {
@@ -177,17 +212,17 @@ in
           };
           types = { };
         };
-        result = genScope.eval {
-          scope = roots;
-          attributes = {
-            children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-            imports = self: id: [ ];
-            resolved-val = inherit' {
-              resolve = node: node.decls.val or null;
-            };
-          };
-          parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
-        };
+        result =
+          genScope.eval
+            {
+              parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
+            }
+            {
+              children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+              imports = self: id: [ ];
+              resolved-val = inherit' { } (node: node.decls.val or null);
+            }
+            roots;
       in
       {
         expr = result.get "c" "resolved-val";
@@ -198,8 +233,14 @@ in
       let
         roots = genScope.buildRoots {
           parentGraph = genScope.overlays [
-            (genScope.edge "c" "b")
-            (genScope.edge "b" "a")
+            (genScope.edge {
+              from = "c";
+              to = "b";
+            })
+            (genScope.edge {
+              from = "b";
+              to = "a";
+            })
           ];
           importGraph = genScope.empty;
           decls = {
@@ -215,17 +256,17 @@ in
           };
           types = { };
         };
-        result = genScope.eval {
-          scope = roots;
-          attributes = {
-            children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
-            imports = self: id: [ ];
-            all-tags = inheritAll {
-              extract = node: node.decls.tags or null;
-            };
-          };
-          parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
-        };
+        result =
+          genScope.eval
+            {
+              parseParent = id: (roots.nodes.${id} or { parent = null; }).parent;
+            }
+            {
+              children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
+              imports = self: id: [ ];
+              all-tags = inheritAll { } (node: node.decls.tags or null);
+            }
+            roots;
       in
       {
         expr = result.get "c" "all-tags";
@@ -250,15 +291,21 @@ in
     test-inheritAll-cycle-repeats-its-entry-once = {
       expr = readAttr {
         parentGraph = genScope.overlays [
-          (genScope.edge "a" "b")
-          (genScope.edge "b" "a")
+          (genScope.edge {
+            from = "a";
+            to = "b";
+          })
+          (genScope.edge {
+            from = "b";
+            to = "a";
+          })
         ];
         decls = {
           a.supp = [ "A" ];
           b.supp = [ "B" ];
         };
         attrName = "all-supp";
-        attr = inheritAll { extract = node: node.decls.supp or null; };
+        attr = inheritAll { } (node: node.decls.supp or null);
         id = "a";
       };
       expected = [
@@ -278,8 +325,14 @@ in
     test-inheritAll-supplied-combine-folds-right = {
       expr = readAttr {
         parentGraph = genScope.overlays [
-          (genScope.edge "leaf" "mid")
-          (genScope.edge "mid" "root")
+          (genScope.edge {
+            from = "leaf";
+            to = "mid";
+          })
+          (genScope.edge {
+            from = "mid";
+            to = "root";
+          })
         ];
         decls = {
           leaf.supp = [ "L" ];
@@ -288,9 +341,8 @@ in
         };
         attrName = "all-supp";
         attr = inheritAll {
-          extract = node: node.decls.supp or null;
           combine = a: b: [ "<" ] ++ a ++ b ++ [ ">" ];
-        };
+        } (node: node.decls.supp or null);
         id = "leaf";
       };
       expected = [
@@ -311,8 +363,14 @@ in
     test-inheritSet-accumulates-deduped = {
       expr = readAttr {
         parentGraph = genScope.overlays [
-          (genScope.edge "c" "b")
-          (genScope.edge "b" "a")
+          (genScope.edge {
+            from = "c";
+            to = "b";
+          })
+          (genScope.edge {
+            from = "b";
+            to = "a";
+          })
         ];
         decls = {
           a.supp = [ "p1" ];
@@ -323,7 +381,7 @@ in
           c.supp = [ "p3" ];
         };
         attrName = "supp-set";
-        attr = inheritSet { extract = node: node.decls.supp or null; };
+        attr = inheritSet { } (node: node.decls.supp or null);
         id = "c";
       };
       expected = [
@@ -339,8 +397,14 @@ in
       expr =
         let
           parentGraph = genScope.overlays [
-            (genScope.edge "c" "b")
-            (genScope.edge "b" "a")
+            (genScope.edge {
+              from = "c";
+              to = "b";
+            })
+            (genScope.edge {
+              from = "b";
+              to = "a";
+            })
           ];
           decls = {
             a.supp = [ "p1" ];
@@ -356,13 +420,13 @@ in
           viaAll = readAttr {
             inherit parentGraph decls;
             attrName = "all";
-            attr = inheritAll { inherit extract; };
+            attr = inheritAll { } extract;
             id = "c";
           };
           viaSet = readAttr {
             inherit parentGraph decls;
             attrName = "set";
-            attr = inheritSet { inherit extract; };
+            attr = inheritSet { } extract;
             id = "c";
           };
         };
@@ -385,9 +449,18 @@ in
     test-inheritSet-siblings-isolated = {
       expr = readAttr {
         parentGraph = genScope.overlays [
-          (genScope.edge "c1" "b")
-          (genScope.edge "c2" "b")
-          (genScope.edge "b" "a")
+          (genScope.edge {
+            from = "c1";
+            to = "b";
+          })
+          (genScope.edge {
+            from = "c2";
+            to = "b";
+          })
+          (genScope.edge {
+            from = "b";
+            to = "a";
+          })
         ];
         decls = {
           a.supp = [ "pa" ];
@@ -396,7 +469,7 @@ in
           c2.supp = [ ];
         };
         attrName = "supp-set";
-        attr = inheritSet { extract = node: node.decls.supp or null; };
+        attr = inheritSet { } (node: node.decls.supp or null);
         id = "c2";
       };
       expected = [
@@ -417,7 +490,7 @@ in
           ];
         };
         attrName = "supp-set";
-        attr = inheritSet { extract = node: node.decls.supp or null; };
+        attr = inheritSet { } (node: node.decls.supp or null);
         id = "a";
       };
       expected = [
@@ -431,9 +504,18 @@ in
     test-inheritSet-lazy-skips-offpath = {
       expr = readAttr {
         parentGraph = genScope.overlays [
-          (genScope.edge "c" "b")
-          (genScope.edge "b" "a")
-          (genScope.edge "d" "a")
+          (genScope.edge {
+            from = "c";
+            to = "b";
+          })
+          (genScope.edge {
+            from = "b";
+            to = "a";
+          })
+          (genScope.edge {
+            from = "d";
+            to = "a";
+          })
         ];
         decls = {
           a.supp = [ "pa" ];
@@ -442,7 +524,7 @@ in
           d.supp = throw "off-path node must not be forced";
         };
         attrName = "supp-set";
-        attr = inheritSet { extract = node: node.decls.supp or null; };
+        attr = inheritSet { } (node: node.decls.supp or null);
         id = "c";
       };
       expected = [
@@ -457,8 +539,14 @@ in
     test-inheritSet-custom-eq = {
       expr = readAttr {
         parentGraph = genScope.overlays [
-          (genScope.edge "c" "b")
-          (genScope.edge "b" "a")
+          (genScope.edge {
+            from = "c";
+            to = "b";
+          })
+          (genScope.edge {
+            from = "b";
+            to = "a";
+          })
         ];
         decls = {
           a.supp = [ "a1" ];
@@ -467,9 +555,8 @@ in
         };
         attrName = "supp-set";
         attr = inheritSet {
-          extract = node: node.decls.supp or null;
           eq = x: y: builtins.substring 0 1 x == builtins.substring 0 1 y;
-        };
+        } (node: node.decls.supp or null);
         id = "c";
       };
       expected = [
@@ -481,13 +568,16 @@ in
     # No contributions anywhere along the chain ⇒ empty set.
     test-inheritSet-empty = {
       expr = readAttr {
-        parentGraph = genScope.edge "b" "a";
+        parentGraph = genScope.edge {
+          from = "b";
+          to = "a";
+        };
         decls = {
           a = { };
           b = { };
         };
         attrName = "supp-set";
-        attr = inheritSet { extract = node: node.decls.supp or null; };
+        attr = inheritSet { } (node: node.decls.supp or null);
         id = "b";
       };
       expected = [ ];

@@ -25,7 +25,7 @@ let
   # kind expands into another. Registering them is what gives the kind set a domain — an
   # unregistered spelling is refused rather than silently becoming a kind of its own.
   kinds = genScope.mkKinds (
-    map (name: genScope.mkKind { inherit name; }) [
+    map (name: genScope.mkKind { } name) [
       "root"
       "group"
       "environment"
@@ -37,7 +37,13 @@ let
     # Parent edges: hosts -> environments -> root
     parentGraph = genScope.overlays (
       [ (genScope.star "root" (map (e: "env:${e}") envNames)) ]
-      ++ map (host: genScope.edge "host:${host}" "env:${hosts.${host}.environment}") hostNames
+      ++ map (
+        host:
+        genScope.edge {
+          from = "host:${host}";
+          to = "env:${hosts.${host}.environment}";
+        }
+      ) hostNames
     );
 
     # M edges: group-to-group membership (transitive).
@@ -52,7 +58,13 @@ let
             let
               g = groups.${gname};
             in
-            map (member: genScope.edge "group:${member}" "group:${gname}") g.members
+            map (
+              member:
+              genScope.edge {
+                from = "group:${member}";
+                to = "group:${gname}";
+              }
+            ) g.members
           ) groupNames)
           # Ensure ALL groups exist as vertices even if they have no membership edges.
           ++ [ (genScope.vertices (map (g: "group:${g}") groupNames)) ]

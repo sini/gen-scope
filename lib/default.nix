@@ -16,7 +16,31 @@ let
   # The library's OWN algebraic-graph constructors, which are a different thing from the graph
   # library bound as `graph`: these build a scope graph out of vertices and overlays, that one
   # answers reachability and partition questions about a graph already built.
-  algebraicGraph = import ./graph.nix;
+  #
+  # `connect` and `edge` publish as R7 (b) records, `{ from; to; }` (den-hoag-7gp66 P2): both
+  # operands are of one sort and the direction is the whole meaning, so each is named rather than
+  # remembered by position. `lib/graph.nix` depends on nothing and keeps the positional cores, which
+  # its own derived constructors (`star`, `edges`, `path`) call; the doors are bound here, where the
+  # prelude is.
+  algebraicGraph =
+    let
+      core = import ./graph.nix;
+      fromTo =
+        name: f:
+        prelude.door {
+          name = "gen-scope.${name}";
+          required = [
+            "from"
+            "to"
+          ];
+          open = true;
+        } (r: f r.from r.to);
+    in
+    core
+    // {
+      connect = fromTo "connect" core.connect;
+      edge = fromTo "edge" core.edge;
+    };
   # `kindSetDefect` is `cascade.nix`'s, for the reason `requireDeclaredDependencies` takes `graph`
   # below: the registry TYPE is decided beside the fold that mints its kinds, and the refusal is
   # minted at the door where the defect is. `cascade.nix` takes `{ prelude }` and reaches neither of
@@ -47,7 +71,7 @@ let
   # the graph library beside its other endpoint extractors, so what arrives here is the CONSTRUCTOR;
   # what this side supplies to it are the two facts only an evaluated substrate holds — the
   # child-bearing predicate and the evaluated node set.
-  eval = import ./eval.nix {
+  evalModule = import ./eval.nix {
     inherit
       prelude
       requireScope
@@ -55,6 +79,8 @@ let
       graph
       ;
   };
+  # The unchecked cores leave before the merge: they are the library's own calls, not its surface.
+  eval = builtins.removeAttrs evalModule [ "cores" ];
   program = import ./program.nix { inherit prelude; };
   leastModel = import ./least-model.nix { inherit prelude; };
   wellFounded = import ./well-founded.nix { inherit prelude; };
@@ -95,7 +121,7 @@ let
   # one it calls is this library's own.
   foldEquations = import ./fold-equations.nix {
     inherit prelude;
-    inherit (eval) eval;
+    inherit (evalModule.cores) eval;
     inherit requireScope requireDeclaredDependencies;
   };
   # The surface is folded rather than chained with `//`, so a name contributed by two modules is a

@@ -64,18 +64,39 @@ in
       expr = fx.threeLevels.allNodeIds;
       expected =
         let
-          c1 = mintNtaId "r" "sub" "g" "k";
-          c2 = mintNtaId c1 "sub" "g" "k";
+          c1 = mintNtaId {
+            host = "r";
+            name = "sub";
+            group = "g";
+            key = "k";
+          };
+          c2 = mintNtaId {
+            host = c1;
+            name = "sub";
+            group = "g";
+            key = "k";
+          };
         in
         [
           "r"
           c1
           c2
-          (mintNtaId c2 "sub" "g" "k")
+          (mintNtaId {
+            host = c2;
+            name = "sub";
+            group = "g";
+            key = "k";
+          })
         ];
     };
     test-U1b-the-child-is-parented-on-its-host = {
-      expr = (fx.threeLevels.node (mintNtaId "r" "sub" "g" "k")).parent;
+      expr =
+        (fx.threeLevels.node (mintNtaId {
+          host = "r";
+          name = "sub";
+          group = "g";
+          key = "k";
+        })).parent;
       expected = "r";
     };
 
@@ -106,7 +127,12 @@ in
       };
     };
     test-U1d-the-second-family-child-resolves-by-id = {
-      expr = u1d.get (mintNtaId "r" "fam" "second" "from-seed") "label";
+      expr = u1d.get (mintNtaId {
+        host = "r";
+        name = "fam";
+        group = "second";
+        key = "from-seed";
+      }) "label";
       expected = "x";
     };
     test-U1d-both-families-enumerate = {
@@ -117,9 +143,45 @@ in
     # ── U1-g · the identifier ──
     test-U1g-a-split-across-the-separator-is-two-identifiers = {
       expr = [
-        (mintNtaId "h" "n" "a:1" "b" == mintNtaId "h" "n" "a" "1:b")
-        (mintNtaId "h" "n" "a/b" "c" == mintNtaId "h" "n" "a" "b/c")
-        (mintNtaId "h" "n1" "" "k" == mintNtaId "h" "n" "1" "k")
+        (
+          mintNtaId {
+            host = "h";
+            name = "n";
+            group = "a:1";
+            key = "b";
+          } == mintNtaId {
+            host = "h";
+            name = "n";
+            group = "a";
+            key = "1:b";
+          }
+        )
+        (
+          mintNtaId {
+            host = "h";
+            name = "n";
+            group = "a/b";
+            key = "c";
+          } == mintNtaId {
+            host = "h";
+            name = "n";
+            group = "a";
+            key = "b/c";
+          }
+        )
+        (
+          mintNtaId {
+            host = "h";
+            name = "n1";
+            group = "";
+            key = "k";
+          } == mintNtaId {
+            host = "h";
+            name = "n";
+            group = "1";
+            key = "k";
+          }
+        )
       ];
       expected = [
         false
@@ -138,14 +200,27 @@ in
               key = "k";
             }
             {
-              host = mintNtaId "r" "sub" "g" "k";
+              host = mintNtaId {
+                host = "r";
+                name = "sub";
+                group = "g";
+                key = "k";
+              };
               name = "n:4:";
               group = "";
               key = "12:x";
             }
           ];
         in
-        map (t: decodeNta (mintNtaId t.host t.name t.group t.key) == t) tuples;
+        map (
+          t:
+          decodeNta (mintNtaId {
+            host = t.host;
+            name = t.name;
+            group = t.group;
+            key = t.key;
+          }) == t
+        ) tuples;
       expected = [
         true
         true
@@ -188,7 +263,7 @@ in
             "alpha"
             "beta"
           ];
-          warm = genScope.evalWarm {
+          warm = genScope.evalWarm { } {
             scope = fx.pickScope [ "gamma" ];
             attributes = fx.attributes;
             inherit prior;
@@ -287,7 +362,12 @@ in
     test-K1-subtypeOf-over-an-nta-child-answers = {
       expr =
         let
-          c = mintNtaId "r" "sub" "g" "k";
+          c = mintNtaId {
+            host = "r";
+            name = "sub";
+            group = "g";
+            key = "k";
+          };
         in
         [
           (genScope.subtypeOf { } fx.threeLevels c c)
@@ -303,19 +383,27 @@ in
     test-K2-evalDebug-resolves-an-nta-child-by-id = {
       expr =
         let
-          c = mintNtaId "r" "sub" "g" "k";
-          dbg = genScope.evalDebug {
-            scope = fx.scopeOf (mkKinds [ fx.tree ]) (fx.root "tree" { defs = [ { s.s = { }; } ]; });
-            attributes = fx.attributes;
-            inherit (genScope) parseParent;
+          c = mintNtaId {
+            host = "r";
+            name = "sub";
+            group = "g";
+            key = "k";
           };
+          dbg = genScope.evalDebug {
+            inherit (genScope) parseParent;
+          } fx.attributes (fx.scopeOf (mkKinds [ fx.tree ]) (fx.root "tree" { defs = [ { s.s = { }; } ]; }));
         in
         [
           (dbg.node c).id
           (builtins.length (dbg.get c "defs"))
         ];
       expected = [
-        (mintNtaId "r" "sub" "g" "k")
+        (mintNtaId {
+          host = "r";
+          name = "sub";
+          group = "g";
+          key = "k";
+        })
         1
       ];
     };
@@ -323,7 +411,14 @@ in
     # ── the projection reads the flattened carriage ──
     test-structuralEdges-reach-the-nta-child = {
       expr = fx.threeLevels.structuralEdges "r";
-      expected = [ (mintNtaId "r" "sub" "g" "k") ];
+      expected = [
+        (mintNtaId {
+          host = "r";
+          name = "sub";
+          group = "g";
+          key = "k";
+        })
+      ];
     };
     test-projectionFindings-are-empty-over-the-nta-carriage = {
       expr = fx.threeLevels.projectionFindings "r";
@@ -359,7 +454,12 @@ in
         in
         [
           (ev.get "r" "readB")
-          (ev.get (mintNtaId "r" "sub" "g" "b") "v")
+          (ev.get (mintNtaId {
+            host = "r";
+            name = "sub";
+            group = "g";
+            key = "b";
+          }) "v")
         ];
       expected = [
         2
@@ -452,11 +552,25 @@ in
         expected = [
           [
             "r/b"
-            "${mintNtaId "r" "sub" "g" "a"}/k"
+            "${
+              mintNtaId {
+                host = "r";
+                name = "sub";
+                group = "g";
+                key = "a";
+              }
+            }/k"
           ]
           [
             "r/b"
-            "${mintNtaId "r" "sub" "g" "a"}/k"
+            "${
+              mintNtaId {
+                host = "r";
+                name = "sub";
+                group = "g";
+                key = "a";
+              }
+            }/k"
           ]
         ];
       };
@@ -467,8 +581,25 @@ in
           hp = self: _: self.getHostAt "pos";
         };
         reads = ev: [
-          (ev.get (mintNtaId "r" "sub" "g" "b") "hp")
-          (ev.get (mintNtaId (mintNtaId "r" "sub" "g" "a") "sub" "g" "k") "hp")
+          (ev.get (mintNtaId {
+            host = "r";
+            name = "sub";
+            group = "g";
+            key = "b";
+          }) "hp")
+          (ev.get (mintNtaId {
+            host = (
+              mintNtaId {
+                host = "r";
+                name = "sub";
+                group = "g";
+                key = "a";
+              }
+            );
+            name = "sub";
+            group = "g";
+            key = "k";
+          }) "hp")
         ];
       in
       {
@@ -479,11 +610,25 @@ in
         expected = [
           [
             "r/b"
-            "${mintNtaId "r" "sub" "g" "a"}/k"
+            "${
+              mintNtaId {
+                host = "r";
+                name = "sub";
+                group = "g";
+                key = "a";
+              }
+            }/k"
           ]
           [
             "r/b"
-            "${mintNtaId "r" "sub" "g" "a"}/k"
+            "${
+              mintNtaId {
+                host = "r";
+                name = "sub";
+                group = "g";
+                key = "a";
+              }
+            }/k"
           ]
         ];
       };

@@ -2,7 +2,7 @@
 let
   # A FLAT kind vocabulary: names, and no order between them, so no kind expands into another.
   # These fixtures declare types and never spawn, which is exactly what an empty `below` says.
-  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { inherit name; }) names);
+  flatKinds = names: genScope.mkKinds (map (name: genScope.mkKind { } name) names);
 
   # Basic build
   basic = genScope.buildRoots {
@@ -11,8 +11,14 @@ let
       "user"
       "library"
     ];
-    parentGraph = genScope.edge "child" "parent";
-    importGraph = genScope.edge "child" "lib";
+    parentGraph = genScope.edge {
+      from = "child";
+      to = "parent";
+    };
+    importGraph = genScope.edge {
+      from = "child";
+      to = "lib";
+    };
     decls = {
       parent = {
         x = 1;
@@ -59,12 +65,21 @@ let
   collide =
     label:
     genScope.buildRoots {
-      parentGraph = genScope.edge "a" "root";
-      importGraph = genScope.edge "a" "lib1";
+      parentGraph = genScope.edge {
+        from = "a";
+        to = "root";
+      };
+      importGraph = genScope.edge {
+        from = "a";
+        to = "lib1";
+      };
       edgeGraphs = [
         {
           label = label;
-          graph = genScope.edge "a" "HIJACKED";
+          graph = genScope.edge {
+            from = "a";
+            to = "HIJACKED";
+          };
         }
       ];
     };
@@ -73,8 +88,14 @@ let
   multiImport = genScope.buildRoots {
     parentGraph = genScope.empty;
     importGraph = genScope.overlays [
-      (genScope.edge "a" "b")
-      (genScope.edge "a" "c")
+      (genScope.edge {
+        from = "a";
+        to = "b";
+      })
+      (genScope.edge {
+        from = "a";
+        to = "c";
+      })
     ];
     decls = {
       a = { };
@@ -154,8 +175,14 @@ in
         !(builtins.tryEval (
           genScope.buildRoots {
             parentGraph = genScope.overlays [
-              (genScope.edge "x" "a")
-              (genScope.edge "x" "b")
+              (genScope.edge {
+                from = "x";
+                to = "a";
+              })
+              (genScope.edge {
+                from = "x";
+                to = "b";
+              })
             ];
           }
         )).success;
@@ -169,8 +196,14 @@ in
           nodes = genScope.buildRoots {
             strict = false;
             parentGraph = genScope.overlays [
-              (genScope.edge "x" "a")
-              (genScope.edge "x" "b")
+              (genScope.edge {
+                from = "x";
+                to = "a";
+              })
+              (genScope.edge {
+                from = "x";
+                to = "b";
+              })
             ];
           };
         in
@@ -223,7 +256,10 @@ in
           edgeGraphs = [
             {
               label = "D";
-              graph = genScope.edge "a" "b";
+              graph = genScope.edge {
+                from = "a";
+                to = "b";
+              };
             }
           ];
           decls = {
@@ -307,7 +343,7 @@ in
       expected = true;
     };
     test-O1-control-buildRoots-is-still-exported = {
-      expr = builtins.isFunction genScope.buildRoots;
+      expr = lib.isFunction genScope.buildRoots; # a door: a functor, which `builtins.isFunction` does not read
       expected = true;
     };
 
@@ -395,8 +431,14 @@ in
           h2 = genScope.mintAttachmentId "heddle" [ "shaft1" "shaft2" ] "shaft2";
           built = genScope.buildRoots {
             parentGraph = genScope.overlays [
-              (genScope.edge h1 "shaft1")
-              (genScope.edge h2 "shaft2")
+              (genScope.edge {
+                from = h1;
+                to = "shaft1";
+              })
+              (genScope.edge {
+                from = h2;
+                to = "shaft2";
+              })
             ];
           };
         in
