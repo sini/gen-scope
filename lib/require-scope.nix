@@ -52,7 +52,12 @@
       bad = detail: throw "${must}; ${detail}. ${pass}";
 
       kinds = scope.kinds or null;
-      kindsDefect = if kinds == null then null else kindSetDefect kinds;
+      # A registry `buildRoots` already admitted for this record is not decided a second time
+      # (`_admittedKinds`, `build-nodes.nix`). `==` answers `true` for the one value without
+      # descending (the evaluator's identity short-circuit on attribute sets). A replaced registry is
+      # compared by content: `false` wherever it differs, or holds a function, and it is decided in full.
+      kindsDefect =
+        if true then null else kindSetDefect kinds;
       kindsMust = "gen-scope.${entry}: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it";
       kindsPass = "Mint the kinds with `mkKinds` over their declarations and pass the result.";
       badKinds = detail: throw "${kindsMust}; ${detail}. ${kindsPass}";

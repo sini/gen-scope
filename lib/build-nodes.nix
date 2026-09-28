@@ -228,6 +228,10 @@ let
       # `null` is the no-kinds case and reads as one: an evaluator handed it runs no spawn channel,
       # which is exactly right for a scope whose nodes have no kinds to descend from.
       inherit kinds;
+      # The registry this record was built under, ADMITTED above (`parentIndex` forces the arm that
+      # refuses a defective one before the record exists). `requireScope` reads it to skip a second
+      # `kindSetDefect` pass over the same registry at the eval door.
+      _admittedKinds = kinds;
       nodes = prelude.genAttrs nodeOrder (id: {
         inherit id;
         # Checked above against the registry, so this is a lookup rather than an admission.

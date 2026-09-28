@@ -159,10 +159,13 @@ in
     # vertex order and the kind registry. The distinction is the whole reason for the second field:
     # a consumer that must call an evaluator needs the order and the registry, and neither is
     # recoverable from the node map — so publishing only `roots` refused such a consumer by name
-    # (the input-type guard) while leaving it nowhere to be redirected.
+    # (the input-type guard) while leaving it nowhere to be redirected. `_admittedKinds` is the
+    # registry `buildRoots` admitted, so the eval door does not decide it a second time
+    # (den-hoag-n6dh7, owner ruling 2026-09-28: a check done twice where once suffices is a defect).
     test-scope-is-sealed-whole = {
       expr = builtins.attrNames ctx.scope;
       expected = [
+        "_admittedKinds"
         "kinds"
         "nodeOrder"
         "nodes"
