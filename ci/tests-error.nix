@@ -3578,6 +3578,248 @@ in
       };
     };
 
+  # ── `getHostAt`'s REFUSALS (den-hoag-n6dh7 U2.0′) ──
+  # The four refusals, total, in both evaluators: (1) a reader that is not an `nta` child's with no
+  # round open, one cell per reader class; (2) an unknown attribute; (3) a quotient attribute, which
+  # never reaches the host's accessor, so `get`'s by-id text cannot answer for it at a nested host;
+  # (4) no entry at the child's coordinates. 2–4 on each entry path: through the host's `getNta`, and
+  # by the child's identifier. The value cells are `tests/nta.nix`'s U2.0′ block.
+  config.flake.testsError.nta-getHostAt-refusals =
+    let
+      fx = import ./tests/_fixtures/nta.nix { inherit genScope; };
+      inherit (genScope) mintNtaId;
+      q =
+        circular
+          {
+            carrier = {
+              bottom = 0;
+              leq = a: b: a <= b;
+              height = 1;
+              quotient = true;
+            };
+          }
+          (
+            _: _: _:
+            0
+          );
+      # `hx` is the child's body; `reads` reads child `b` through the root's `getNta`.
+      withBody =
+        evaluator: body: extra:
+        fx.nestWith evaluator (
+          {
+            inherit (fx) pos;
+            inherit q;
+            onlyB = _: _: { sub.g.b = 0; };
+            hx = body;
+            reads = self: _: self.getNta "sub" "g" "b" "hx";
+          }
+          // extra
+        );
+      viaGetNta = evaluator: body: (withBody evaluator body { }).get "r" "reads";
+      byId = evaluator: body: (withBody evaluator body { }).get (mintNtaId "r" "sub" "g" "b") "hx";
+      atGrandchild =
+        evaluator: body:
+        (withBody evaluator body {
+          readK = self: _: self.getNta "sub" "g" "k" "hx";
+          reads = self: _: self.getNta "sub" "g" "a" "readK";
+        }).get
+          "r"
+          "reads";
+      err = msg: {
+        type = "ThrownError";
+        msg = exactly msg;
+      };
+      unbound = "gen-scope.nta: `getHostAt` reads the reading node's HOST's attribute at the node's own `nta` coordinates, so it is answered only on an `nta` child's reader with no circular round open. A root's or a `children` child's reader, the evaluation's own record, a child's body applied while a round is open, and every reader of an evaluation whose kinds declare no NTA have no host to read.";
+      unknown =
+        host: key:
+        "gen-scope.nta: `getHostAt`: unknown attribute 'nosuch' on host '${host}' of NTA 'sub' group 'g' key '${key}'";
+      quotient =
+        host: key:
+        "gen-scope.nta: `getHostAt`: 'q' on host '${host}' of NTA 'sub' group 'g' key '${key}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getHostAt` reads raw values only";
+      noEntry =
+        host: a: key:
+        "gen-scope.nta: `getHostAt`: host '${host}' attribute '${a}' carries no entry at NTA 'sub' group 'g' key '${key}'";
+      hostA = mintNtaId "r" "sub" "g" "a";
+      noNta =
+        evaluator:
+        (evaluator {
+          scope = {
+            nodes.r = {
+              id = "r";
+              parent = null;
+              decls = { };
+            };
+            nodeOrder = [ "r" ];
+          };
+          attributes = {
+            children = _: _: { };
+            reads = self: _: self.getHostAt "pos";
+          };
+        }).get
+          "r"
+          "reads";
+    in
+    {
+      # (1) unbound, one cell per reader class.
+      test-the-evaluations-own-record-is-unbound = {
+        expr = (fx.nestWith genScope.eval { }).getHostAt "pos";
+        expectedError = err unbound;
+      };
+      test-a-roots-reader-is-unbound = {
+        expr =
+          (withBody genScope.eval (_: _: 0) { reads = self: _: self.getHostAt "pos"; }).get "r"
+            "reads";
+        expectedError = err unbound;
+      };
+      # `c` is registered and selected by `children`, in an evaluation that runs the `nta` channel.
+      test-a-children-childs-reader-is-unbound = {
+        expr =
+          let
+            nodes = fx.root "tree" { defs = [ { } ]; } // {
+              c = {
+                id = "c";
+                type = "tree";
+                decls.defs = [ { } ];
+                parent = "r";
+              };
+            };
+          in
+          (genScope.eval {
+            scope = fx.scopeOf (genScope.mkKinds [ fx.tree ]) nodes;
+            attributes = fx.attributes // {
+              children = _: id: if id == "r" then { inherit (nodes) c; } else { };
+              reads = self: _: self.getHostAt "pos";
+            };
+          }).get
+            "c"
+            "reads";
+        expectedError = err unbound;
+      };
+      # The child's body applied while a round is open runs on the base reader (`getNtaAt`'s
+      # round-open arm). No module-tree attribute is `circular`, so Unit 2 never reaches it.
+      test-a-childs-body-inside-an-open-round-is-unbound = {
+        expr =
+          (withBody genScope.eval (self: _: self.getHostAt "pos") {
+            ring =
+              circular
+                {
+                  carrier = {
+                    bottom = 0;
+                    leq = a: b: a <= b;
+                    height = 3;
+                    quotient = false;
+                  };
+                }
+                (
+                  self: id: _:
+                  builtins.stringLength (self.get id "reads")
+                );
+          }).get
+            "r"
+            "ring";
+        expectedError = err unbound;
+      };
+      test-a-reader-in-an-evaluation-running-no-nta-is-unbound = {
+        expr = noNta genScope.eval;
+        expectedError = err unbound;
+      };
+      test-evalDebugs-own-record-is-unbound = {
+        expr = (fx.nestWith genScope.evalDebug { }).getHostAt "pos";
+        expectedError = err unbound;
+      };
+      test-evalDebug-a-reader-of-an-id-that-is-no-nta-child-is-unbound = {
+        expr =
+          (withBody genScope.evalDebug (_: _: 0) { reads = self: _: self.getHostAt "pos"; }).get "r"
+            "reads";
+        expectedError = err unbound;
+      };
+      test-evalDebug-a-reader-in-an-evaluation-running-no-nta-is-unbound = {
+        expr = noNta genScope.evalDebug;
+        expectedError = err unbound;
+      };
+
+      # (2) unknown attribute.
+      test-an-unknown-attribute-is-refused-through-getNta = {
+        expr = viaGetNta genScope.eval (self: _: self.getHostAt "nosuch");
+        expectedError = err (unknown "r" "b");
+      };
+      test-an-unknown-attribute-is-refused-by-id = {
+        expr = byId genScope.eval (self: _: self.getHostAt "nosuch");
+        expectedError = err (unknown "r" "b");
+      };
+      test-evalDebug-refuses-an-unknown-attribute-through-getNta = {
+        expr = viaGetNta genScope.evalDebug (self: _: self.getHostAt "nosuch");
+        expectedError = err (unknown "r" "b");
+      };
+      test-evalDebug-refuses-an-unknown-attribute-by-id = {
+        expr = byId genScope.evalDebug (self: _: self.getHostAt "nosuch");
+        expectedError = err (unknown "r" "b");
+      };
+
+      # (3) quotient attribute; at a nested host too, where the host's accessor would fall to `get`.
+      test-a-quotient-attribute-is-refused-through-getNta = {
+        expr = viaGetNta genScope.eval (self: _: self.getHostAt "q");
+        expectedError = err (quotient "r" "b");
+      };
+      test-a-quotient-attribute-is-refused-by-id = {
+        expr = byId genScope.eval (self: _: self.getHostAt "q");
+        expectedError = err (quotient "r" "b");
+      };
+      test-a-quotient-attribute-under-a-child-host-is-refused = {
+        expr = atGrandchild genScope.eval (self: _: self.getHostAt "q");
+        expectedError = err (quotient hostA "k");
+      };
+      test-evalDebug-refuses-a-quotient-attribute-through-getNta = {
+        expr = viaGetNta genScope.evalDebug (self: _: self.getHostAt "q");
+        expectedError = err (quotient "r" "b");
+      };
+      test-evalDebug-refuses-a-quotient-attribute-by-id = {
+        expr = byId genScope.evalDebug (self: _: self.getHostAt "q");
+        expectedError = err (quotient "r" "b");
+      };
+      test-evalDebug-refuses-a-quotient-attribute-under-a-child-host = {
+        expr = atGrandchild genScope.evalDebug (self: _: self.getHostAt "q");
+        expectedError = err (quotient hostA "k");
+      };
+
+      # (4) no entry at the child's coordinates: the host's `onlyB` carries key `b` only, and its
+      # `n` is not a set at all.
+      test-no-entry-at-the-childs-coordinates-is-refused-through-getNta = {
+        expr =
+          (withBody genScope.eval (self: _: self.getHostAt "onlyB") {
+            reads = self: _: self.getNta "sub" "g" "a" "hx";
+          }).get
+            "r"
+            "reads";
+        expectedError = err (noEntry "r" "onlyB" "a");
+      };
+      test-a-host-attribute-that-is-no-set-is-refused-by-id = {
+        expr = byId genScope.eval (self: _: self.getHostAt "n");
+        expectedError = err (noEntry "r" "n" "b");
+      };
+      test-no-entry-under-a-child-host-is-refused = {
+        expr = atGrandchild genScope.eval (self: _: self.getHostAt "onlyB");
+        expectedError = err (noEntry hostA "onlyB" "k");
+      };
+      test-evalDebug-refuses-no-entry-through-getNta = {
+        expr =
+          (withBody genScope.evalDebug (self: _: self.getHostAt "onlyB") {
+            reads = self: _: self.getNta "sub" "g" "a" "hx";
+          }).get
+            "r"
+            "reads";
+        expectedError = err (noEntry "r" "onlyB" "a");
+      };
+      test-evalDebug-refuses-no-entry-by-id = {
+        expr = byId genScope.evalDebug (self: _: self.getHostAt "n");
+        expectedError = err (noEntry "r" "n" "b");
+      };
+      test-evalDebug-refuses-no-entry-under-a-child-host = {
+        expr = atGrandchild genScope.evalDebug (self: _: self.getHostAt "onlyB");
+        expectedError = err (noEntry hostA "onlyB" "k");
+      };
+    };
+
   # den-hoag-7gp66 P1: the closed doors' shared checks, each message pinned to the byte on the real
   # path. Per door: a missing required field and a non-set argument refused naming the door; an
   # unknown field refused on an options or mixed door; an extra field ADMITTED on a record door (R5's
