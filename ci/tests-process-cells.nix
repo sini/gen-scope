@@ -469,6 +469,72 @@ let
     else
       builtins.seq byId (viaRecord + byId);
 
+  # U2.0-h — the `nta` channel's cost per child (den-hoag-n6dh7 D2). A host with `n` children,
+  # each seeded by one two-step address into the host's `defs`, reads every child through its own
+  # record with `getNta`, and each child reads its seed and its host's `pos` at its coordinates
+  # with `getHostAt`: the seed read, the channel and the host read, once per child. The runner
+  # reads the evaluator's thunk count at two sizes; the per-eval constants cancel in the
+  # difference, which is the marginal per child. The value is 2n.
+  childCost =
+    n:
+    let
+      keys = map toString (builtins.genList (i: i) n);
+      table =
+        v:
+        builtins.listToAttrs (
+          map (k: {
+            name = k;
+            value = v;
+          }) keys
+        );
+      ev = evalLib.eval {
+        scope = {
+          nodes.h = {
+            id = "h";
+            type = "nest";
+            parent = null;
+            decls = { };
+          };
+          nodeOrder = [ "h" ];
+          kinds = mkKinds [
+            (mkKind {
+              name = "nest";
+              nta.sub =
+                _: id:
+                if id == "h" then
+                  {
+                    g = builtins.mapAttrs (k: _: [
+                      {
+                        attr = "defs";
+                        def = 0;
+                        at = [
+                          k
+                          "v"
+                        ];
+                      }
+                    ]) (table null);
+                  }
+                else
+                  { };
+            })
+          ];
+        };
+        attributes = {
+          children = _: _: { };
+          defs =
+            self: id:
+            let
+              d = (self.node id).decls;
+            in
+            if d ? seed then map (e: e.value) d.seed else [ (table { v = 1; }) ];
+          pos = _: _: { sub.g = table 1; };
+          leaf = self: id: builtins.head (self.get id "defs") + self.getHostAt "pos";
+          sum = self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "leaf") 0 keys;
+        };
+      };
+    in
+    ev.get "h" "sum";
+
   # U2.0-g — a same-kind `nta` chain of depth `n`, one empty-seed child per node, bounded by a
   # `depth` read through `getHostAt`. `what` picks the read: every id (`allNodeIds`), or the
   # deepest node's `depth` by its identifier. The verdict is the evaluator's own function-call
@@ -563,5 +629,9 @@ else if arm == "chain-byid-6" then
   chain "byid" 6
 else if arm == "chain-byid-12" then
   chain "byid" 12
+else if arm == "child-cost-100" then
+  childCost 100
+else if arm == "child-cost-400" then
+  childCost 400
 else
   throw "tests-process-cells: unknown arm '${arm}'"

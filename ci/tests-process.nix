@@ -108,17 +108,21 @@
             fi
             grep -Eo 'max-call-depth exceeded|infinite recursion encountered' "$TMPDIR/err" | head -n 1 > "$TMPDIR/channel-$1"
           }
-          # <arm>: runs one cell with the evaluator's statistics on, requires exit 0, and leaves the
-          # process's own function-call count in `calls`. A stats file with no count is a broken
-          # instrument and dies as one, never a zero.
-          callsOf() {
+          # <arm> <stat>: runs one cell with the evaluator's statistics on, requires exit 0, and
+          # leaves the process's own count `<stat>` in `stat` (`callsOf`: nrFunctionCalls in
+          # `calls`). A stats file with no count is a broken instrument and dies as one, never a zero.
+          statOf() {
             export NIX_SHOW_STATS=1 NIX_SHOW_STATS_PATH="$TMPDIR/stats"
             rm -f "$TMPDIR/stats"
             evalArm "$1" "$libSrc"
             unset NIX_SHOW_STATS NIX_SHOW_STATS_PATH
             [ "$rc" -eq 0 ] || die "$1" "expected exit 0, got $rc"
-            calls=$(tr -d ' \n' < "$TMPDIR/stats" | grep -o '"nrFunctionCalls":[0-9]*' | cut -d: -f2 || true)
-            [ -n "$calls" ] || die "$1" "the evaluator wrote no nrFunctionCalls to $TMPDIR/stats: cannot measure"
+            stat=$(tr -d ' \n' < "$TMPDIR/stats" | grep -o "\"$2\":[0-9]*" | cut -d: -f2 || true)
+            [ -n "$stat" ] || die "$1" "the evaluator wrote no $2 to $TMPDIR/stats: cannot measure"
+          }
+          callsOf() {
+            statOf "$1" nrFunctionCalls
+            calls=$stat
           }
           traceCount() { # <arm> <n>: the F1 probe fired exactly n times
             n=$(grep -c 'trace: F1-PROBE' "$TMPDIR/err" || true)
@@ -234,9 +238,20 @@
             [ $((2 * calls)) -lt $((5 * c6)) ] || die "chain-$w-12" "function calls grew from $c6 at depth 6 to $calls at depth 12, not under 2.5x: enumeration is superlinear in depth"
           done
 
+          # U2.0-h — the `nta` channel's cost per child (den-hoag-n6dh7 D2): the evaluator's thunks
+          # at 400 children less those at 100, over 300, is at most 38 — measured 38 on upstream Nix,
+          # Determinate and Lix alike, where c93a5c0 read 68. A binding paid per child that the
+          # channel does not need moves it; each value is the hand-derived 2n.
+          statOf child-cost-100 nrThunks
+          [ "$val" = "200" ] || die child-cost-100 "expected value 200, got '$val'"
+          t100=$stat
+          statOf child-cost-400 nrThunks
+          [ "$val" = "800" ] || die child-cost-400 "expected value 800, got '$val'"
+          [ $((stat - t100)) -le $((38 * 300)) ] || die child-cost-400 "the nta channel costs $((stat - t100)) thunks over 300 children, above 38 per child"
+
           # 0/0 is a false pass: the runner must have executed every cell above.
-          [ "$ran" = "29" ] || die runner "expected 29 evaluations, ran $ran"
-          echo "tests-process: 29 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
+          [ "$ran" = "31" ] || die runner "expected 31 evaluations, ran $ran"
+          echo "tests-process: 31 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
         ''
         + ''
           cat "$out"
