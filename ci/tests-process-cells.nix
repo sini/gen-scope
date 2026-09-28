@@ -468,6 +468,37 @@ let
       builtins.seq viaRecord (viaRecord + byId)
     else
       builtins.seq byId (viaRecord + byId);
+
+  # U2.0-g — a same-kind `nta` chain of depth `n`, one empty-seed child per node, bounded by a
+  # `depth` read through `getHostAt`. `what` picks the read: every id (`allNodeIds`), or the
+  # deepest node's `depth` by its identifier. The verdict is the evaluator's own function-call
+  # count at two depths, read by the runner: a host resolved twice per level costs 2^depth.
+  chain =
+    what: n:
+    let
+      ev = evalLib.eval {
+        scope = buildRoots {
+          parentGraph = ag.vertex "r";
+          importGraph = ag.empty;
+          decls.r = { };
+          types.r = "tree";
+          kinds = mkKinds [
+            (mkKind {
+              name = "tree";
+              nta.sub = self: id: if self.get id "depth" < n then { g.k = [ ]; } else { };
+            })
+          ];
+        };
+        attributes = {
+          children = _: _: { };
+          imports = _: _: [ ];
+          depth = self: id: if id == "r" then 0 else self.getHostAt "pos";
+          pos = self: id: { sub.g.k = self.get id "depth" + 1; };
+        };
+      };
+      deepest = builtins.foldl' (h: _: evalLib.mintNtaId h "sub" "g" "k") "r" (builtins.genList (x: x) n);
+    in
+    if what == "ids" then builtins.length ev.allNodeIds else ev.get deepest "depth";
 in
 if arm == "lrp2" then
   lrp2 (builtins.div 1 0)
@@ -524,5 +555,13 @@ else if arm == "hostat-once" then
   (onceEval 1).get "h" "viaHost"
 else if arm == "hostat-once-ctl" then
   (onceEval 1).get "h" "viaHostCtl"
+else if arm == "chain-ids-6" then
+  chain "ids" 6
+else if arm == "chain-ids-12" then
+  chain "ids" 12
+else if arm == "chain-byid-6" then
+  chain "byid" 6
+else if arm == "chain-byid-12" then
+  chain "byid" 12
 else
   throw "tests-process-cells: unknown arm '${arm}'"
