@@ -77,11 +77,13 @@ first line of each):
 
 **Evaluators** — `lib/eval.nix`
 
-| Export      | Signature                                                                                                                                                                                                       |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `eval`      | `{ roots, attributes, parseParent ? null, prior ? null, decision ? coldDecision, provenance ? [] } -> accessorRecord`                                                                                           |
-| `evalDebug` | `{ roots, attributes, parseParent ? null } -> { node; get; getRepresentative; getTraced; trace; allNodes; allNodeIds; }` — shadow-stack cycle tracing; defeats memoization. Both materializers are named throws |
-| `evalWarm`  | `{ roots, attributes, parseParent ? null, prior, decision, provenance ? [] } -> accessorRecord` — thin wrapper over `eval`, same code path; `prior` and `decision` MANDATORY                                    |
+| Export      | Signature                                                                                                                                                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eval`      | `{ roots, attributes, parseParent ? null, prior ? null, decision ? coldDecision, provenance ? [] } -> accessorRecord`                                                                                                              |
+| `evalDebug` | `{ roots, attributes, parseParent ? null } -> { node; get; getRepresentative; getTraced; getNta; getHostAt; trace; allNodes; allNodeIds; }` — shadow-stack cycle tracing; defeats memoization. Both materializers are named throws |
+| `evalWarm`  | `{ roots, attributes, parseParent ? null, prior, decision, provenance ? [] } -> accessorRecord` — thin wrapper over `eval`, same code path; `prior` and `decision` MANDATORY                                                       |
+
+A body's reader in an evaluation running the `nta` channel carries `self.getNta name group key attrName` (the reading node's own `nta` child's attribute); an `nta` child's reader with no round open also carries `self.getHostAt attrName` (its host's `attrName` at the child's own coordinates). Every other reader, and the record itself, refuses each by name.
 
 **The plane interface** — `lib/structural.nix`, `lib/interface.nix`
 

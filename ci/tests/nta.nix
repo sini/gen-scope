@@ -423,5 +423,69 @@ in
           "ring";
       expected = 2;
     };
+
+    # ── U2.0′ · a child reads its HOST's equation at its own coordinates (den-hoag-n6dh7 U2.0′) ──
+    # `self.getHostAt a` on an `nta` child's reader answers `(host's a).${name}.${group}.${key}`. One
+    # parity cell per entry path — through the host's `getNta`, and by the child's identifier — each
+    # at depth 1 and at depth 2 (the host is itself an `nta` child), `eval` against `evalDebug`. The
+    # refusals are `tests-error.nix`'s `nta-getHostAt-refusals`; one evaluation of the host
+    # attribute is U2.0-f in `tests-process.nix`.
+    test-U20p-evalDebug-agrees-with-eval-through-getNta =
+      let
+        extra = {
+          inherit (fx) pos;
+          hp = self: _: self.getHostAt "pos";
+          readB = self: _: self.getNta "sub" "g" "b" "hp";
+          readK = self: _: self.getNta "sub" "g" "k" "hp";
+          readAK = self: _: self.getNta "sub" "g" "a" "readK";
+        };
+        reads = ev: [
+          (ev.get "r" "readB")
+          (ev.get "r" "readAK")
+        ];
+      in
+      {
+        expr = [
+          (reads (fx.nestWith genScope.eval extra))
+          (reads (fx.nestWith genScope.evalDebug extra))
+        ];
+        expected = [
+          [
+            "r/b"
+            "${mintNtaId "r" "sub" "g" "a"}/k"
+          ]
+          [
+            "r/b"
+            "${mintNtaId "r" "sub" "g" "a"}/k"
+          ]
+        ];
+      };
+    test-U20p-evalDebug-agrees-with-eval-by-id =
+      let
+        extra = {
+          inherit (fx) pos;
+          hp = self: _: self.getHostAt "pos";
+        };
+        reads = ev: [
+          (ev.get (mintNtaId "r" "sub" "g" "b") "hp")
+          (ev.get (mintNtaId (mintNtaId "r" "sub" "g" "a") "sub" "g" "k") "hp")
+        ];
+      in
+      {
+        expr = [
+          (reads (fx.nestWith genScope.eval extra))
+          (reads (fx.nestWith genScope.evalDebug extra))
+        ];
+        expected = [
+          [
+            "r/b"
+            "${mintNtaId "r" "sub" "g" "a"}/k"
+          ]
+          [
+            "r/b"
+            "${mintNtaId "r" "sub" "g" "a"}/k"
+          ]
+        ];
+      };
   };
 }

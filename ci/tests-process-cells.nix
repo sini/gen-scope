@@ -433,6 +433,23 @@ let
         inner = self: _: self.getNta "sub" "g" "k" "probe";
         viaD1 = self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "probe") 0 onceKeys;
         viaD2 = self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "inner") 0 onceKeys;
+        # U2.0-f: the host attribute every child reads through `getHostAt`, and the live control's
+        # read of it through a SECOND evaluation per child.
+        pos =
+          _: _:
+          builtins.trace "F1-PROBE" {
+            sub.g = builtins.listToAttrs (
+              map (k: {
+                name = k;
+                value = 1;
+              }) onceKeys
+            );
+          };
+        hostRead = self: _: self.getHostAt "pos";
+        hostReadCtl = _: id: ((onceEval id).get "h" "pos").sub.g.${(evalLib.decodeNta id).key};
+        viaHost = self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "hostRead") 0 onceKeys;
+        viaHostCtl =
+          self: _: builtins.foldl' (acc: k: acc + self.getNta "sub" "g" k "hostReadCtl") 0 onceKeys;
       };
     };
   onceChild = k: evalLib.mintNtaId "h" "sub" "g" k;
@@ -503,5 +520,9 @@ else if arm == "once-d2-id" then
   once 2 false false
 else if arm == "once-d2-ctl" then
   once 2 true true
+else if arm == "hostat-once" then
+  (onceEval 1).get "h" "viaHost"
+else if arm == "hostat-once-ctl" then
+  (onceEval 1).get "h" "viaHostCtl"
 else
   throw "tests-process-cells: unknown arm '${arm}'"

@@ -197,9 +197,18 @@
             traceCount "$c" 6
           done
 
+          # U2.0-f — the host attribute is evaluated once however many children read it
+          # (den-hoag-n6dh7 U2.0′): three children read it through `getHostAt`, and it applies
+          # once — gen-scope's per-node memo, which the host's accessor reaches; the live control
+          # reads it through a second evaluation per child, 3.
+          answers hostat-once "$libSrc" 3
+          traceCount hostat-once 1
+          answers hostat-once-ctl "$libSrc" 3
+          traceCount hostat-once-ctl 3
+
           # 0/0 is a false pass: the runner must have executed every cell above.
-          [ "$ran" = "23" ] || die runner "expected 23 evaluations, ran $ran"
-          echo "tests-process: 23 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
+          [ "$ran" = "25" ] || die runner "expected 25 evaluations, ran $ran"
+          echo "tests-process: 25 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
         ''
         + ''
           cat "$out"

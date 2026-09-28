@@ -194,6 +194,13 @@ let
       attributes = attributes // { v = self: id: (first self id).v; } // extra;
     };
 
+  # The host's equation for each of its `nest` children, by the child's coordinates: the attribute
+  # a child reads through `getHostAt` (den-hoag-n6dh7 U2.0′).
+  pos = self: id: {
+    sub.g =
+      if id == "r" then builtins.mapAttrs (k: _: "${id}/${k}") (first self id) else { k = "${id}/k"; };
+  };
+
   # The one `raw` child under group `g` key `k`, its seed the given list.
   seeded = seed: rawRun (_: _: { g.k = seed; });
   child = mintNtaId "r" "x" "g" "k";
@@ -211,6 +218,7 @@ in
     rawRun
     rawNodes
     nestWith
+    pos
     seeded
     child
     seedOfChild

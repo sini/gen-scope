@@ -804,6 +804,25 @@ let
     _: _: _: _:
     throw "gen-scope.nta: `getNta` reads the reading node's own `nta` children, so it is answered only on a body's reader in an evaluation whose kinds declare an NTA. Outside a body, read a child by its identifier with `get`.";
 
+  # `getHostAt`'s refusal on a reader that is not an `nta` child's with no round open: the
+  # evaluation's own record, a root's or a `children` child's reader, a child's body applied while a
+  # circular round is open (it runs on the base reader), every reader of an evaluation that runs no
+  # `nta` channel, and in `evalDebug` the reader of an id that is not an `nta` child's.
+  hostAtUnbound =
+    _:
+    throw "gen-scope.nta: `getHostAt` reads the reading node's HOST's attribute at the node's own `nta` coordinates, so it is answered only on an `nta` child's reader with no circular round open. A root's or a `children` child's reader, the evaluation's own record, a child's body applied while a round is open, and every reader of an evaluation whose kinds declare no NTA have no host to read.";
+
+  # `getHostAt`'s diagnosis once the host's attribute holds no entry at the child's coordinates, in
+  # the order 2, 3, 4: an unknown attribute has no value to look into, so it is decided first.
+  hostAtMiss =
+    declared: isQuotientAttr: host: name: group: key: a:
+    if !(declared ? ${a}) then
+      throw "gen-scope.nta: `getHostAt`: unknown attribute '${a}' on host '${host}' of NTA '${name}' group '${group}' key '${key}'"
+    else if isQuotientAttr a then
+      throw "gen-scope.nta: `getHostAt`: '${a}' on host '${host}' of NTA '${name}' group '${group}' key '${key}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getHostAt` reads raw values only"
+    else
+      throw "gen-scope.nta: `getHostAt`: host '${host}' attribute '${a}' carries no entry at NTA '${name}' group '${group}' key '${key}'";
+
   # The attribute set the evaluators actually run: the caller's, with the selection channel guarded
   # and the spawn channel the registry declares added. Writing the spawn channel by hand is refused —
   # it is the one surface on which an expansion could still be declared outside the kind order, and
@@ -1031,24 +1050,45 @@ let
                   raw = applyAttr acc nodeId attrName fn;
                 in
                 if attrName == ntaChannel && !round.open then
-                  mapAtDepth (structural.childDepth attrName) (
-                    childNode:
-                    let
-                      own = self // {
-                        getNta = getNtaAt own childNode.id;
-                        node = tid: if tid == childNode.id then wrapped else self.node tid;
-                        get =
-                          tid: a:
-                          if tid == childNode.id && runAttributes ? ${a} && !(isQuotientAttr a) then
-                            wrapped._eval.${a}
-                          else
-                            self.get tid a;
-                      };
-                      wrapped = childNode // {
-                        _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
-                      };
-                    in
-                    wrapped
+                  let
+                    # The host's attributes, each read once per host through the host's own accessor
+                    # (its record's reader when the host is itself an `nta` child). One evaluation
+                    # is the per-node memo `get` reaches; this table is cost only. A quotient
+                    # attribute is `null` here, so it never reaches `get` and the miss names it.
+                    hostVals = builtins.mapAttrs (
+                      a: _: if isQuotientAttr a then null else (if acc != null then acc else self).get nodeId a
+                    ) runAttributes;
+                  in
+                  builtins.mapAttrs (
+                    name:
+                    builtins.mapAttrs (
+                      group:
+                      builtins.mapAttrs (
+                        key: childNode:
+                        let
+                          own = self // {
+                            # The host's equation at this child's coordinates (Söderberg & Hedin 2013
+                            # §2.3, §4.1): one selection, diagnosed only when it misses.
+                            getHostAt =
+                              a:
+                              hostVals.${a}.${name}.${group}.${key}
+                                or (hostAtMiss runAttributes isQuotientAttr nodeId name group key a);
+                            getNta = getNtaAt own childNode.id;
+                            node = tid: if tid == childNode.id then wrapped else self.node tid;
+                            get =
+                              tid: a:
+                              if tid == childNode.id && runAttributes ? ${a} && !(isQuotientAttr a) then
+                                wrapped._eval.${a}
+                              else
+                                self.get tid a;
+                          };
+                          wrapped = childNode // {
+                            _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
+                          };
+                        in
+                        wrapped
+                      )
+                    )
                   ) raw
                 else if structural.childBearing attrName then
                   mapAtDepth (structural.childDepth attrName) wrapChild raw
@@ -1873,6 +1913,9 @@ let
 
             # A body's reader binds this to its node (`applyAttr`); unbound, it refuses by name.
             getNta = ntaUnbound;
+            # An `nta` child's reader binds this to its host (`evalAttr`); every other reader
+            # inherits the refusal from here.
+            getHostAt = hostAtUnbound;
 
             # --- Tier 2: Materialization (forces evaluation, memoized) ---
 
@@ -2157,7 +2200,7 @@ let
           # is a LABEL here, carried into the trace and passed to `fn` — the record it names, if
           # any, is never re-read through it.
           applyTraced =
-            id: attrName: traceEntry: path:
+            id: at: attrName: traceEntry: path:
             if visited ? ${traceEntry} then
               throw "gen-scope: cycle detected: ${builtins.concatStringsSep " -> " path}"
             else
@@ -2174,7 +2217,13 @@ let
               else if builtins.isAttrs fn then
                 throw "gen-scope: attribute '${attrName}' on '${id}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
               else if runAttributes ? ${ntaChannel} then
-                fn (s // { getNta = debugGetNta s id; }) id
+                fn (
+                  s
+                  // {
+                    getNta = debugGetNta s id;
+                    getHostAt = debugGetHostAt s at;
+                  }
+                ) id
               else
                 fn s id;
 
@@ -2184,6 +2233,9 @@ let
               let
                 traceEntry = "${id}.${attrName}";
                 path = traceList ++ [ traceEntry ];
+                # `getHostAt`'s coordinates: the decode this by-id read already performs in `node`,
+                # `null` for an id that is not an `nta` child's.
+                at = ntaTarget (checked.kinds or null) checked.nodes runAttributes (mkSelf visited traceList) id;
               in
               {
                 trace = path;
@@ -2191,7 +2243,7 @@ let
                   if !(runAttributes ? ${attrName}) then
                     throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
                   else
-                    applyTraced id attrName traceEntry path;
+                    applyTraced id at attrName traceEntry path;
               }
             );
           # `getNta`, on this evaluator's reader. There is no co-located cache here to answer
@@ -2214,7 +2266,27 @@ let
             else if isQuotientAttr attrName then
               throw "gen-scope.nta: `getNta`: '${attrName}' on NTA '${name}' group '${group}' key '${key}' of host '${host}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getNta` reads raw values only (in self.get)"
             else
-              applyTraced child.id attrName traceEntry path;
+              applyTraced child.id {
+                inherit
+                  host
+                  name
+                  group
+                  key
+                  ;
+              } attrName traceEntry path;
+          # `getHostAt`, on this evaluator's reader: the host's attribute at the coordinates the entry
+          # path holds (`debugGetNta`'s, or the `ntaTarget` decode the by-id read already performs,
+          # `null` for an id that is not an `nta` child's). Checked before `s.get`, as `debugGetNta`
+          # checks its own; the same four texts as the production reader.
+          debugGetHostAt =
+            s: at: a:
+            if at == null then
+              hostAtUnbound a
+            else if !(runAttributes ? ${a}) || isQuotientAttr a then
+              hostAtMiss runAttributes isQuotientAttr at.host at.name at.group at.key a
+            else
+              (s.get at.host a).${at.name}.${at.group}.${at.key}
+                or (hostAtMiss runAttributes isQuotientAttr at.host at.name at.group at.key a);
           debugCircular =
             id: decl: s:
             let
@@ -2256,6 +2328,7 @@ let
         {
           inherit getTraced;
           getNta = ntaUnbound;
+          getHostAt = hostAtUnbound;
 
           # The read path this accessor was reached along, as a value.
           trace = traceList;
