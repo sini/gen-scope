@@ -460,8 +460,12 @@ let
 
   kindOf =
     kinds: nodes: ev: id:
+    kindOfNode kinds nodes id (ev.node id);
+
+  # The same read on a record already in hand.
+  kindOfNode =
+    kinds: nodes: id: n:
     let
-      n = ev.node id;
       t = n.type or null;
     in
     if t == null then
@@ -665,8 +669,12 @@ let
   ntaFrom =
     kinds: nodes: declared: ev: id:
     let
-      host = kindOf kinds nodes ev id;
-      hostKind = (ev.node id).type or null;
+      # The host is resolved ONCE and its kind and `type` are read off that one record: a reader
+      # that resolves by identifier pays a resolution per call, and two per level compound into
+      # 2^depth down a nested chain.
+      hostNode = ev.node id;
+      host = kindOfNode kinds nodes id hostNode;
+      hostKind = hostNode.type or null;
       ntas = if host == null then { } else host.nta;
       at = name: "gen-scope.nta: kind '${hostKind}' NTA '${name}' on host '${id}'";
 
@@ -761,7 +769,28 @@ let
   # memoized product, one group's key set forced and nothing else. `null` when the id is not an
   # `nta` identifier of this evaluation — no decode, no channel, or a host whose kind declares no NTA
   # of that name — so a caller-chosen id that merely decodes falls through to the other arms.
+  #
+  # ★ THE HOST IS RESOLVED ONCE PER LEVEL. The product's names ARE its kind's `nta` names
+  # (`ntaFrom`), so the kind test reads the product, and the answer carries that product for
+  # `ntaLookup`: one host resolution per level, where a kind read beside a product read resolved
+  # the host twice and a depth-d chain cost 2^d resolutions.
   ntaTarget =
+    kinds: nodes: declared: ev: id:
+    let
+      t = decodeNta id;
+      product = ev.get t.host ntaChannel;
+    in
+    if t == null || !(declared ? ${ntaChannel}) || kinds == null then
+      null
+    else if product ? ${t.name} then
+      t // { inherit product; }
+    else
+      null;
+
+  # The same decode and test for a reader that needs only the coordinates (`evalDebug`'s
+  # `getHostAt` on a by-id read): the kind is read off the host's record and its product is never
+  # forced, so a coordinate read evaluates nothing of the host's `nta` channel.
+  ntaCoords =
     kinds: nodes: declared: ev: id:
     let
       t = decodeNta id;
@@ -774,9 +803,7 @@ let
     else
       null;
 
-  ntaLookup =
-    ev: id: t:
-    ntaMember "node '${id}' not reachable" (ev.get t.host ntaChannel) t.host t.name t.group t.key;
+  ntaLookup = id: t: ntaMember "node '${id}' not reachable" t.product t.host t.name t.group t.key;
 
   # One child record of a host's `nta` product, by its coordinates. The
   # product is read, never an identifier: `ntaLookup` reaches it by decoding one, a reader's
@@ -1816,7 +1843,7 @@ let
               if roots ? ${id} then
                 roots.${id}
               else if nta != null then
-                ntaLookup self id nta
+                ntaLookup id nta
               else if parseParent != null then
                 let
                   parentId = parseParent id;
@@ -1892,6 +1919,7 @@ let
                       evalAttr null id attrName runAttributes.${attrName}
                 )
               );
+
           in
           {
             node = id: resolveNode (identifier "self.node" id);
@@ -1921,17 +1949,42 @@ let
 
             # Internal: walk children/derived-children from a node.
             _walkFrom =
-              id:
               let
-                all = childRecordsLenient self id;
+                # THE WALK CARRIES THE RECORD IT DESCENDS. `n` is the node at `id`, and the child map is
+                # read through a reader that answers `id`'s own attributes from `n` — so an `nta` child,
+                # whose record its host's product already holds, is never re-resolved from its
+                # identifier: a by-id resolution walks the whole address up to a root, and paying it per
+                # node made a depth-d chain's enumeration cost grow with the sum of every node's depth.
+                # A `children` or spawned child is resolved as `self.node` resolves it, so the record
+                # the walk hands out is the one a by-id read answers.
+                walkAt =
+                  id: n:
+                  let
+                    # `demand`'s co-located arm, on `n`; every other read, a root's included, is `get`'s.
+                    rd = self // {
+                      get =
+                        tid: a:
+                        if tid == id && !round.open && n ? _eval && runAttributes ? ${a} && !(isQuotientAttr a) then
+                          n._eval.${a}
+                        else
+                          self.get tid a;
+                    };
+                    all = childRecordsLenient rd id;
+                    ntaKids =
+                      if runAttributes ? ${ntaChannel} then
+                        structural.flattenChildren ntaChannel (rd.get id ntaChannel)
+                      else
+                        { };
+                  in
+                  [
+                    {
+                      name = id;
+                      value = n;
+                    }
+                  ]
+                  ++ prelude.concatMap (cid: walkAt cid (ntaKids.${cid} or (self.node cid))) (builtins.attrNames all);
               in
-              [
-                {
-                  name = id;
-                  value = self.node id;
-                }
-              ]
-              ++ prelude.concatMap self._walkFrom (builtins.attrNames all);
+              id: walkAt id (self.node id);
 
             # Internal: the composed child-record read — `children` with the spawn channel's half —
             # published under one name so the sibling query and resolver modules can reach it. They
@@ -2015,28 +2068,9 @@ let
             # O(n) walk but result size ≤ matching nodes.
             allNodesWhere =
               pred:
-              let
-                walkFrom =
-                  id:
-                  let
-                    node = self.node id;
-                    all = childRecordsLenient self id;
-                    childResults = prelude.concatMap walkFrom (builtins.attrNames all);
-                  in
-                  (
-                    if pred node then
-                      [
-                        {
-                          name = id;
-                          value = node;
-                        }
-                      ]
-                    else
-                      [ ]
-                  )
-                  ++ childResults;
-              in
-              prelude.listToAttrs (prelude.concatMap walkFrom (builtins.attrNames roots));
+              prelude.listToAttrs (
+                builtins.filter (e: pred e.value) (prelude.concatMap self._walkFrom (builtins.attrNames roots))
+              );
 
             # Subtree materialization: forces only the subtree rooted at a given node.
             # O(subtree size). Does not touch nodes outside the subtree.
@@ -2237,7 +2271,7 @@ let
                 path = traceList ++ [ traceEntry ];
                 # `getHostAt`'s coordinates: the decode this by-id read already performs in `node`,
                 # `null` for an id that is not an `nta` child's.
-                at = ntaTarget (checked.kinds or null) checked.nodes runAttributes (mkSelf visited traceList) id;
+                at = ntaCoords (checked.kinds or null) checked.nodes runAttributes (mkSelf visited traceList) id;
               in
               {
                 trace = path;
@@ -2277,7 +2311,7 @@ let
                   ;
               } attrName traceEntry path;
           # `getHostAt`, on this evaluator's reader: the host's attribute at the coordinates the entry
-          # path holds (`debugGetNta`'s, or the `ntaTarget` decode the by-id read already performs,
+          # path holds (`debugGetNta`'s, or the `ntaCoords` decode the by-id read already performs,
           # `null` for an id that is not an `nta` child's). Checked before `s.get`, as `debugGetNta`
           # checks its own; the same four texts as the production reader.
           debugGetHostAt =
@@ -2343,7 +2377,7 @@ let
             if roots ? ${identifier "self.node" id} then
               roots.${id}
             else if nta != null then
-              ntaLookup (mkSelf visited traceList) id nta
+              ntaLookup id nta
             else if parseParent != null then
               let
                 parentId = parseParent id;

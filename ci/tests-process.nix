@@ -108,6 +108,18 @@
             fi
             grep -Eo 'max-call-depth exceeded|infinite recursion encountered' "$TMPDIR/err" | head -n 1 > "$TMPDIR/channel-$1"
           }
+          # <arm>: runs one cell with the evaluator's statistics on, requires exit 0, and leaves the
+          # process's own function-call count in `calls`. A stats file with no count is a broken
+          # instrument and dies as one, never a zero.
+          callsOf() {
+            export NIX_SHOW_STATS=1 NIX_SHOW_STATS_PATH="$TMPDIR/stats"
+            rm -f "$TMPDIR/stats"
+            evalArm "$1" "$libSrc"
+            unset NIX_SHOW_STATS NIX_SHOW_STATS_PATH
+            [ "$rc" -eq 0 ] || die "$1" "expected exit 0, got $rc"
+            calls=$(tr -d ' \n' < "$TMPDIR/stats" | grep -o '"nrFunctionCalls":[0-9]*' | cut -d: -f2 || true)
+            [ -n "$calls" ] || die "$1" "the evaluator wrote no nrFunctionCalls to $TMPDIR/stats: cannot measure"
+          }
           traceCount() { # <arm> <n>: the F1 probe fired exactly n times
             n=$(grep -c 'trace: F1-PROBE' "$TMPDIR/err" || true)
             [ "$n" = "$2" ] || die "$1" "expected $2 F1-PROBE firing(s), saw $n"
@@ -206,9 +218,25 @@
           answers hostat-once-ctl "$libSrc" 3
           traceCount hostat-once-ctl 3
 
+          # U2.0-g — enumeration and by-id resolution down a same-kind `nta` chain grow linearly in
+          # depth (den-hoag-n6dh7): doubling the depth from 6 to 12 must multiply the evaluator's
+          # function calls by less than 2.5, where linear growth reads about 1.8x and quadratic
+          # tends to 4x. A host resolved twice per level, 2^depth, read 63x (ids) and 51x (by id)
+          # at d62b595. Each value is the
+          # hand-derived answer, so a cell that stopped reaching the chain cannot pass on its count.
+          for w in ids byid; do
+            [ "$w" = ids ] && v6=7 v12=13 || v6=6 v12=12
+            callsOf "chain-$w-6"
+            [ "$val" = "$v6" ] || die "chain-$w-6" "expected value $v6, got '$val'"
+            c6=$calls
+            callsOf "chain-$w-12"
+            [ "$val" = "$v12" ] || die "chain-$w-12" "expected value $v12, got '$val'"
+            [ $((2 * calls)) -lt $((5 * c6)) ] || die "chain-$w-12" "function calls grew from $c6 at depth 6 to $calls at depth 12, not under 2.5x: enumeration is superlinear in depth"
+          done
+
           # 0/0 is a false pass: the runner must have executed every cell above.
-          [ "$ran" = "25" ] || die runner "expected 25 evaluations, ran $ran"
-          echo "tests-process: 25 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
+          [ "$ran" = "29" ] || die runner "expected 29 evaluations, ran $ran"
+          echo "tests-process: 29 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
         ''
         + ''
           cat "$out"
