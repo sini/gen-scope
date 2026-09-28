@@ -3094,6 +3094,33 @@ in
         };
       };
 
+      # F-1 (den-hoag-n6dh7 landing gate): a hand-built registry whose kind carries a spawn named
+      # `type`, outside its `below` and with a builder that throws, is refused BY NAME before any
+      # builder is forced. The door's empty-set guard compares `{ } != k.spawns`; the other operand
+      # order reads the left set's `type` attribute (Nix asks whether both sides are derivations)
+      # and surfaces the caller's throw in place of this refusal, on every evaluator.
+      test-F1-buildRoots-refuses-a-spawn-outside-below-without-forcing-its-builder = {
+        expr =
+          (buildWith (
+            okKinds
+            // {
+              kinds = okKinds.kinds // {
+                k = okKinds.kinds.k // {
+                  spawns = okKinds.kinds.k.spawns // {
+                    type = throw "a spawn builder the door must not force";
+                  };
+                };
+              };
+            }
+          )).nodeOrder;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (
+            registryRefusal "buildRoots" ''holds entries that are not minted kinds: ["`k` declares a spawn outside its own `below` set"]''
+          );
+        };
+      };
+
       # The third evaluator entry, which shares the guard and must not borrow another's name.
       # Read through `node`, and the accessor is load-bearing. The guard fires when a field of
       # `requireScope`'s RESULT is selected: `trace` and `getTraced` are assembled without reaching

@@ -469,8 +469,13 @@ let
     else
       shapeDefect k;
 
-  # The `!= [ ]` and `!= { }` guards below skip a pass over an empty list or key set, which holds
-  # vacuously; comparing against an empty value forces no element, so every answer is unchanged.
+  # The `!= [ ]` and `{ } !=` guards below skip a pass over an empty list or key set, which holds
+  # vacuously. They force nothing the passes would not, and the OPERAND ORDER is what makes that so
+  # for the attribute set: Nix's `==` on two attribute sets first asks whether BOTH are derivations,
+  # which reads the LEFT operand's `type` attribute. With `k.spawns` on the left, a spawn named
+  # `type` would have its builder forced before the refusal that names it (den-hoag-n6dh7 gate F-1);
+  # with the empty literal on the left the question is answered without touching `k.spawns`. Two
+  # lists compare lengths before elements, so `k.below != [ ]` forces no name.
   shapeDefect =
     k:
     if !isString (k.name or null) then
@@ -494,9 +499,9 @@ let
       "carries a `resolve` that cannot be applied"
     else if !isAttrs k.spawns then
       "carries a `spawns` that is not an attribute set"
-    else if k.spawns != { } && !(all (p: elem p k.below) (attrNames k.spawns)) then
+    else if { } != k.spawns && !(all (p: elem p k.below) (attrNames k.spawns)) then
       "declares a spawn outside its own `below` set"
-    else if k.spawns != { } && !(all (p: callable k.spawns.${p}) (attrNames k.spawns)) then
+    else if { } != k.spawns && !(all (p: callable k.spawns.${p}) (attrNames k.spawns)) then
       "carries a spawn builder that cannot be applied"
     else if !(k ? nta) then
       "nta: carries no `nta` field"
