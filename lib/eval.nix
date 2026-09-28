@@ -644,14 +644,15 @@ let
   # One step of an address path: an attribute name, or a list index ≥ 0.
   isStep = k: builtins.isString k || (builtins.isInt k && k >= 0);
 
-  # The addressed sub-value of `v` along `steps`, as `{ found; value; }`. PRESENCE is decided by
-  # `?` and by the list's length, never by a sentinel value, so a present path whose value is
-  # `null` is found and answers `null`.
+  # The seed element `{ address; value; }` for the sub-value of `v` along `steps`, or `null` when
+  # the path is absent. PRESENCE is decided by `?` and by the list's length, never by a sentinel
+  # value: the addressed value rides inside the record, so a present path whose value is `null`
+  # answers a record carrying `null`.
   walkAddress =
-    v: steps:
+    address: v: steps:
     if steps == [ ] then
       {
-        found = true;
+        inherit address;
         value = v;
       }
     else
@@ -660,14 +661,20 @@ let
         rest = builtins.tail steps;
       in
       if builtins.isString s then
-        (if builtins.isAttrs v && v ? ${s} then walkAddress v.${s} rest else { found = false; })
+        (if builtins.isAttrs v && v ? ${s} then walkAddress address v.${s} rest else null)
       else if builtins.isList v && s < builtins.length v then
-        walkAddress (builtins.elemAt v s) rest
+        walkAddress address (builtins.elemAt v s) rest
       else
-        { found = false; };
+        null;
 
   ntaFrom =
-    kinds: nodes: declared: ev: id:
+    kinds: nodes:
+    let
+      # Whether any registered id could be a minted one at all (every minted id carries the prefix).
+      # With none, no key collides, and the collision check mints nothing per child.
+      ntaShaped = builtins.any (n: builtins.substring 0 4 n == ntaIdPrefix) (builtins.attrNames nodes);
+    in
+    declared: ev: id:
     let
       # The host is resolved ONCE and its kind and `type` are read off that one record: a reader
       # that resolves by identifier pays a resolution per call, and two per level compound into
@@ -677,49 +684,68 @@ let
       hostKind = hostNode.type or null;
       ntas = if host == null then { } else host.nta;
       at = name: "gen-scope.nta: kind '${hostKind}' NTA '${name}' on host '${id}'";
+      # The host attributes a seed may address, each demanded once per host: every element of every
+      # child's seed reads one, and a demand per element re-ran `get`'s checks per child.
+      hostAttr = builtins.mapAttrs (a: _: ev.get id a) declared;
 
+      # A seed element's place in a refusal, rendered only when one fires.
+      here =
+        name: group: key: i:
+        "${at name}, child '${group}'/'${key}', seed element ${toString i}";
+      notAnAddress =
+        name: group: key: i:
+        throw "${here name group key i}: a seed element is not an address { attr : string; def : int >= 0; at : [ name | index >= 0 ]; }";
+
+      # The record's shape is checked before its fields are bound: the pattern then never meets a
+      # record it would refuse in Nix's own words, and binds each field without a selection per read.
       readAddress =
         name: group: key: i: a:
-        let
-          here = "${at name}, child '${group}'/'${key}', seed element ${toString i}";
-        in
         if
-          !(
-            builtins.isAttrs a
-            &&
-              builtins.attrNames a == [
-                "at"
-                "attr"
-                "def"
-              ]
-            && builtins.isString a.attr
-            && builtins.isInt a.def
-            && a.def >= 0
-            && builtins.isList a.at
-            && builtins.all isStep a.at
-          )
+          builtins.isAttrs a
+          &&
+            builtins.attrNames a == [
+              "at"
+              "attr"
+              "def"
+            ]
         then
-          throw "${here}: a seed element is not an address { attr : string; def : int >= 0; at : [ name | index >= 0 ]; }"
-        else if a.at == [ ] then
-          throw "${here}: an address with an empty path re-addresses a whole definition, which is not a strict sub-value of it. Name at least one step inside the definition."
-        else if !(declared ? ${a.attr}) then
-          throw "${here}: address does not resolve: the evaluation declares no attribute '${a.attr}' to carry the host's definitions"
-        else
-          let
-            defs = ev.get id a.attr;
-            r = walkAddress (builtins.elemAt defs a.def) a.at;
-          in
-          if !builtins.isList defs then
-            throw "${here}: address does not resolve: '${a.attr}' on the host is a ${builtins.typeOf defs}, not a list of definitions"
-          else if a.def >= builtins.length defs then
-            throw "${here}: address does not resolve: '${a.attr}' on the host holds ${toString (builtins.length defs)} definition(s), and the address names definition ${toString a.def}"
-          else if !r.found then
-            throw "${here}: address does not resolve: the path ${builtins.toJSON a.at} is absent from definition ${toString a.def} of '${a.attr}'"
-          else
+          (
             {
-              address = a;
-              inherit (r) value;
-            };
+              at,
+              attr,
+              def,
+            }:
+            if
+              !(
+                builtins.isString attr
+                && builtins.isInt def
+                && def >= 0
+                && builtins.isList at
+                && builtins.all isStep at
+              )
+            then
+              notAnAddress name group key i
+            else if at == [ ] then
+              throw "${here name group key i}: an address with an empty path re-addresses a whole definition, which is not a strict sub-value of it. Name at least one step inside the definition."
+            else if !(declared ? ${attr}) then
+              throw "${here name group key i}: address does not resolve: the evaluation declares no attribute '${attr}' to carry the host's definitions"
+            else
+              let
+                defs = hostAttr.${attr};
+                r = walkAddress a (builtins.elemAt defs def) at;
+              in
+              if !builtins.isList defs then
+                throw "${here name group key i}: address does not resolve: '${attr}' on the host is a ${builtins.typeOf defs}, not a list of definitions"
+              else if def >= builtins.length defs then
+                throw "${here name group key i}: address does not resolve: '${attr}' on the host holds ${toString (builtins.length defs)} definition(s), and the address names definition ${toString def}"
+              else if r == null then
+                throw "${here name group key i}: address does not resolve: the path ${builtins.toJSON at} is absent from definition ${toString def} of '${attr}'"
+              else
+                r
+          )
+            a
+        else
+          notAnAddress name group key i;
 
       seedOf =
         name: group: key: seed:
@@ -734,9 +760,11 @@ let
           # Checked on the group's own KEYS, eager the moment the group is forced: a minted id that
           # is a registered node's is one `resolveNode` answers from its roots-first arm, so a check
           # inside the lazy per-record thunk would never fire for exactly the case it exists for.
-          colliding = builtins.filter (key: nodes ? ${mintNtaId id name group key}) (
-            builtins.attrNames members
-          );
+          colliding =
+            if ntaShaped then
+              builtins.filter (key: nodes ? ${mintNtaId id name group key}) (builtins.attrNames members)
+            else
+              [ ];
         in
         if !builtins.isAttrs members then
           throw "${at name}: the builder's group '${group}' is a ${builtins.typeOf members} rather than an attribute set of seeds keyed by child key"
@@ -1153,12 +1181,17 @@ let
             # `getNta`'s own door-named text (7gp66 R6), not by `get`'s reused message, since the
             # caller invoked `getNta` and never minted or saw the child's identifier.
             getNtaAt =
-              acc: host: name: group: key: attrName:
+              acc: host:
+              let
+                # The host's product, read once per reader rather than once per child read.
+                product = acc.get host ntaChannel;
+              in
+              name: group: key: attrName:
               if !round.open && runAttributes ? ${attrName} && !(isQuotientAttr attrName) then
-                (ntaMember "`getNta`" (acc.get host ntaChannel) host name group key)._eval.${attrName}
+                (ntaMember "`getNta`" product host name group key)._eval.${attrName}
               else
                 let
-                  child = ntaMember "`getNta`" (acc.get host ntaChannel) host name group key;
+                  child = ntaMember "`getNta`" product host name group key;
                 in
                 if !(runAttributes ? ${attrName}) then
                   builtins.seq child (
@@ -1182,6 +1215,9 @@ let
                 circularDemand nodeId attrName (fn // { step = bindStepReader declaredRelation fn.step; })
               else if builtins.isAttrs fn then
                 throw "gen-scope: attribute '${attrName}' on '${nodeId}' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error"
+              else if acc != null && declaredRelation == null then
+                # An `nta` child's own record reader, with no declared relation to bind onto it.
+                fn acc nodeId
               else
                 fn (
                   if acc != null then
@@ -1892,8 +1928,12 @@ let
 
             # `effectiveAttributes` yields one node-independent attribute set, so this test is total
             # over every attribute an accessor can name.
+            # `isQuotientDecl` at a declared name, read in place: a missing name, a function and a
+            # malformed carrier each select to `null`, so no argument is built per read.
             isQuotientAttr =
-              attrName: (runAttributes ? ${attrName}) && isQuotientDecl runAttributes.${attrName};
+              attrName:
+              (runAttributes.${attrName}.kind or null) == "circular"
+              && (runAttributes.${attrName}.carrier.quotient or null) == true;
 
             # The demand both accessors delegate to, kept off the record: a third published demand
             # form would stand outside the two-form contract. `who` names the entry the caller used.
@@ -2356,8 +2396,11 @@ let
               tagRepresentative (go 0 decl.carrier.bottom)
             else
               go 0 decl.carrier.bottom;
+          # `isQuotientDecl` at a declared name, read in place (as in `eval`).
           isQuotientAttr =
-            attrName: (runAttributes ? ${attrName}) && isQuotientDecl runAttributes.${attrName};
+            attrName:
+            (runAttributes.${attrName}.kind or null) == "circular"
+            && (runAttributes.${attrName}.carrier.quotient or null) == true;
         in
         {
           inherit getTraced;
