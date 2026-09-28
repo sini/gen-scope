@@ -1662,16 +1662,9 @@
       importEdgesOf = _id: entry: entry.decls.__edges.I or [ ];
       parentOf = _id: entry: entry.parent;
       domGraph = genGraph.fromRegistry {
-        registry = nodes;
-        edges = importEdgesOf;
         parent = parentOf;
-      };
-      mkImportGraph =
-        nodeMap:
-        genGraph.fromRegistry {
-          registry = nodeMap;
-          edges = importEdgesOf;
-        };
+      } importEdgesOf nodes;
+      mkImportGraph = nodeMap: genGraph.fromRegistry { } importEdgesOf nodeMap;
       importNodes = genScope.buildRoots {
         importGraph = genScope.overlays [
           (genScope.vertices [
@@ -1743,10 +1736,8 @@
               };
             };
             nestedGraph = genGraph.fromRegistry {
-              registry = (buildDomGraph nestedNodes).nodes;
-              edges = importEdgesOf;
               parent = parentOf;
-            };
+            } importEdgesOf ((buildDomGraph nestedNodes).nodes);
             parentEdges = genGraph.materializeParents nestedGraph;
           in
           builtins.length (builtins.attrNames parentEdges);
@@ -1767,7 +1758,7 @@
       };
 
       test-import-graph-dependents = {
-        expr = genGraph.dependents importGraph "web-1";
+        expr = genGraph.dependents { } importGraph "web-1";
         expected = [ "lb" ];
       };
     };

@@ -239,7 +239,7 @@ in
 
   # gen-graph queries on instance-level graph
   reachableFrom = genGraph.reachableFrom instanceNodes;
-  dependents = genGraph.dependents instanceNodes;
+  dependents = genGraph.dependents { } instanceNodes;
   impactOf = genGraph.impactOf instanceNodes;
 
   # SQL parser + engine

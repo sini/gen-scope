@@ -185,7 +185,7 @@ genGraph.cycles kindNodes      # --> [ "loadbalancer" "server" "user" ] (self-re
 genGraph.reachableFrom instanceNodes "server:web-1"
 # --> [ "datacenter:us-east-1" "environment:prod" "subnet:us-east-1.primary.web" ... ]
 
-genGraph.dependents instanceNodes "datacenter:us-east-1"
+genGraph.dependents { } instanceNodes "datacenter:us-east-1"
 # --> [ "server:web-1" "network:us-east-1.primary" ... ]
 ```
 

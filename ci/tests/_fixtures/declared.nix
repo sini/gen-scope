@@ -15,7 +15,5 @@
 { genGraph, scope }:
 rel:
 genGraph.mkDeclaredEdges (
-  builtins.mapAttrs (
-    _: ids: map (genGraph.mkNodeRef { isRegistered = id: scope.nodes ? ${id}; }) ids
-  ) rel
+  builtins.mapAttrs (_: ids: map (genGraph.mkNodeRef (id: scope.nodes ? ${id})) ids) rel
 )

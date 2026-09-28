@@ -2070,20 +2070,18 @@ let
             # than a leak — membership is a statement about the whole graph — and it is why the
             # surface exists on `eval` alone: `evalDebug` binds `allNodeIds` to a refusal, so there is
             # no authority for it to check against there.
-            structuralEdges = graph.mkEndpointProjection {
-              inherit (structural) childBearing;
-              isNode = t: builtins.elem t self.allNodeIds;
-            } self.structuralAttributes;
+            structuralEdges = graph.mkEndpointProjection structural.childBearing (
+              t: builtins.elem t self.allNodeIds
+            ) self.structuralAttributes;
 
             # The debug-mode validator for that relation, as a value, in the same seat and under the
             # same discipline as `decisionFindings` below: nothing in the production path forces it,
             # so it alters no production result. Forcing it reports every structural attribute of this
             # node whose value violates the codomain contract, and `[ ]` when none does — which is
             # what lets an assertion land on the returned message rather than on a caught throw.
-            projectionFindings = graph.mkProjectionFindings {
-              inherit (structural) childBearing;
-              isNode = t: builtins.elem t self.allNodeIds;
-            } self.structuralAttributes;
+            projectionFindings = graph.mkProjectionFindings structural.childBearing (
+              t: builtins.elem t self.allNodeIds
+            ) self.structuralAttributes;
 
             # The debug-mode validator, as a value. Nothing in the production path forces it, so it
             # alters no production result and is not a rule the plane must obey; forcing it reports
