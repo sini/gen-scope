@@ -469,13 +469,15 @@ let
     else
       shapeDefect k;
 
+  # The `!= [ ]` and `!= { }` guards below skip a pass over an empty list or key set, which holds
+  # vacuously; comparing against an empty value forces no element, so every answer is unchanged.
   shapeDefect =
     k:
     if !isString (k.name or null) then
       "carries a `name` that is not a string"
     else if !isList (k.below or null) then
       "carries a `below` that is not a list"
-    else if !(all isString k.below) then
+    else if k.below != [ ] && !(all isString k.below) then
       "carries a `below` holding a name that is not a string"
     else if !(k ? resolve) then
       "carries no `resolve` field"
@@ -492,9 +494,9 @@ let
       "carries a `resolve` that cannot be applied"
     else if !isAttrs k.spawns then
       "carries a `spawns` that is not an attribute set"
-    else if !(all (p: elem p k.below) (attrNames k.spawns)) then
+    else if k.spawns != { } && !(all (p: elem p k.below) (attrNames k.spawns)) then
       "declares a spawn outside its own `below` set"
-    else if !(all (p: callable k.spawns.${p}) (attrNames k.spawns)) then
+    else if k.spawns != { } && !(all (p: callable k.spawns.${p}) (attrNames k.spawns)) then
       "carries a spawn builder that cannot be applied"
     else if !(k ? nta) then
       "nta: carries no `nta` field"
@@ -603,7 +605,33 @@ let
     && attrNames a.spawns == attrNames b.spawns
     && attrNames a.nta == attrNames b.nta;
 
-  kindSetDefect =
+  # ADMISSION FIRST, THE REASON ONLY ON A REFUSAL. `kindSetAdmitted` decides the set
+  # `kindSetDefect'` accepts, conjunct for conjunct and in its order — every entry a kind, every
+  # entry under its own name, every resolved `below` present, then the same kind — as four `all`
+  # passes that build no list of findings; a registry it does not admit goes to `kindSetDefect'`,
+  # which builds the reason. Each pass forces only what the reason's walk forces before reaching
+  # the same conjunct, so the two agree on every registry, a throwing one included, and the answer
+  # and its message are the reason's (den-hoag-n6dh7: the door is crossed twice per evaluation).
+  kindSetAdmitted =
+    reg:
+    isAttrs reg
+    && isAttrs (reg.kinds or null)
+    && (
+      let
+        ks = reg.kinds;
+        registered = attrNames ks;
+      in
+      all (n: notAKind ks.${n} == null) registered
+      && all (n: ks.${n}.name == n) registered
+      && all (n: all (b: ks ? ${b}) (attrNames ks.${n}.belowKinds)) registered
+      && all (
+        n: all (b: sameKind ks.${b} ks.${n}.belowKinds.${b}) (attrNames ks.${n}.belowKinds)
+      ) registered
+    );
+
+  kindSetDefect = reg: if kindSetAdmitted reg then null else kindSetDefect' reg;
+
+  kindSetDefect' =
     reg:
     if !isAttrs reg then
       "received a ${typeOf reg}"
