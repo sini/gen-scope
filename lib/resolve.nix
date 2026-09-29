@@ -39,7 +39,9 @@ let
   # Shadow: merge two declaration sets, inner shadows outer (Neron §5 Def. 1).
   shadow = inner: outer: inner // prelude.filterAttrs (k: _: !(inner ? ${k})) outer;
 
-  # Resolve with specificity ordering D < I < P (Neron Fig. 2).
+  # Resolve with specificity ordering D < I < P (Neron Fig. 2). `query`'s own selector, and no longer
+  # published: the surface name `resolve` is the calculus (`calculus.nix`), and this ordering is
+  # `neron.order` there, read by mode "visible".
   resolve =
     {
       local ? null,
@@ -664,7 +666,6 @@ in
     ;
   # THE DOORS (den-hoag-7gp66 P2, R7): options first, one closed set checked when `f opts` is formed,
   # then the operands, then the protocol tail (`self id`), which stays positional and last (OQ5).
-  resolve = door.options "resolve" [ ] resolve;
   query = door.options "query" [ "dataFilter" ] query;
   queryAll = door.options "queryAll" [ "dataFilter" ] queryAll;
   queryReverse = door.options "queryReverse" [ "dataFilter" ] queryReverse;

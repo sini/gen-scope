@@ -20,8 +20,9 @@
 # an attrset has no order to carry: enumerating a label space with `attrNames` makes the order in
 # which edge graphs contribute a function of alphabetical label spelling. A list has somewhere for
 # the caller's declared order to live. It is the caller's OWN label space, open on every label
-# except `P` and `I`, which are this constructor's names for the containment and import relations
-# and are refused by name at the entry — see the reservation below.
+# except `P` and `I`, which are this constructor's names for the containment and import relations,
+# and `imports` and `parent`, the calculus's letters for them; all four are refused by name at the
+# entry — see the reservation below.
 #
 # `kindSetDefect` is `cascade.nix`'s registry type check, taken as a formal for `require-scope.nix`'s
 # reason: the test belongs with the fold and the refusal belongs at the door. This constructor owns
@@ -48,6 +49,17 @@ let
     {
       label = "I";
       relation = "the import relation, whose edges arrive as the `importGraph` argument";
+    }
+    # The calculus's two reserved LETTERS (`calculus.nix`): `imports` reads the import relation and
+    # `parent` the node's `.parent`, never an `edges-` attribute, so a lifted label spelled like
+    # either would be held under `__edges` and walked by nothing.
+    {
+      label = "imports";
+      relation = "the calculus's import letter, whose edges arrive as the `importGraph` argument";
+    }
+    {
+      label = "parent";
+      relation = "the calculus's containment letter, whose edges arrive as the `parentGraph` argument";
     }
   ];
 

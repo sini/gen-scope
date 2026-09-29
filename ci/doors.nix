@@ -49,6 +49,8 @@ let
   attributes = {
     children = _: id: if id == "root" then { inherit (roots.nodes) a; } else { };
     imports = self: id: (self.node id).decls.__edges.I or [ ];
+    # The boundary-mark floor the calculus reads (`resolve`'s G3 row); `[ ]` states none.
+    marks = _: _: [ ];
   };
   ev = S.eval { } attributes roots;
 
@@ -160,13 +162,6 @@ in
       "_seen"
       "transitive"
     ];
-    resolve.optional = [
-      "importShadowsParent"
-      "imported"
-      "inherited"
-      "local"
-      "localShadowsImport"
-    ];
     resolveClaims.optional = [ "ctx" ];
     subtypeOf.optional = [ "eq" ];
   };
@@ -188,7 +183,6 @@ in
     "query"
     "queryAll"
     "queryReverse"
-    "resolve"
     "resolveClaims"
     "subtypeOf"
   ];

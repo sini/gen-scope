@@ -66,7 +66,20 @@ let
     # the layer above and reserved here on its behalf, so the partition is partly defined by the
     # caller's attribute set. Naming it in the substrate's own vocabulary is what puts a caller's
     # boundary mark inside a rule the substrate can apply.
-    || name == "includes";
+    || name == "includes"
+    # The boundary-mark floor the calculus reads at every edge source (ADR-0026: "a structural
+    # attribute … never conditional at query time"), so a warm evaluation never serves a prior's.
+    || name == markAttribute;
+
+  # THE MARK ATTRIBUTE, bound once: `marks = self: id: [ { name; admits; } … ]`, read by
+  # `resolve` (`calculus.nix`) at the source of every edge it considers. It is structural and is
+  # NOT an edge relation: its codomain is a list of marks, not of node ids, so it is kept out of
+  # the endpoint projection (`projected`), whose contract would refuse it. It is not in
+  # `traversal-names.nix`, whose members are exactly the traversed relations and so are projected.
+  markAttribute = "marks";
+
+  # The structural names read as edge relations by `eval.nix`'s endpoint projection.
+  projected = name: structural name && name != markAttribute;
 
   # The complement over a set of names. The reuse vocabulary is this projection and nothing
   # else, so a structural name contributes nothing to what may be served — not because a guard
@@ -120,6 +133,8 @@ in
 {
   inherit
     edgePrefix
+    markAttribute
+    projected
     structural
     resolutionalNames
     childDepth

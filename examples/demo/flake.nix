@@ -366,6 +366,8 @@
           result = genScope.eval { } {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
             imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+            # The boundary-mark floor `resolve` reads at every edge source; `[ ]` states none.
+            marks = _self: _id: [ ];
           } nodes;
         in
         {
@@ -382,12 +384,19 @@
           };
           # -> { a = 1; b = 2; c = 3; }
 
-          # resolve: specificity ordering D < I < P
-          resolve-local-wins = genScope.resolve {
-            local = "local";
-            imported = "imported";
-            inherited = "inherited";
-          }; # -> "local"
+          # resolve: the one calculus, under the Neron preset — D < I < P is `neron.order`
+          # ($ < imports < parent), read by mode "visible". inner declares green, imports red from
+          # lib and inherits blue from outer; the local declaration wins.
+          resolve-local-wins =
+            (genScope.resolve (
+              genScope.neron
+              // {
+                mode = "visible";
+                dataFilter = n: n.decls.color or null;
+                groupBy = _: "color";
+              }
+            ) result "inner").single
+              "color"; # -> "green"
 
           # query: generalized combinator (van Antwerpen §2.1)
           # inner has local color=green, import color=red, parent color=blue
