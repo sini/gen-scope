@@ -4,8 +4,8 @@
 # detection (Mokhov et al., 2018). Evaluation happens exactly once per (node, attrName) —
 # including on dynamically synthesized nodes (Vogt et al., 1989). Where an attribute's value is
 # itself a function (a caller-written parameterized attribute, hand-rolled with no combinator of
-# this library's own — `paramAttr` carried that shape and was retired, R§10.1 carry note in
-# `README.md`), the memo covers the CLOSURE the declaration returns, once, same as any other
+# this library's own — `paramAttr` carried that shape and was retired, see README's "Retired:
+# paramAttr"), the memo covers the CLOSURE the declaration returns, once, same as any other
 # value; it does not extend to that closure's own applications, which are ordinary Nix function
 # calls and recompute on every call. That is a fact about function application, not an exception
 # to this claim.

@@ -626,8 +626,8 @@
               in
               local + childTotal;
 
-            # Parameterized attribute, hand-written (no per-parameter cache; see gen-scope's
-            # README, "Retired: paramAttr").
+            # Parameterized attribute, hand-written: a bare function of self id param, no
+            # combinator, no per-parameter cache — a repeated call with the same param recomputes.
             configFor =
               self: id: param:
               let
