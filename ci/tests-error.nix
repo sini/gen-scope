@@ -3153,6 +3153,56 @@ in
           );
         };
       };
+      # C1: a spawn builder choosing its child's kind value, refused beside the builder `type` arm,
+      # whether or not the produced kind declares one (it was admitted, or silently overwritten).
+      test-C1-a-spawn-builder-carrying-a-kind-value-is-refused-by-name = {
+        expr =
+          (genScope.eval { } { children = _self: _id: { }; } (
+            genScope.buildRoots {
+              parentGraph = genScope.vertex "a";
+              types.a = "host";
+              kinds = mkKinds [
+                (mkKind { } "svc")
+                (mkKind {
+                  below = [ "svc" ];
+                  spawns.svc = _self: id: {
+                    kid = {
+                      id = "kid";
+                      parent = id;
+                      decls = { };
+                      kindValue = valueOf "host" "host:b";
+                    };
+                  };
+                } "host")
+              ];
+            }
+          )).get
+            "a"
+            "derived-children";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: kind 'host' spawns 'svc' and its builder returned a child 'kid' carrying its own `kindValue`. A spawn does not choose its child's kind value any more than its kind: the value is the one the produced kind declares (`mkKind { kindValue = …; }`), stamped by the substrate with its `type` — a value chosen while the spawn fires is one no kind declared. Drop the field.";
+        };
+      };
+      # C2: a hand-built node of registered `host` carrying a value `host` does not declare.
+      test-C2-eval-refuses-a-node-whose-kind-value-contradicts-its-kind = {
+        expr =
+          (genScope.eval { } { children = _self: _id: { }; } {
+            kinds = mkKinds [ (mkKind { kindValue = valueOf "host" "host:a"; } "host") ];
+            nodeOrder = [ "a" ];
+            nodes.a = {
+              id = "a";
+              type = "host";
+              parent = null;
+              decls = { };
+              kindValue = valueOf "host" "host:b";
+            };
+          }).allNodeIds;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.eval: node 'a' of kind 'host' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
+        };
+      };
       # c11: a merge filing under `host` a kind whose value differs from the one `leaf` resolved.
       test-c11-buildRoots-refuses-a-merge-whose-kind-values-differ = {
         expr = buildWith {

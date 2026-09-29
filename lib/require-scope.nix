@@ -42,6 +42,17 @@
 # `buildRoots`' own default is `null`, callers that declare no types pass no registry, and a
 # hand-built record need not carry the field — a node set with no kinds has nothing to spawn and
 # therefore nothing to bound.
+#
+# ── AND EVERY NODE'S KIND VALUE AGREES WITH ITS KIND'S (den-hoag-l0y) ──
+# A kind carries its gen-schema kind value and every node of it carries the same one; gen-select
+# matches `sel.kind` on the NODE's copy. A hand-built record whose node of registered kind K carries
+# a value K does not declare gives the node two kinds that silently disagree — the registry's and
+# the carried one — which is the registry door's own coherence defect at node grain. So it is
+# refused by name, compared by mark (a value holds functions). Decided ONCE per scope: only a
+# registry in which some kind declares a value is walked, so a scope whose kinds declare none pays
+# nothing per node. A node omitting the field is admitted (it stays kind-blind at `sel.kind`, and
+# is refused there by name); a node carrying a value in a scope whose registry declares none is the
+# node's own declaration and is admitted too.
 { prelude, kindSetDefect }:
 {
   requireScope =
@@ -56,6 +67,31 @@
       kindsMust = "gen-scope.${entry}: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it";
       kindsPass = "Mint the kinds with `mkKinds` over their declarations and pass the result.";
       badKinds = detail: throw "${kindsMust}; ${detail}. ${kindsPass}";
+
+      # A mark, or `null` for no value; `false` for a value carrying none, which equals neither.
+      markOf =
+        v:
+        if v == null then
+          null
+        else if builtins.isAttrs v && v ? __mint && v.__mint ? minted then
+          v.__mint.minted
+        else
+          false;
+      contradicting =
+        if !(prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds)) then
+          [ ]
+        else
+          builtins.filter (
+            id:
+            let
+              n = scope.nodes.${id};
+              t = n.type or null;
+            in
+            n ? kindValue
+            && builtins.isString t
+            && kinds.kinds ? ${t}
+            && markOf n.kindValue != markOf kinds.kinds.${t}.kindValue
+          ) (builtins.attrNames scope.nodes);
     in
     if !(builtins.isAttrs scope) then
       bad "received a ${builtins.typeOf scope}"
@@ -67,8 +103,14 @@
       bad "received an attrset with no `nodeOrder`"
     else if !(builtins.isList scope.nodeOrder) then
       bad "received an attrset whose `nodeOrder` is a ${builtins.typeOf scope.nodeOrder}, not a list"
-    else if kindsDefect == null then
+    else if kindsDefect != null then
+      badKinds kindsDefect
+    else if kinds == null || contradicting == [ ] then
       scope
     else
-      badKinds kindsDefect;
+      let
+        id = builtins.head contradicting;
+        t = scope.nodes.${id}.type;
+      in
+      throw "gen-scope.${entry}: node '${id}' of kind '${t}' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
 }

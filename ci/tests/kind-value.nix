@@ -43,6 +43,24 @@ let
     };
   };
 
+  # Hand-built records crossing the eval door: coherent with the registry, omitting the field, and
+  # carrying a value in a scope whose registry declares none.
+  handBuilt =
+    kinds: node:
+    (S.eval { } { children = _self: _id: { }; } {
+      inherit kinds;
+      nodeOrder = [ "a" ];
+      nodes.a = {
+        id = "a";
+        type = "host";
+        parent = null;
+        decls = { };
+      }
+      // node;
+    }).allNodeIds;
+  valuedReg = S.mkKinds [ (S.mkKind { kindValue = hostA; } "host") ];
+  bareReg = S.mkKinds [ (S.mkKind { } "host") ];
+
   # `host` spawns `leaf` children; both kinds declare a value.
   spawnScope = S.buildRoots {
     parentGraph = S.vertex "a";
@@ -108,6 +126,21 @@ in
             types.a = "host";
             kinds = mergedCoherent;
           }).nodes;
+      expected = [ "a" ];
+    };
+    # C2's admitting half: a hand-built node carrying its kind's own value, one omitting the field
+    # (kind-blind, refused by name at `sel.kind`), and one carrying a value in a scope whose registry
+    # declares none (the node's own declaration, authoritative there).
+    test-C2-a-hand-built-node-carrying-its-kinds-value-is-admitted = {
+      expr = handBuilt valuedReg { kindValue = hostA; };
+      expected = [ "a" ];
+    };
+    test-C2-a-hand-built-node-omitting-the-value-is-admitted = {
+      expr = handBuilt valuedReg { };
+      expected = [ "a" ];
+    };
+    test-C2-a-node-carried-value-in-a-scope-declaring-none-is-admitted = {
+      expr = handBuilt bareReg { kindValue = hostA; };
       expected = [ "a" ];
     };
     # c14: a spawned child carries its PRODUCED kind's value, stamped with its `type`.
