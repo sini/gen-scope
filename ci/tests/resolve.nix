@@ -33,6 +33,58 @@ let
           roots;
     in
     result.get id attrName;
+
+  # The retired D < I < P selector's cells, read through the calculus: `c` declares the local value,
+  # `m` (which `c` imports) the imported one and `p` (`c`'s parent) the inherited one. The selection
+  # is `neron.order` under mode "visible", and the answer is the group's `single`.
+  selected =
+    {
+      local ? null,
+      imported ? null,
+      inherited ? null,
+      order ? genScope.neron.order,
+    }:
+    let
+      roots = genScope.buildRoots {
+        parentGraph = genScope.overlays [
+          (genScope.edge {
+            from = "c";
+            to = "p";
+          })
+          (genScope.vertex "m")
+        ];
+        importGraph = genScope.edge {
+          from = "c";
+          to = "m";
+        };
+        decls = {
+          c.x = local;
+          m.x = imported;
+          p.x = inherited;
+        };
+      };
+      ev =
+        genScope.eval
+          {
+            parseParent = i: (roots.nodes.${i} or { parent = null; }).parent;
+          }
+          {
+            children = _self: i: lib.filterAttrs (_: n: n.parent == i) roots.nodes;
+            imports = self: i: (self.node i).decls.__edges.I or [ ];
+            marks = _: _: [ ];
+          }
+          roots;
+    in
+    (resolve (
+      genScope.neron
+      // {
+        mode = "visible";
+        inherit order;
+        dataFilter = n: n.decls.x or null;
+        groupBy = _: "x";
+      }
+    ) ev "c").single
+      "x";
 in
 {
   flake.tests."resolve" = {
@@ -108,7 +160,7 @@ in
     };
 
     test-resolve-local-wins = {
-      expr = resolve {
+      expr = selected {
         local = "L";
         imported = "I";
         inherited = "P";
@@ -117,8 +169,7 @@ in
     };
 
     test-resolve-imported-wins-over-inherited = {
-      expr = resolve {
-        local = null;
+      expr = selected {
         imported = "I";
         inherited = "P";
       };
@@ -126,30 +177,35 @@ in
     };
 
     test-resolve-inherited-fallback = {
-      expr = resolve {
-        local = null;
-        imported = null;
+      expr = selected {
         inherited = "P";
       };
       expected = "P";
     };
 
     test-resolve-all-null = {
-      expr = resolve {
-        local = null;
-        imported = null;
-        inherited = null;
-      };
+      expr = selected { };
       expected = null;
     };
 
     test-resolve-specificity-override = {
-      expr = resolve {
-        local = null;
+      # The retired selector's `localShadowsImport = false` row as an order: `imports` < `$` <
+      # `parent`, through an empty middle rank.
+      expr = selected {
         imported = "I";
         inherited = "P";
-        localShadowsImport = false;
-        importShadowsParent = false;
+        order = genScope.labelOrder {
+          alphabet = [
+            "parent"
+            "imports"
+          ];
+          layers = [
+            [ "imports" ]
+            [ ]
+            [ "parent" ]
+          ];
+          endOfPath = 1;
+        };
       };
       expected = "I";
     };

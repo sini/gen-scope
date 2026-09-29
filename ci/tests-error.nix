@@ -3881,4 +3881,98 @@ in
     // builtins.foldl' (acc: name: acc // recordCells name F.records.${name}) { } (
       builtins.attrNames F.records
     );
+
+  # ── THE CALCULUS'S REFUSAL TABLE (den-hoag-gayc build spec §2.4), each row's text to the byte ──
+  # The plants are `tests/_fixtures/calculus-refusals.nix`'s, shared with `tests/calculus.nix`, which
+  # holds catchability and the unplanted twins. Row 18 is the edge read's OWN text: the calculus
+  # never catches an edge read, so what reaches the caller is what the attribute threw.
+  config.flake.testsError.calculus-refusals =
+    let
+      R = import ./tests/_fixtures/calculus-refusals.nix { inherit lib genScope; };
+      pin = row: msg: {
+        expr = builtins.deepSeq R.${row}.plant R.${row}.plant;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly msg;
+        };
+      };
+    in
+    lib.mapAttrs'
+      (row: msg: {
+        name = "test-${row}";
+        value = pin row msg;
+      })
+      {
+        "row1-malformed-expression" = ''gen-scope.regex.parse: expected a label or '(' (in "a (")'';
+        "row2-longer-than-maxLength" =
+          ''gen-scope.regex.parse: pattern length 5 exceeds the stated cap of 3 characters; past it the parser's recursion meets the evaluator's call-depth ceiling, an abort tryEval cannot catch (lower the cap with parseWith { maxLength; } when calling from deep in a stack) (in "a b a")'';
+        "row3-unknown-wellFormed-option" =
+          "gen-scope.wellFormed: 'depth' is not an option of this door; the options are closed (accepted: 'alphabet', 'expression', 'maxLength') (in prelude.checkOptions)";
+        "row4-not-a-constructor-term" =
+          "gen-scope.regex: this value was not built by the regex constructors (eps, empty, any, lit, seq, alt, star, opt, plus, deriv, parse), so it has no canonical key";
+        "row5-duplicate-letter" = "gen-scope.labelOrder: alphabet lists the letter 'a' more than once";
+        "row5-letter-not-a-string" =
+          "gen-scope.wellFormed: alphabet carries a int where a letter (a string) belongs";
+        "row5-letter-outside-the-alphabet" =
+          ''gen-scope.wellFormed: the expression names 'c', which is not a letter of the alphabet (["a","b"]); a path expression ranges over L and a name outside it would match nothing and say nothing'';
+        "row5-reserved-letter" =
+          "gen-scope.wellFormed: alphabet carries the reserved letter '$' — `_` is the any-label wildcard of the path-expression grammar and `$` the extended label marking the end of a path (van Antwerpen 2018 Fig. 1); neither can also name an edge";
+        "row7-endOfPath-not-an-int" =
+          "gen-scope.labelOrder: endOfPath must be an int; it is the rank of the extended label `$` and decides whether stopping outranks continuing";
+        "row7-foreign-letter" =
+          ''gen-scope.labelOrder: layers rank 'c', which is not a letter of the alphabet (["a","b"])'';
+        "row7-label-outside-L-hat" = ''gen-scope.labelOrder: 'c' is not a label of L̂ (["a","b"], or `$`)'';
+        "row7-layers-not-a-list-of-lists" =
+          "gen-scope.labelOrder: layers must be a list of lists — each inner list is one rank, and two letters sharing a rank are incomparable, which is how a strict PARTIAL order is declared";
+        "row7-unranked-letter" =
+          "gen-scope.labelOrder: letter 'b' is not ranked; the label order is total over the alphabet, and an unranked letter would otherwise take a default rank nobody declared";
+        "row8-dataFilter-missing" =
+          "gen-scope.resolve: required field 'dataFilter' is missing (required: 'wf', 'dataFilter') (in prelude.checkRequired)";
+        "row8-wf-missing" =
+          "gen-scope.resolve: required field 'wf' is missing (required: 'wf', 'dataFilter') (in prelude.checkRequired)";
+        "row9-visible-without-groupBy" =
+          "gen-scope.resolve: groupBy is required and is never defaulted (den-hoag-l7af / ADR-0024 ruling 3); a caller wanting the per-node reading states `groupBy = ans: ans.node;` explicitly";
+        "row10-groupBy-outside-visible" =
+          ''gen-scope.resolve: `groupBy` is read only by mode "visible", and the mode is "witnesses"'';
+        "row10-order-outside-visible" =
+          ''gen-scope.resolve: `order` is read only by mode "visible", and the mode is "reachable"'';
+        "row10-unknown-mode" =
+          ''gen-scope.resolve: unknown mode "all" (one of ["reachable","witnesses","visible"])'';
+        "row10-unknown-option" =
+          "gen-scope.resolve: 'follow' is not an option of this door; the options are closed (accepted: 'wf', 'dataFilter', 'mode', 'order', 'groupBy', 'bound') (in prelude.checkOptions)";
+        "row10-visible-without-order" =
+          ''gen-scope.resolve: mode "visible" requires `order`, a `labelOrder` value (<l over the alphabet, with `$`'s rank)'';
+        "row11-admits-not-a-bool" =
+          ''gen-scope.resolve: a mark's admits at node "a" on the label "e" returned a int, not a bool'';
+        "row11-admits-not-callable" =
+          ''gen-scope.resolve: a mark's admits (`marks` of node "a") is a int, not a function returning a bool'';
+        "row11-dataFilter-not-callable" =
+          "gen-scope.resolve: dataFilter is a int, not a function returning a datum or null";
+        "row11-groupBy-not-a-string" =
+          ''gen-scope.resolve: groupBy on the answer at "b" returned a int, not a string, the answer's competition key'';
+        "row11-groupBy-not-callable" =
+          "gen-scope.resolve: groupBy is a string, not a function returning a string, the answer's competition key";
+        "row12-from-not-a-node-id" = "gen-scope.resolve: got int, expected a node identifier (a string)";
+        "row13-edge-attribute-not-a-list" =
+          ''gen-scope.resolve: node "a", letter 'e': the edge attribute is a string, not a list of node ids'';
+        "row13-edge-target-not-a-string" =
+          ''gen-scope.resolve: node "a", letter 'e': an edge target is a int, not a node id (a string)'';
+        "row14-mark-with-no-admits" =
+          ''gen-scope.resolve: the `marks` of node "a" carry a mark with no admits, not a mark { name; admits; }'';
+        "row14-mark-with-no-name" =
+          ''gen-scope.resolve: node "a" carries a mark with no name; `withheld` reports a mark by its name'';
+        "row14-marks-not-a-list" =
+          ''gen-scope.resolve: the `marks` of node "a" is a set, not a list of marks { name; admits; }'';
+        "row15-ambiguity" =
+          ''gen-scope.resolve: group "x" has more than one visible declaration, from ["b","c"]. That is an AMBIGUITY in the sense of Neron et al. 2015 (Fig. 3 rule (V); §2.2 Duplicate Declarations) — two declaration occurrences for one read. `single` answers with one declaration or REFUSES; read the group's `answers` to see every one'';
+        "row16-parent-cycle" =
+          ''gen-scope.resolve: node "a" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
+        "row18-edge-read-refusal-propagates" = "planted: the edge read's own refusal";
+        "row19-no-marks" =
+          "gen-scope: node 'a' is read for its boundary marks, but this evaluation declares no `marks` attribute — a scope that declares no boundary mark; `_: _: [ ]` states none. An absent mark is never read as an open floor (ADR-0026).";
+        "row20-undeclared-letter" =
+          "gen-scope: node 'a' is read for the edges of letter 'l1', but this evaluation declares no `edges-l1` attribute; an undeclared letter is refused rather than read as no edges (declare `edges-l1`, answering `[ ]` where a node has none).";
+        "row21-reserved-lifted-label" =
+          ''gen-scope.buildRoots: `edgeGraphs` carries reserved label(s) ["imports"]: 'imports' is the calculus's import letter, whose edges arrive as the `importGraph` argument. A reserved label is this library's own name for a relation it privileges, and `edgeGraphs` does not extend to it — supply those edges as the argument named, or relabel them.'';
+      };
 }

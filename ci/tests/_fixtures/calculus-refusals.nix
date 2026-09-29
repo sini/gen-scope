@@ -1,0 +1,418 @@
+# The calculus's refusal table (den-hoag-gayc build spec §2.4), one planted value per row and arm,
+# each beside its unplanted twin. `ci/tests/calculus.nix` reads catchability (`tryEval` false on the
+# plant, the twin answers); `ci/tests-error.nix` pins the text. Row 6 is dropped (D8); row 17 is the
+# engine's ADR-0033 guard, unchanged, and is pinned by that guard's own cells.
+{ lib, genScope }:
+let
+  S = genScope;
+  ab = [
+    "a"
+    "b"
+  ];
+  wf =
+    expression:
+    S.wellFormed {
+      alphabet = ab;
+      inherit expression;
+    };
+  lo =
+    layers: endOfPath:
+    S.labelOrder {
+      alphabet = ab;
+      inherit layers endOfPath;
+    };
+  goodOrder = lo [
+    [ "a" ]
+    [ "b" ]
+  ] (-1);
+
+  # A lifted scope over `a`, `b`, `c`: `a —e→ b`; `b` and `c` declare `x`. Every attribute is
+  # overridable, and `null` leaves it undeclared.
+  scope =
+    attrs:
+    let
+      roots = S.buildRoots {
+        parentGraph = S.vertices (ab ++ [ "c" ]);
+        decls = {
+          b.x = "vb";
+          c.x = "vc";
+        };
+      };
+    in
+    S.eval { parseParent = _: null; } (lib.filterAttrs (_: v: v != null) (
+      {
+        children = _: _: { };
+        imports = _: _: [ ];
+        marks = _: _: [ ];
+        edges-e = _: id: if id == "a" then [ "b" ] else [ ];
+      }
+      // attrs
+    )) roots;
+  ok = scope { };
+  e = S.wellFormed {
+    alphabet = [ "e" ];
+    expression = "e?";
+  };
+  x = n: n.decls.x or null;
+  go =
+    opts: ev:
+    (S.resolve (
+      {
+        wf = e;
+        dataFilter = x;
+      }
+      // opts
+    ) ev "a").answers;
+  vis = {
+    mode = "visible";
+    order = S.labelOrder {
+      alphabet = [ "e" ];
+      layers = [ [ "e" ] ];
+      endOfPath = -1;
+    };
+    groupBy = _: "x";
+  };
+  mark = m: scope { marks = _: id: if id == "a" then m else [ ]; };
+  # `a` reaches `b` by `e` and `c` by `imports`, both declaring `x`, at one rank.
+  twoDecls = scope { imports = _: id: if id == "a" then [ "c" ] else [ ]; };
+in
+{
+  # ── row: { plant; twin; } ──
+  row1-malformed-expression = {
+    plant = wf "a (";
+    twin = wf "a (b)";
+  };
+  row2-longer-than-maxLength = {
+    plant = S.wellFormed {
+      alphabet = ab;
+      expression = "a b a";
+      maxLength = 3;
+    };
+    twin = S.wellFormed {
+      alphabet = ab;
+      expression = "a b";
+      maxLength = 3;
+    };
+  };
+  row3-unknown-wellFormed-option = {
+    plant = S.wellFormed {
+      alphabet = ab;
+      expression = "a";
+      depth = 1;
+    };
+    twin = wf "a";
+  };
+  row4-not-a-constructor-term = {
+    plant = wf {
+      t = "lit";
+      l = "a";
+    };
+    twin = wf (S.wfl.lit "a");
+  };
+  row5-letter-outside-the-alphabet = {
+    plant = wf "a c";
+    twin = wf "a b";
+  };
+  row5-letter-not-a-string = {
+    plant = S.wellFormed {
+      alphabet = [ 1 ];
+      expression = "a";
+    };
+    twin = wf "a";
+  };
+  row5-reserved-letter = {
+    plant = S.wellFormed {
+      alphabet = [ "$" ];
+      expression = "a";
+    };
+    twin = wf "a";
+  };
+  row5-duplicate-letter = {
+    plant = S.labelOrder {
+      alphabet = [
+        "a"
+        "a"
+      ];
+      layers = [ [ "a" ] ];
+      endOfPath = -1;
+    };
+    twin = goodOrder;
+  };
+  row7-unranked-letter = {
+    plant = lo [ [ "a" ] ] (-1);
+    twin = goodOrder;
+  };
+  row7-foreign-letter = {
+    plant = lo [
+      [ "a" ]
+      [
+        "b"
+        "c"
+      ]
+    ] (-1);
+    twin = goodOrder;
+  };
+  row7-layers-not-a-list-of-lists = {
+    plant = lo [ "a" "b" ] (-1);
+    twin = goodOrder;
+  };
+  row7-endOfPath-not-an-int = {
+    plant = lo [
+      [ "a" ]
+      [ "b" ]
+    ] "last";
+    twin = goodOrder;
+  };
+  row7-label-outside-L-hat = {
+    plant = goodOrder.pathPrecedes [ { label = "c"; } ] [ ];
+    twin = goodOrder.pathPrecedes [ { label = "a"; } ] [ ];
+  };
+  row8-wf-missing = {
+    plant = S.resolve { dataFilter = x; } ok "a";
+    twin = go { } ok;
+  };
+  row8-dataFilter-missing = {
+    plant = S.resolve { wf = e; } ok "a";
+    twin = go { } ok;
+  };
+  row9-visible-without-groupBy = {
+    plant = go (builtins.removeAttrs vis [ "groupBy" ]) ok;
+    twin = go vis ok;
+  };
+  row10-order-outside-visible = {
+    plant = go { inherit (vis) order; } ok;
+    twin = go { } ok;
+  };
+  row10-groupBy-outside-visible = {
+    plant = go {
+      mode = "witnesses";
+      inherit (vis) groupBy;
+    } ok;
+    twin = go { mode = "witnesses"; } ok;
+  };
+  row10-visible-without-order = {
+    plant = go (builtins.removeAttrs vis [ "order" ]) ok;
+    twin = go vis ok;
+  };
+  row10-unknown-mode = {
+    plant = go { mode = "all"; } ok;
+    twin = go { mode = "reachable"; } ok;
+  };
+  row10-unknown-option = {
+    plant = go { follow = 1; } ok;
+    twin = go { } ok;
+  };
+  row11-dataFilter-not-callable = {
+    plant = go { dataFilter = 1; } ok;
+    twin = go { } ok;
+  };
+  row11-groupBy-not-callable = {
+    plant = go (vis // { groupBy = "x"; }) ok;
+    twin = go vis ok;
+  };
+  row11-groupBy-not-a-string = {
+    plant = go (vis // { groupBy = _: 1; }) ok;
+    twin = go vis ok;
+  };
+  row11-admits-not-callable = {
+    plant = go { } (mark [
+      {
+        name = "m";
+        admits = 1;
+      }
+    ]);
+    twin = go { } (mark [
+      {
+        name = "m";
+        admits = _: true;
+      }
+    ]);
+  };
+  row11-admits-not-a-bool = {
+    plant = go { } (mark [
+      {
+        name = "m";
+        admits = _: 1;
+      }
+    ]);
+    twin = go { } (mark [
+      {
+        name = "m";
+        admits = _: true;
+      }
+    ]);
+  };
+  row12-from-not-a-node-id = {
+    plant = S.resolve {
+      wf = e;
+      dataFilter = x;
+    } ok 1;
+    twin = go { } ok;
+  };
+  row13-edge-attribute-not-a-list = {
+    plant = go { } (scope {
+      edges-e = _: _: "b";
+    });
+    twin = go { } ok;
+  };
+  row13-edge-target-not-a-string = {
+    plant = go { } (scope {
+      edges-e = _: id: if id == "a" then [ 1 ] else [ ];
+    });
+    twin = go { } ok;
+  };
+  row14-marks-not-a-list = {
+    plant = go { } (mark { });
+    twin = go { } (mark [ ]);
+  };
+  row14-mark-with-no-admits = {
+    plant = go { } (mark [ { name = "m"; } ]);
+    twin = go { } (mark [ ]);
+  };
+  row14-mark-with-no-name = {
+    plant =
+      (S.resolve {
+        wf = e;
+        dataFilter = x;
+      } (mark [ { admits = _: false; } ]) "a").withheld
+        "a";
+    twin =
+      (S.resolve
+        {
+          wf = e;
+          dataFilter = x;
+        }
+        (mark [
+          {
+            name = "m";
+            admits = _: false;
+          }
+        ])
+        "a"
+      ).withheld
+        "a";
+  };
+  row15-ambiguity = {
+    plant =
+      (S.resolve {
+        wf = S.wellFormed {
+          alphabet = [
+            "e"
+            "imports"
+          ];
+          expression = "e | imports";
+        };
+        dataFilter = x;
+        mode = "visible";
+        order = S.labelOrder {
+          alphabet = [
+            "e"
+            "imports"
+          ];
+          layers = [
+            [
+              "e"
+              "imports"
+            ]
+          ];
+          endOfPath = -1;
+        };
+        groupBy = _: "x";
+      } twoDecls "a").single
+        "x";
+    twin =
+      (S.resolve (
+        vis
+        // {
+          wf = e;
+          dataFilter = x;
+        }
+      ) ok "a").single
+        "x";
+  };
+  row16-parent-cycle = {
+    plant =
+      let
+        roots = S.buildRoots {
+          parentGraph = S.overlays [
+            (S.edge {
+              from = "a";
+              to = "b";
+            })
+            (S.edge {
+              from = "b";
+              to = "a";
+            })
+          ];
+        };
+      in
+      (S.resolve
+        {
+          wf = S.neron.wf;
+          dataFilter = x;
+        }
+        (S.eval { parseParent = id: roots.nodes.${id}.parent; } {
+          children = _: _: { };
+          imports = _: _: [ ];
+          marks = _: _: [ ];
+        } roots)
+        "a"
+      ).answers;
+    twin =
+      (S.resolve {
+        inherit (S.neron) wf;
+        dataFilter = x;
+      } ok "a").answers;
+  };
+  row18-edge-read-refusal-propagates = {
+    plant = go { } (scope {
+      edges-e = _: _: throw "planted: the edge read's own refusal";
+    });
+    twin = go { } ok;
+  };
+  row19-no-marks = {
+    plant = go { } (scope {
+      marks = null;
+    });
+    twin = go { } ok;
+  };
+  row20-undeclared-letter = {
+    plant =
+      (S.resolve {
+        wf = S.wellFormed {
+          alphabet = [ "l1" ];
+          expression = "l1";
+        };
+        dataFilter = x;
+      } ok "a").answers;
+    twin = go { } ok;
+  };
+  row21-reserved-lifted-label = {
+    plant =
+      (S.buildRoots {
+        parentGraph = S.vertices ab;
+        edgeGraphs = [
+          {
+            label = "imports";
+            graph = S.edge {
+              from = "a";
+              to = "b";
+            };
+          }
+        ];
+      }).nodes;
+    twin =
+      (S.buildRoots {
+        parentGraph = S.vertices ab;
+        edgeGraphs = [
+          {
+            label = "peer";
+            graph = S.edge {
+              from = "a";
+              to = "b";
+            };
+          }
+        ];
+      }).nodes;
+  };
+}
