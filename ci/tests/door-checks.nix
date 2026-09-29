@@ -322,16 +322,22 @@ in
       expr = builtins.mapAttrs (n: _: applied S.${n} 1) F.options;
       expected = each (_: false) F.options;
     };
-    # D3: the contract is published as data, and the functor-aware reader reads the same map.
+    # D3: the contract is published as data, and the functor-aware reader reads the same map. The
+    # whole record is compared, `name` included: a two-operand door publishes its contract off a
+    # prelude door it builds only when read, so a wrapper that renamed or widened it would otherwise
+    # pass here.
     test-every-options-step-publishes-the-row-as-its-contract = {
       expr = builtins.mapAttrs (n: _: {
-        inherit (S.${n}.__contract) optional required open;
+        contract = S.${n}.__contract;
         functionArgs = genPreludeLib.functionArgs S.${n};
       }) F.options;
-      expected = each (d: {
-        inherit (d) optional;
-        required = [ ];
-        open = false;
+      expected = builtins.mapAttrs (n: d: {
+        contract = {
+          name = "gen-scope.${n}";
+          inherit (d) optional;
+          required = [ ];
+          open = false;
+        };
         functionArgs = flag true d.optional;
       }) F.options;
     };

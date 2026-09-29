@@ -68,16 +68,27 @@ in
     else if n == 1 then
       d (o: x: impl (o // { ${a0} = x; }))
     else if n == 2 then
-      d (
-        o: x: y:
-        impl (
-          o
-          // {
-            ${a0} = x;
-            ${a1} = y;
-          }
-        )
-      )
+      # `{ }` is answered with `body { }` without building the prelude door, which is that door's own
+      # answer (`checkOptions _ _ { } ≡ { }`). The door is built when its contract is read or a
+      # non-empty set is checked; its spec cannot be refused, so deferring it defers no refusal. A
+      # one-operand door keeps the plain form: where its options are given, as at `mkKind`, the
+      # wrapper costs more than it saves.
+      let
+        body =
+          o: x: y:
+          impl (
+            o
+            // {
+              ${a0} = x;
+              ${a1} = y;
+            }
+          );
+        checked = d body;
+      in
+      {
+        inherit (checked) __contract __functionArgs;
+        __functor = _: o: if o == { } then body o else checked o;
+      }
     else
       throw "gen-scope door.nix: ${doorName name} takes ${toString n} positional operands; a door past two states its record instead";
 
