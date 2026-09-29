@@ -234,6 +234,7 @@ in
             {
               children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
               imports = self: id: [ ];
+              marks = _: _: [ ];
               resolved-val = inherit' { } (node: node.decls.val or null);
             }
             roots;
@@ -276,6 +277,7 @@ in
             {
               children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
               imports = self: id: [ ];
+              marks = _: _: [ ];
               resolved-val = inherit' { } (node: node.decls.val or null);
             }
             roots;

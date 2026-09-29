@@ -1,13 +1,43 @@
 { lib, genScope, ... }:
 let
   inherit (genScope)
-    query
-    queryAll
     queryReverse
-    ambiguous
     collect
     collectByType
     ;
+
+  # The retired `query`, `queryAll` and `ambiguous`, read through the one calculus (den-hoag-gayc
+  # U1c): Néron's D < I < P is `neron` under mode "visible"; the identify-all reading is mode
+  # "witnesses"; an ambiguity is more than one DISTINCT declaring node among the witnesses (D10).
+  transitiveWf = genScope.wellFormed {
+    alphabet = [
+      "parent"
+      "imports"
+    ];
+    expression = "parent* imports*";
+  };
+  query =
+    wf: dataFilter: self: id:
+    (genScope.resolve {
+      inherit wf dataFilter;
+      inherit (genScope.neron) order;
+      mode = "visible";
+      groupBy = _: "val";
+    } self id).single
+      "val";
+  witnesses =
+    dataFilter: self: id:
+    (genScope.resolve {
+      inherit (genScope.neron) wf;
+      inherit dataFilter;
+      mode = "witnesses";
+    } self id).answers;
+  queryAll =
+    dataFilter: self: id:
+    map (a: a.value) (witnesses dataFilter self id);
+  ambiguous =
+    dataFilter: self: id:
+    builtins.length (lib.unique (map (a: a.node) (witnesses dataFilter self id))) > 1;
 
   # Graph: a imports b, b imports c. Parent: a → root.
   roots = genScope.buildRoots {
@@ -49,7 +79,8 @@ let
       {
         children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
         imports = self: id: (self.node id).decls.__edges.I or [ ];
-        resolved = query { } (node: node.decls.val or null);
+        marks = _: _: [ ];
+        resolved = query genScope.neron.wf (node: node.decls.val or null);
       }
       roots;
 
@@ -61,9 +92,8 @@ let
       {
         children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
         imports = self: id: (self.node id).decls.__edges.I or [ ];
-        resolved = query {
-          transitiveImports = true;
-        } (node: node.decls.val or null);
+        marks = _: _: [ ];
+        resolved = query transitiveWf (node: node.decls.val or null);
       }
       roots;
 
@@ -75,7 +105,8 @@ let
       {
         children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
         imports = self: id: (self.node id).decls.__edges.I or [ ];
-        all-vals = queryAll { } (node: node.decls.val or null);
+        marks = _: _: [ ];
+        all-vals = queryAll (node: node.decls.val or null);
       }
       roots;
 
@@ -107,7 +138,8 @@ let
   ambResult = genScope.eval { } {
     children = self: id: { };
     imports = self: id: (self.node id).decls.__edges.I or [ ];
-    is-ambiguous = ambiguous { } (node: node.decls.val or null);
+    marks = _: _: [ ];
+    is-ambiguous = ambiguous (node: node.decls.val or null);
   } ambRoots;
 
   # Reverse (neededBy): b and c import a; d imports b.
@@ -244,17 +276,15 @@ in
       expected = "from-b";
     };
 
-    # ★ RE-EXPECTED, and the comment is rewritten rather than edited, because the one it replaces
-    # described the wrong mechanism. It read "b has val so it wins (import shadows parent)" — but
-    # D < I < P never entered it: `b` and `c` are both IMPORTED candidates at `a` under transitive
-    # imports, and the old winner was whichever of them `builtins.head` reached first. Two distinct
-    # declaring nodes for one read is an ambiguity (Neron §2.2, Duplicate Declarations), and the
-    # query now refuses by name instead of choosing by traversal order. The two cells that bracket
-    # this one read the NON-transitive `result`, where `a` sees only `b` — one candidate, one
-    # answer — so they stay green and are this cell's non-refusal control.
-    test-query-transitive-finds-deep-refuses-on-two-declarers = {
-      expr = !(builtins.tryEval (builtins.deepSeq (resultTransitive.get "a" "resolved") null)).success;
-      expected = true;
+    # ★ RE-EXPECTED UNDER THE CALCULUS (den-hoag-gayc U1c, T6). `b` and `c` both declare `val`, and
+    # under transitive imports `a` reaches `b` along `imports` and `c` along `imports imports`. The
+    # retired `query` refused the pair as an AMBIGUITY; the visibility order ranks `$` before
+    # `imports`, so the one-step path is strictly more specific and `b` shadows `c`. An ambiguity is
+    # two origins in the MINIMAL set, and this minimal set has one. The two cells that bracket this
+    # one read the NON-transitive `result`, where `a` sees only `b`.
+    test-query-transitive-takes-the-nearer-of-two-declarers = {
+      expr = resultTransitive.get "a" "resolved";
+      expected = "from-b";
     };
 
     test-query-parent-fallback = {

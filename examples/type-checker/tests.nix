@@ -80,5 +80,16 @@
 
   # --- Ambiguity --------------------------------------------------
 
-  name-not-ambiguous = genScope.ambiguous { } (n: n.decls.name or null) result "NamedPoint";
+  # More than one DISTINCT declaring node among the resolutions (Neron §2.2).
+  name-not-ambiguous =
+    builtins.length (
+      lib.unique (
+        map (a: a.node)
+          (genScope.resolve {
+            inherit (genScope.neron) wf;
+            mode = "witnesses";
+            dataFilter = n: n.decls.name or null;
+          } result "NamedPoint").answers
+      )
+    ) > 1;
 }

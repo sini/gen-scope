@@ -27,7 +27,7 @@
 # itself still escapes, since a predicate over attribute names has no access to a caller's
 # literals. That residual belongs to `structural`'s stated domain and is named at `interface.nix`'s
 # facade note; it is not closed here.
-{ prelude }:
+{ prelude, calculus }:
 let
   door = import ./door.nix { inherit prelude; };
   relations = import ./traversal-names.nix;
@@ -39,198 +39,18 @@ let
   # Shadow: merge two declaration sets, inner shadows outer (Neron §5 Def. 1).
   shadow = inner: outer: inner // prelude.filterAttrs (k: _: !(inner ? ${k})) outer;
 
-  # Resolve with specificity ordering D < I < P (Neron Fig. 2). `query`'s own selector, and no longer
-  # published: the surface name `resolve` is the calculus (`calculus.nix`), and this ordering is
-  # `neron.order` there, read by mode "visible".
-  resolve =
-    {
-      local ? null,
-      imported ? null,
-      inherited ? null,
-      localShadowsImport ? true,
-      importShadowsParent ? true,
-    }:
-    if local != null && localShadowsImport then
-      local
-    else if imported != null && importShadowsParent then
-      imported
-    else if local != null then
-      local
-    else if imported != null then
-      imported
-    else
-      inherited;
-
-  # Generalized query combinator (van Antwerpen §2.1).
-  # Import edges come from self.get id relations.imports (computed attribute).
-  # _seen tracks visited scopes to prevent import self-resolution (Neron §2.4, rule X).
-  # The answer is a SINGLE declaration. An import set contributed by more than one DISTINCT node is
-  # an ambiguity (Neron §2.2, Duplicate Declarations) and refuses by name rather than being folded
-  # together or chosen from by traversal order. Refusing is this library's single-answer contract,
-  # not Neron's rule — the calculus deliberately identifies ambiguous resolutions rather than
-  # requiring their absence (§2.2), and `queryAll` is that identify-all reading (Fig. 3 rule R).
-  query =
-    {
-      dataFilter,
-      localShadowsImport ? true,
-      importShadowsParent ? true,
-      transitiveImports ? false,
-      _seen ? { },
-    }:
-    self: id:
-    let
-      node = self.node id;
-      local = dataFilter node;
-      importIds = self.get id relations.imports;
-      unseenImports = builtins.filter (iid: !(_seen ? ${iid})) importIds;
-      collectFromImport =
-        seen: importId:
-        let
-          v = dataFilter (self.node importId);
-          # Each candidate travels with the id of the node whose `dataFilter` produced it. Neron's
-          # judgements conclude at a declaration OCCURRENCE (Fig. 3, `x^D_j`) and occurrence identity
-          # is positional — §2.2, "all occurrences b_i denote the same name b at different positions"
-          # — so the contributing node is the identity the predicate below is over. The recursion
-          # needs no help: each recursive call knows its own `importId`, so a transitively-reached
-          # candidate is attributed to the node that DECLARED it, never to the direct import it was
-          # reached through.
-          direct = prelude.optional (v != null) {
-            node = importId;
-            value = v;
-          };
-          transitive =
-            if transitiveImports then
-              let
-                nextImports = self.get importId relations.imports;
-                nextUnseen = builtins.filter (iid: !(seen ? ${iid})) nextImports;
-                nextSeen = seen // {
-                  ${importId} = true;
-                };
-              in
-              prelude.concatMap (collectFromImport nextSeen) nextUnseen
-            else
-              [ ];
-        in
-        direct ++ transitive;
-      imported =
-        let
-          contributions = prelude.concatMap (collectFromImport (_seen // { ${id} = true; })) unseenImports;
-          contributors = prelude.unique (map (c: c.node) contributions);
-        in
-        # AMBIGUITY IS MORE THAN ONE DISTINCT DECLARATION OCCURRENCE, NOT MORE THAN ONE DERIVATION.
-        # A node reached along several import routes — a repeated edge, a diamond — is ONE
-        # declaration reached several ways, and the seen-imports machinery exists to make those
-        # routes terminate (Neron §2.4) rather than to multiply the answer. Two distinct declaring
-        # nodes are §2.2's Duplicate Declarations, and those refuse.
-        #
-        # Distinctness is deliberately NOT value equality. Comparing candidate values would force
-        # them deeply, where the emptiness test below already forces each to WHNF and no further;
-        # the ids cost nothing, being `importIds` the filters above have forced already. Value
-        # equality would also refuse two nodes carrying the same function, which Nix compares as
-        # unequal without erroring.
-        if contributions == [ ] then
-          null
-        else if builtins.length contributors > 1 then
-          throw "gen-scope: node '${id}' imports more than one declaration of the queried datum, from ${builtins.toJSON contributors}. That is an AMBIGUITY in the sense of Neron et al. 2015 (Fig. 3 rule (V); §2.2 Duplicate Declarations) — two declaration occurrences for one read. This query answers with a single declaration or REFUSES; it does not choose among them, and it does not fold them together. Declare the datum on '${id}' itself (a local declaration shadows imports at the default `localShadowsImport = true`), drop one of the competing imports, or read the whole set with `queryAll`, which identifies ALL the resolutions without shadowing (Neron rule R, and §2.2's own reading) and leaves the choice at the call site."
-        else
-          # One distinct contributor means every candidate carries the same value — `dataFilter` is a
-          # pure function of the node — so this head is a projection out of a singleton equivalence
-          # class, not a tie-break among rivals.
-          (builtins.head contributions).value;
-      inherited =
-        if node.parent != null then
-          query {
-            inherit
-              dataFilter
-              localShadowsImport
-              importShadowsParent
-              transitiveImports
-              ;
-            _seen =
-              _seen
-              // builtins.listToAttrs (
-                map (iid: {
-                  name = iid;
-                  value = true;
-                }) importIds
-              );
-          } self node.parent
-        else
-          null;
-    in
-    resolve {
-      inherit
-        local
-        imported
-        inherited
-        localShadowsImport
-        importShadowsParent
-        ;
-    };
-
-  # Return all reachable results without shadowing (Neron §2.3, rule R).
-  queryAll =
-    {
-      dataFilter,
-      transitiveImports ? false,
-      _seen ? { },
-    }:
-    self: id:
-    let
-      node = self.node id;
-      local = dataFilter node;
-      importIds = self.get id relations.imports;
-      unseenImports = builtins.filter (iid: !(_seen ? ${iid})) importIds;
-      collectFromImportAll =
-        seen: importId:
-        let
-          v = dataFilter (self.node importId);
-          direct = prelude.optional (v != null) v;
-          transitive =
-            if transitiveImports then
-              let
-                nextImports = self.get importId relations.imports;
-                nextUnseen = builtins.filter (iid: !(seen ? ${iid})) nextImports;
-                nextSeen = seen // {
-                  ${importId} = true;
-                };
-              in
-              prelude.concatMap (collectFromImportAll nextSeen) nextUnseen
-            else
-              [ ];
-        in
-        direct ++ transitive;
-      importResults = prelude.concatMap (collectFromImportAll (_seen // { ${id} = true; })) unseenImports;
-      parentResults =
-        if node.parent != null then
-          queryAll {
-            inherit dataFilter transitiveImports;
-            _seen =
-              _seen
-              // builtins.listToAttrs (
-                map (iid: {
-                  name = iid;
-                  value = true;
-                }) importIds
-              );
-          } self node.parent
-        else
-          [ ];
-    in
-    (prelude.optional (local != null) local) ++ importResults ++ parentResults;
-
   # Reverse reference attribute — `neededBy`, and this library's OWN dual, claimed from no
   # paper: gather `dataFilter` over every node that IMPORTS `id` (the reverse of
   # the `includes`/imports relation). A node does not know its importers locally, so this
   # forces the full node set via `allNodes` (Tier 2, like `collect`). Gather-all, no
   # shadowing; DIRECT importers by default — set `transitive = true` to walk the
-  # reverse-import closure. Dual of `queryAll` (which walks imports forward).
+  # reverse-import closure. Dual of the forward import walk (`resolve` mode "witnesses").
   #
   # ORDER — reverse-walk DISCOVERY order. The result is emitted in the order the reverse
   # walk reaches its contributors: a pre-order depth-first traversal of the reverse-import
   # relation rooted at `id`, in which a node's importers are enumerated in MATERIALIZATION
   # order (`self.allNodeIds` — root order, then pre-order through children; see eval.nix).
-  # The duality is what fixes the choice. `queryAll`'s answer order is its traversal order,
+  # The duality is what fixes the choice. The forward walk's answer order is its traversal order,
   # taken from each node's DECLARED `imports` list; a dual whose order came instead from
   # the codepoint key order of the node set would not be the dual of a traversal-ordered
   # read, and the reverse relation carries no declared list of its own to walk. A reverse
@@ -297,46 +117,31 @@ let
     in
     prelude.concatMap (collectFrom (_seen // { ${id} = true; })) directImporters;
 
-  # Ambiguity detection (van Antwerpen §2.3).
-  # `queryAll`'s fields, named: the door built over it reads its contract off these formals.
-  ambiguous =
-    {
-      dataFilter,
-      transitiveImports ? false,
-      _seen ? { },
-    }@args:
-    self: id: builtins.length (queryAll args self id) > 1;
-
-  # Convenience: resolve single visible declaration from a scope.
-  visibleFrom =
-    dataFilter: self: nodeId:
-    query { inherit dataFilter; } self nodeId;
-
-  # Inherited attribute: walks parent chain until resolve returns non-null.
-  # _visited prevents cycles on malformed parent relations.
+  # Inherited attribute: the first non-null up the parent chain, as the one calculus reads it —
+  # `parent*` under mode "visible", one rank (`$ < parent`, so the nearest declaration shadows every
+  # farther one), one competition group, and `single`. A parent chain that returns to itself is
+  # refused by name at the calculus's `parent` read (den-hoag-gayc D9), which is the refusal this
+  # attribute always carried. Like every resolution it reads `marks` at each node it steps from.
+  inheritWf = calculus.wellFormed {
+    alphabet = [ "parent" ];
+    expression = "parent*";
+  };
+  inheritOrder = calculus.labelOrder {
+    alphabet = [ "parent" ];
+    layers = [ [ "parent" ] ];
+    endOfPath = -1;
+  };
   inherit' =
-    {
-      resolve,
-      _visited ? { },
-    }:
+    { resolve }:
     self: id:
-    let
-      node = self.node id;
-      result = resolve node;
-    in
-    if _visited ? ${id} then
-      throw "gen-scope: parent cycle detected at '${id}'"
-    else if result != null then
-      result
-    else if node.parent == null then
-      null
-    else
-      inherit' {
-        inherit resolve;
-        _visited = _visited // {
-          ${id} = true;
-        };
-      } self node.parent;
+    (calculus.resolve {
+      wf = inheritWf;
+      order = inheritOrder;
+      mode = "visible";
+      dataFilter = resolve;
+      groupBy = _: "inherited";
+    } self id).single
+      "inherited";
 
   # Inherited accumulator: walks parent chain collecting ALL values.
   #
@@ -658,7 +463,6 @@ let
 in
 {
   inherit
-    visibleFrom
     collectImports
     collectByType
     followEdge
@@ -666,11 +470,14 @@ in
     ;
   # THE DOORS (den-hoag-7gp66 P2, R7): options first, one closed set checked when `f opts` is formed,
   # then the operands, then the protocol tail (`self id`), which stays positional and last (OQ5).
-  query = door.options "query" [ "dataFilter" ] query;
-  queryAll = door.options "queryAll" [ "dataFilter" ] queryAll;
   queryReverse = door.options "queryReverse" [ "dataFilter" ] queryReverse;
-  ambiguous = door.options "ambiguous" [ "dataFilter" ] ambiguous;
   inherit' = door.options "inherit'" [ "resolve" ] inherit';
+  # RETIRED BY THE ONE CALCULUS (den-hoag-gayc D16): each name is a tombstone naming its
+  # replacement, so an un-migrated call is refused where it is written rather than answering.
+  query = throw "gen-scope: `query` is retired. Use the one resolution calculus: `(resolve (neron // { mode = \"visible\"; dataFilter = f; groupBy = _: \"k\"; }) self id).single \"k\"`. `transitiveImports = true` is `wf = wellFormed { alphabet = [ \"parent\" \"imports\" ]; expression = \"parent* imports*\"; }`, and the retired shadowing flags are a stated `order` (`labelOrder`). Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+  queryAll = throw "gen-scope: `queryAll` is retired. Use the one resolution calculus: `(resolve { inherit (neron) wf; mode = \"witnesses\"; dataFilter = f; } self id).answers`, one `{ node; value; path; state; }` per acyclic resolution path (a diamond answers twice). Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+  ambiguous = throw "gen-scope: `ambiguous` is retired. Use `length (unique (map (a: a.node) (resolve { inherit (neron) wf; mode = \"witnesses\"; dataFilter = f; } self id).answers)) > 1`: an ambiguity is more than one distinct declaring node, never one declaration reached along several paths. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+  visibleFrom = throw "gen-scope: `visibleFrom` is retired. Use `(resolve (neron // { mode = \"visible\"; dataFilter = f; groupBy = _: \"k\"; }) self id).single \"k\"`. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
   inheritAll = door.options "inheritAll" [ "extract" ] inheritAll;
   inheritSet = door.options "inheritSet" [ "extract" ] inheritSet;
   circular = door.options "circular" [ ] circular;

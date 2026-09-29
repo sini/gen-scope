@@ -29,7 +29,7 @@ distance(p3, origin)  -- OK: Point3D <: Point2D
 | Scoped relations                | van Antwerpen 2018 §2.1 | Separate type vs value namespaces via `rels`            |
 | HOAG synthesis                  | Vogt 1989               | Instantiate Pair\<Num, String> via `synthesize`         |
 | `nodesByType`                   | --                      | Find all record types including synthesized ones        |
-| `ambiguous`                     | van Antwerpen 2018      | Detect field name ambiguity in extension chains         |
+| distinct origins (`witnesses`)  | van Antwerpen 2018      | Detect field name ambiguity in extension chains         |
 
 ## Tests
 

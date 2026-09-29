@@ -50,7 +50,6 @@ let
     inherit (cascadeModule) kindSetDefect;
   };
   queries = import ./queries.nix { inherit prelude; };
-  resolve = import ./resolve.nix { inherit prelude; };
   # The one resolution calculus. It takes gen-graph's published key former applied under THIS
   # library's name, so a refusal it raises reads `gen-scope.<door>` and the key discipline is the
   # one gen-graph states, bound once rather than copied (den-hoag-gayc C7).
@@ -58,6 +57,8 @@ let
     inherit prelude;
     key = graph.key "gen-scope";
   };
+  # `inherit'` is read by the calculus, so the resolver module takes it rather than a second walker.
+  resolve = import ./resolve.nix { inherit prelude calculus; };
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
   inherit

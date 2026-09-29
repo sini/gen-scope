@@ -6,14 +6,62 @@ let
   # Helper: build the scope record from the constructor
   mkRoots = args: genScope.buildRoots args;
 
-  # Attributes that wire __edges.I as computed imports
+  # Attributes that wire __edges.I as computed imports, and state no boundary mark (the calculus
+  # reads `marks` in every resolution; `[ ]` is the declaration of none).
   withImports =
     extra:
     {
       imports = _self: id: (_self.node id).decls.__edges.I or [ ];
       children = _self: _id: { };
+      marks = _: _: [ ];
     }
     // extra;
+
+  # The retired `query` and `ambiguous`, read through the one calculus (den-hoag-gayc U1c). Néron's
+  # D < I < P is `neron` under mode "visible" with one competition group; `transitiveImports` is
+  # the WFL `parent* imports*`; a retired shadowing flag is a stated `order`. An ambiguity is more
+  # than one DISTINCT declaring node among the witnesses (D10).
+  transitiveWf = genScope.wellFormed {
+    alphabet = [
+      "parent"
+      "imports"
+    ];
+    expression = "parent* imports*";
+  };
+  visibleOf =
+    {
+      wf ? genScope.neron.wf,
+      order ? genScope.neron.order,
+    }:
+    dataFilter: self: id:
+    (genScope.resolve {
+      inherit wf order dataFilter;
+      mode = "visible";
+      groupBy = _: "x";
+    } self id).single
+      "x";
+  ambiguous =
+    dataFilter: self: id:
+    builtins.length (
+      lib.unique (
+        map (a: a.node)
+          (genScope.resolve {
+            inherit (genScope.neron) wf;
+            inherit dataFilter;
+            mode = "witnesses";
+          } self id).answers
+      )
+    ) > 1;
+  # An order over the Néron alphabet, `$` ranked by `endOfPath`.
+  orderOf =
+    layers: endOfPath:
+    genScope.labelOrder {
+      alphabet = [
+        "parent"
+        "imports"
+      ];
+      inherit layers endOfPath;
+    };
 
   # A refusal here is a named `throw`, so `tryEval` observes it and the suite REPORTS rather than
   # dying — the property that separates this idiom from the anonymous attribute-missing abort.
@@ -47,7 +95,7 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.query { } (n: n.decls.x or null) result "consumer";
+        visibleOf { } (n: n.decls.x or null) result "consumer";
       expected = "local";
     };
 
@@ -77,13 +125,16 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.query { } (n: n.decls.x or null) result "child";
+        visibleOf { } (n: n.decls.x or null) result "child";
       expected = "imported";
     };
 
-    # Override: importShadowsParent = false
+    # The retired `importShadowsParent = false` as the order its name states: `imports` and `parent`
+    # share one rank (I ∥ P), so the import and the inherited value are two origins and `single`
+    # refuses the AMBIGUITY. The retired flag was inert here and answered "imported" (den-hoag-gayc
+    # U1c flag cells); `imports` before `parent` is `neron`, the cell above.
     test-import-does-not-shadow-parent = {
-      expr =
+      expr = didRefuse (
         let
           roots = mkRoots {
             parentGraph = genScope.edge {
@@ -107,12 +158,16 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.query {
-          importShadowsParent = false;
-        } (n: n.decls.x or null) result "child";
-      # When import doesn't shadow parent, local is still null, import is found
-      # but doesn't shadow, so we check inherited — "inherited" wins
-      expected = "imported"; # import found first (before parent walk)
+        visibleOf {
+          order = orderOf [
+            [
+              "imports"
+              "parent"
+            ]
+          ] (-1);
+        } (n: n.decls.x or null) result "child"
+      );
+      expected = true;
     };
 
     # Override: localShadowsImport = false — local no longer takes priority,
@@ -137,8 +192,12 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.query {
-          localShadowsImport = false;
+        visibleOf {
+          order = orderOf [
+            [ "imports" ]
+            [ ]
+            [ "parent" ]
+          ] 1;
         } (n: n.decls.x or null) result "consumer";
       # With localShadowsImport = false: import is checked before local in priority
       expected = "imported";
@@ -163,7 +222,7 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.query { } (n: n.decls.x or null) result "child";
+        visibleOf { } (n: n.decls.x or null) result "child";
       expected = "from-parent";
     };
   };
@@ -197,9 +256,7 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.query {
-          transitiveImports = true;
-        } (n: n.decls.value or null) result "a";
+        visibleOf { wf = transitiveWf; } (n: n.decls.value or null) result "a";
       expected = "deep";
     };
 
@@ -229,7 +286,7 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.query { } (n: n.decls.value or null) result "a";
+        visibleOf { } (n: n.decls.value or null) result "a";
       expected = null; # not reachable without transitive
     };
 
@@ -260,7 +317,7 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.query { } (n: n.decls.y or null) result "a";
+        visibleOf { } (n: n.decls.y or null) result "a";
       expected = "from-b";
     };
 
@@ -289,9 +346,9 @@ in
           result = genScope.eval { } attributes roots;
           # consumer imports provider; provider's PARENT has "secret"
           # Under P*I* WF: once you follow I edge, you don't follow P from there
-          # query with default settings does NOT walk provider's parent
+          # the default `neron` WFL (`parent* imports?`) does NOT walk provider's parent
         in
-        genScope.query { } (n: n.decls.secret or null) result "consumer";
+        visibleOf { } (n: n.decls.secret or null) result "consumer";
       expected = null;
     };
   };
@@ -327,7 +384,7 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.ambiguous { } (n: n.decls.x or null) result "consumer";
+        ambiguous (n: n.decls.x or null) result "consumer";
       expected = true;
     };
 
@@ -350,7 +407,7 @@ in
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
         in
-        genScope.ambiguous { } (n: n.decls.x or null) result "consumer";
+        ambiguous (n: n.decls.x or null) result "consumer";
       expected = false;
     };
 
@@ -383,18 +440,18 @@ in
           };
           attributes = withImports { };
           result = genScope.eval { } attributes roots;
-          # With local shadowing, query returns local — ambiguity in imports is moot
+          # With local shadowing, the local declaration is visible — ambiguity in imports is moot
         in
-        genScope.query { } (n: n.decls.x or null) result "consumer";
+        visibleOf { } (n: n.decls.x or null) result "consumer";
       expected = "local";
     };
 
     # ── A multi-candidate import set REFUSES BY NAME (Neron §2.2, Duplicate Declarations) ──
     #
-    # `query` answers with a SINGLE declaration. It used to dispose of a larger candidate set
-    # itself, dispatching on the runtime type of the first candidate: an attrset arm folded every
-    # candidate together into a value that existed at no node, a list arm took the head and dropped
-    # the rest. Both are gone.
+    # `single` answers with ONE declaration and refuses a minimal set holding two distinct origins.
+    # The retired `query` once disposed of a larger candidate set itself, dispatching on the runtime
+    # type of the first candidate: an attrset arm folded every candidate together into a value that
+    # existed at no node, a list arm took the head and dropped the rest. Neither came back.
     #
     # ★★ THE REFUSAL CELLS AND THE IDENTICAL-EDGE CELLS ARE ONE INSTRUMENT AND ARE READ TOGETHER.
     # The refusals alone pass under a predicate spelled over candidate-list LENGTH; the
@@ -429,7 +486,7 @@ in
           };
           result = genScope.eval { } (withImports { }) roots;
         in
-        genScope.query { } (n: n.decls.x or null) result "consumer"
+        visibleOf { } (n: n.decls.x or null) result "consumer"
       );
       expected = true;
     };
@@ -464,7 +521,7 @@ in
           };
           result = genScope.eval { } (withImports { }) roots;
         in
-        genScope.query { } (n: n.decls.x or null) result "consumer"
+        visibleOf { } (n: n.decls.x or null) result "consumer"
       );
       expected = true;
     };
@@ -500,7 +557,7 @@ in
           };
           result = genScope.eval { } (withImports { }) roots;
         in
-        genScope.query { } (n: n.decls.x or null) result "consumer"
+        visibleOf { } (n: n.decls.x or null) result "consumer"
       );
       expected = true;
     };
@@ -538,7 +595,7 @@ in
           };
           result = genScope.eval { } (withImports { }) roots;
         in
-        genScope.query { } (n: n.decls.x or null) result "consumer";
+        visibleOf { } (n: n.decls.x or null) result "consumer";
       expected = [ "p" ];
     };
 
@@ -571,7 +628,7 @@ in
           };
           result = genScope.eval { } (withImports { }) roots;
         in
-        genScope.query { } (n: n.decls.x or null) result "consumer";
+        visibleOf { } (n: n.decls.x or null) result "consumer";
       expected = {
         p = 1;
       };
@@ -614,12 +671,10 @@ in
 
     # ── Diamonds and reconvergence: one declaration reached by several ROUTES ──
     #
-    # The seen-imports machinery exists to make repeated routes TERMINATE (Neron §2.4, rule X), not
-    # to multiply the answer. Attribution is what makes these resolve, and it is correct by
-    # construction rather than by luck: the recursion maps the collector over the NEXT node's
-    # imports, so a transitively-reached candidate carries the id of the node that DECLARED it and
-    # never that of the direct import it was reached through. Both diamond routes therefore tag the
-    # same declarer.
+    # Acyclic resolution paths (NR-Cons: a path never re-enters a scope it has already visited) make
+    # repeated routes TERMINATE; they do not multiply the answer. Each route is its own witness, but
+    # a witness carries the node that DECLARED it and never the direct import it was reached
+    # through, so both diamond routes name the same origin and `single` sees one.
 
     test-control-a-diamond-reaching-one-declaration-resolves-list-arm = {
       expr =
@@ -654,9 +709,7 @@ in
           };
           result = genScope.eval { } (withImports { }) roots;
         in
-        genScope.query {
-          transitiveImports = true;
-        } (n: n.decls.x or null) result "r";
+        visibleOf { wf = transitiveWf; } (n: n.decls.x or null) result "r";
       expected = [ "d" ];
     };
 
@@ -695,57 +748,64 @@ in
           };
           result = genScope.eval { } (withImports { }) roots;
         in
-        genScope.query {
-          transitiveImports = true;
-        } (n: n.decls.x or null) result "r";
+        visibleOf { wf = transitiveWf; } (n: n.decls.x or null) result "r";
       expected = {
         d = 1;
       };
     };
 
-    # ★ THIS IS WHAT MAKES THE TWO DIAMOND CELLS MEAN SOMETHING. Add a second DECLARER on one route
-    # of the same fixture and it refuses — so their non-refusal is the two routes collapsing onto
-    # one occurrence, and not a fixture that failed to form two routes in the first place.
-    test-a-diamond-with-a-second-declarer-on-one-route-refuses = {
-      expr = didRefuse (
+    # ★ THIS IS WHAT MAKES THE TWO DIAMOND CELLS MEAN SOMETHING. Declare on BOTH routes at the same
+    # depth and it refuses — so their non-refusal is the two routes collapsing onto one occurrence,
+    # and not a fixture that failed to form two routes in the first place. A declarer on ONE route
+    # only is nearer than `D` and shadows it (`$ < imports`, den-hoag-gayc T6); the retired `query`
+    # refused that shape too, counting `B` and `D` as rivals.
+    test-a-diamond-with-declarers-on-both-routes-refuses = {
+      expr =
         let
-          roots = mkRoots {
-            importGraph = genScope.overlays [
-              (genScope.edge {
-                from = "r";
-                to = "B";
+          read =
+            decls:
+            visibleOf { wf = transitiveWf; } (n: n.decls.x or null) (genScope.eval { } (withImports { })
+              (mkRoots {
+                importGraph = genScope.overlays [
+                  (genScope.edge {
+                    from = "r";
+                    to = "B";
+                  })
+                  (genScope.edge {
+                    from = "r";
+                    to = "C";
+                  })
+                  (genScope.edge {
+                    from = "B";
+                    to = "D";
+                  })
+                  (genScope.edge {
+                    from = "C";
+                    to = "D";
+                  })
+                ];
+                inherit decls;
               })
-              (genScope.edge {
-                from = "r";
-                to = "C";
-              })
-              (genScope.edge {
-                from = "B";
-                to = "D";
-              })
-              (genScope.edge {
-                from = "C";
-                to = "D";
-              })
-            ];
-            decls = {
-              r = { };
-              B = {
-                x = [ "b" ];
-              };
-              C = { };
-              D = {
-                x = [ "d" ];
-              };
-            };
-          };
-          result = genScope.eval { } (withImports { }) roots;
+            ) "r";
         in
-        genScope.query {
-          transitiveImports = true;
-        } (n: n.decls.x or null) result "r"
-      );
-      expected = true;
+        {
+          bothRoutes = didRefuse (read {
+            r = { };
+            B.x = [ "b" ];
+            C.x = [ "c" ];
+            D.x = [ "d" ];
+          });
+          oneRoute = read {
+            r = { };
+            B.x = [ "b" ];
+            C = { };
+            D.x = [ "d" ];
+          };
+        };
+      expected = {
+        bothRoutes = true;
+        oneRoute = [ "b" ];
+      };
     };
 
     # Reconvergence rather than a diamond: `r` imports A directly AND reaches it through B.
@@ -777,9 +837,7 @@ in
           };
           result = genScope.eval { } (withImports { }) roots;
         in
-        genScope.query {
-          transitiveImports = true;
-        } (n: n.decls.x or null) result "r";
+        visibleOf { wf = transitiveWf; } (n: n.decls.x or null) result "r";
       expected = [ "a" ];
     };
 
@@ -810,9 +868,7 @@ in
           };
           result = genScope.eval { } (withImports { }) roots;
         in
-        genScope.query {
-          transitiveImports = true;
-        } (n: n.decls.x or null) result "r";
+        visibleOf { wf = transitiveWf; } (n: n.decls.x or null) result "r";
       expected = [ "d" ];
     };
 
@@ -839,7 +895,7 @@ in
               ];
               inherit decls;
             });
-          read = decls: genScope.query { } (n: n.decls.x or null) (mkResult decls) "consumer";
+          read = decls: visibleOf { } (n: n.decls.x or null) (mkResult decls) "consumer";
         in
         {
           ambiguous = resolves (read {
@@ -1185,6 +1241,7 @@ in
           attributes = {
             imports = _self: _id: [ ];
             children = _self: _id: { };
+            marks = _: _: [ ];
             types = self: id: (self.node id).decls.__relations.types or { };
             all-types = genScope.inherit' { } (
               n:

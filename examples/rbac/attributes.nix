@@ -26,6 +26,8 @@ in
   attributes = {
     children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
     imports = _self: _id: [ ];
+    # The boundary-mark floor every resolution reads; `[ ]` states none.
+    marks = _: _: [ ];
     "edges-R" = _self: id: (_self.node id).decls.__edges.R or [ ];
     "edges-A" = _self: id: (_self.node id).decls.__edges.A or [ ];
     "edges-D" = _self: id: (_self.node id).decls.__edges.D or [ ];

@@ -164,6 +164,8 @@ let
         imports = _self: _id: [ ];
         "edges-R" = _self: id: (_self.node id).decls.__edges.R or [ ];
         "edges-E" = _self: id: (_self.node id).decls.__edges.E or [ ];
+        # The boundary-mark floor every resolution reads; `[ ]` states none.
+        marks = _: _: [ ];
       };
     in
     baseAttrs // userAttrs;

@@ -1,4 +1,4 @@
-# THE ONE RESOLUTION CALCULUS (`lib/calculus.nix`, den-hoag-gayc U1b) — the gating cells.
+# THE ONE RESOLUTION CALCULUS (`lib/calculus.nix`, den-hoag-gayc U1b, U1c) — the gating cells.
 #
 # Every fixture is an EVALUATED scope: a node set lifted by `buildRoots`, each letter `l` read from
 # an `edges-l` attribute, `imports` from the import relation, `parent` from the node record, and the
@@ -309,7 +309,9 @@ let
   };
 
   # ── the neron = query grid (gate v1 grid2): every 3-node scope — acyclic parent map, import
-  # subsets, declaration flags — read by today's `query` and by `neron` + visible + `single` ──
+  # subsets, declaration flags — read by the retired `query` (frozen in
+  # `_fixtures/retired-resolution.nix`) and by `neron` + visible + `single` ──
+  retired = import ./_fixtures/retired-resolution.nix { prelude = genPreludeLib; };
   ns = [
     "c"
     "p"
@@ -418,7 +420,14 @@ let
       try = e: builtins.tryEval (builtins.deepSeq e e);
     in
     {
-      today = verdict (try (S.query { localShadowsImport = lsi; } f ev "c"));
+      today = verdict (
+        try (
+          retired.query {
+            dataFilter = f;
+            localShadowsImport = lsi;
+          } ev "c"
+        )
+      );
       preset = verdict (
         try (
           (S.resolve (
@@ -449,6 +458,182 @@ let
       flips = builtins.length (builtins.filter (r: r.today != r.preset) rows);
       vc = builtins.length (builtins.filter (r: r.today == "vc") rows);
     };
+
+  # ── U1c: the retired surfaces against their replacements, over the same grid ──
+  neronWf =
+    transitive:
+    if transitive then
+      wf [
+        "parent"
+        "imports"
+      ] "parent* imports*"
+    else
+      S.neron.wf;
+  witnessesOf =
+    transitive: f: ev: from:
+    (S.resolve {
+      wf = neronWf transitive;
+      mode = "witnesses";
+      dataFilter = f;
+    } ev from).answers;
+  # D10: the retiring `ambiguous` over DISTINCT ORIGINS — one declaration reached several ways is one.
+  ambiguousD10 =
+    transitive: f: ev: from:
+    builtins.length (lib.unique (map (a: a.node) (witnessesOf transitive f ev from))) > 1;
+  # How many times each value occurs, so two answer lists compare as multisets.
+  tally = builtins.foldl' (acc: v: acc // { ${v} = (acc.${v} or 0) + 1; }) { };
+  within = a: b: builtins.all (v: (b.${v} or 0) >= a.${v}) (builtins.attrNames a);
+  ambRow =
+    transitive: pm: im: dm:
+    let
+      ev = lift {
+        nodes = ns;
+        parents = lib.filterAttrs (_: p: p != null) pm;
+        imports = im;
+        decls = lib.genAttrs ns (n: if dm.${n} then { x = "v${n}"; } else { });
+      };
+      f = n: n.decls.x or null;
+      o = {
+        dataFilter = f;
+        transitiveImports = transitive;
+      };
+      wit = witnessesOf transitive f ev "c";
+    in
+    {
+      today = retired.ambiguous o ev "c";
+      distinct = ambiguousD10 transitive f ev "c";
+      count = builtins.length wit > 1;
+      all = tally (retired.queryAll o ev "c");
+      wit = tally (map (a: a.value) wit);
+    };
+  ambRead =
+    transitive:
+    let
+      rows = builtins.concatMap (
+        pm: builtins.concatMap (im: map (dm: ambRow transitive pm im dm) dmaps) imaps
+      ) (builtins.filter acyclic pmaps);
+      n = pred: builtins.length (builtins.filter pred rows);
+      differ = r: r.all != r.wit;
+    in
+    {
+      shapes = builtins.length rows;
+      distinct = {
+        trueToFalse = n (r: r.today && !r.distinct);
+        falseToTrue = n (r: !r.today && r.distinct);
+      };
+      # The control: the witness-COUNT reading, which the gate measured flipping both ways.
+      count = {
+        trueToFalse = n (r: r.today && !r.count);
+        falseToTrue = n (r: !r.today && r.count);
+      };
+      queryAllVersusWitnesses = {
+        differ = n differ;
+        moreInQueryAll = n (r: differ r && within r.wit r.all);
+        moreInWitnesses = n (r: differ r && within r.all r.wit);
+        mixed = n (r: differ r && !(within r.wit r.all) && !(within r.all r.wit));
+      };
+    };
+  # `inherit'` read from every node of every acyclic parent map under every declaration pattern.
+  inheritRead =
+    let
+      rows = builtins.concatMap (
+        pm:
+        builtins.concatMap (
+          dm:
+          let
+            ev = lift {
+              nodes = ns;
+              parents = lib.filterAttrs (_: p: p != null) pm;
+              decls = lib.genAttrs ns (n: if dm.${n} then { x = "v${n}"; } else { });
+            };
+            f = n: n.decls.x or null;
+          in
+          map (from: {
+            today = retired."inherit'" { resolve = f; } ev from;
+            now = S."inherit'" { } f ev from;
+          }) ns
+        ) dmaps
+      ) (builtins.filter acyclic pmaps);
+    in
+    {
+      reads = builtins.length rows;
+      flips = builtins.length (builtins.filter (r: r.today != r.now) rows);
+      # The control: both answer kinds occur, so an `inherit'` reading one constant cannot read 0.
+      nulls = builtins.length (builtins.filter (r: r.now == null) rows);
+      answered = builtins.length (builtins.filter (r: r.now != null) rows);
+    };
+  # T4, T6 and the N2 diamond: one scope each, read by the replacement and by the retired surface.
+  x = n: n.decls.x or null;
+  valuesOf = map (a: a.value);
+  t4 =
+    withImport:
+    lift {
+      nodes = [
+        "c"
+        "p"
+      ];
+      parents.c = "p";
+      imports = lib.optionalAttrs withImport { p = [ "c" ]; };
+      decls = {
+        c.x = "vc";
+        p.x = "vp";
+      };
+    };
+  t6 = lift {
+    nodes = [
+      "c"
+      "m1"
+      "m2"
+    ];
+    imports = {
+      c = [ "m1" ];
+      m1 = [ "m2" ];
+    };
+    decls = {
+      m1.x = "v1";
+      m2.x = "v2";
+    };
+  };
+  diamond = lift {
+    nodes = [
+      "c"
+      "p"
+      "m"
+    ];
+    parents.c = "p";
+    imports = {
+      c = [ "m" ];
+      p = [ "m" ];
+    };
+    decls.m.x = "vm";
+  };
+  # The flag fixture: `child` imports `provider` (x = "imported") and sits under `parent`
+  # (x = "inherited").
+  flags = lift {
+    nodes = [
+      "child"
+      "parent"
+      "provider"
+    ];
+    parents.child = "parent";
+    imports.child = [ "provider" ];
+    decls = {
+      parent.x = "inherited";
+      provider.x = "imported";
+    };
+  };
+  visibleUnder =
+    order: ev: from:
+    (S.resolve (
+      S.neron
+      // {
+        mode = "visible";
+        inherit order;
+        dataFilter = x;
+        groupBy = _: "x";
+      }
+    ) ev from).single
+      "x";
 
   # ── warm freshness: a prior whose every route and whose floor answer values a cold run never
   # produces; a decision naming every structural attribute the calculus reads as reusable ──
@@ -845,6 +1030,172 @@ in
           flips = 0;
           vc = 2304;
         };
+      };
+    };
+
+    # ── U1c (den-hoag-gayc §3a): the intended answer changes, each against the retired surface ──
+
+    # T4: c —P→ p —I→ c. The acyclic-path law drops the return to c; `queryAll` counted it again.
+    test-U1c-T4-witnesses-drop-the-revisit = {
+      expr = {
+        witnesses = valuesOf (witnessesOf false x (t4 true) "c");
+        retired = retired.queryAll { dataFilter = x; } (t4 true) "c";
+        retiredWithoutTheImport = retired.queryAll { dataFilter = x; } (t4 false) "c";
+      };
+      expected = {
+        witnesses = [
+          "vc"
+          "vp"
+        ];
+        retired = [
+          "vc"
+          "vp"
+          "vc"
+        ];
+        retiredWithoutTheImport = [
+          "vc"
+          "vp"
+        ];
+      };
+    };
+
+    # T6: c —I→ m1 —I→ m2, transitive. The nearer declaration shadows the farther (`$ < imports`);
+    # `query` refused the pair as an AMBIGUITY.
+    test-U1c-T6-visible-takes-the-nearer-import = {
+      expr = {
+        visible =
+          (S.resolve {
+            wf = neronWf true;
+            mode = "visible";
+            inherit (S.neron) order;
+            dataFilter = x;
+            groupBy = _: "x";
+          } t6 "c").single
+            "x";
+        retiredRefuses = throws (
+          retired.query {
+            dataFilter = x;
+            transitiveImports = true;
+          } t6 "c"
+        );
+        retiredAll = retired.queryAll {
+          dataFilter = x;
+          transitiveImports = true;
+        } t6 "c";
+      };
+      expected = {
+        visible = "v1";
+        retiredRefuses = true;
+        retiredAll = [
+          "v1"
+          "v2"
+        ];
+      };
+    };
+
+    # N2: c's parent is p, both import m. NR-Cons admits c·I·m and c·P·p·I·m; `queryAll`'s parent
+    # recursion seeded `_seen` with c's imports and skipped the second.
+    test-U1c-N2-the-diamond-answers-twice = {
+      expr = {
+        witnesses = valuesOf (witnessesOf false x diamond "c");
+        retired = retired.queryAll { dataFilter = x; } diamond "c";
+      };
+      expected = {
+        witnesses = [
+          "vm"
+          "vm"
+        ];
+        retired = [ "vm" ];
+      };
+    };
+
+    # N2/D10 over the grid: distinct origins flip only true → false (one declaration reached several
+    # ways); the witness-count reading, the control, flips both ways. The queryAll/witnesses split
+    # is the gate's class count.
+    test-U1c-N2-D10-ambiguous-over-distinct-origins = {
+      expr = {
+        nonTransitive = ambRead false;
+        transitive = builtins.removeAttrs (ambRead true) [ "queryAllVersusWitnesses" ];
+      };
+      expected = {
+        nonTransitive = {
+          shapes = 8192;
+          distinct = {
+            trueToFalse = 768;
+            falseToTrue = 0;
+          };
+          count = {
+            trueToFalse = 368;
+            falseToTrue = 96;
+          };
+          queryAllVersusWitnesses = {
+            differ = 1590;
+            moreInQueryAll = 1078;
+            moreInWitnesses = 358;
+            mixed = 154;
+          };
+        };
+        transitive = {
+          shapes = 8192;
+          distinct = {
+            trueToFalse = 1064;
+            falseToTrue = 0;
+          };
+          count = {
+            trueToFalse = 376;
+            falseToTrue = 48;
+          };
+        };
+      };
+    };
+
+    # The retired flags as stated orders: `imports` before `parent` answers the import; one rank for
+    # both is I ∥ P, and `single` refuses the two origins. The retired `importShadowsParent = false`
+    # was inert and answered the import regardless.
+    test-U1c-flags-become-stated-orders = {
+      expr = {
+        importsFirst = visibleUnder S.neron.order flags "child";
+        oneRank = throws (
+          visibleUnder (S.labelOrder {
+            alphabet = [
+              "parent"
+              "imports"
+            ];
+            layers = [
+              [
+                "imports"
+                "parent"
+              ]
+            ];
+            endOfPath = -1;
+          }) flags "child"
+        );
+        retiredIspInert = retired.query {
+          dataFilter = x;
+          importShadowsParent = false;
+        } flags "child";
+      };
+      expected = {
+        importsFirst = "imported";
+        oneRank = true;
+        retiredIspInert = "imported";
+      };
+    };
+
+    # `inherit'` over `resolve`: parity with the retired walk from every node of the grid's parent
+    # maps, and a real parent cycle refused by name (D9).
+    test-U1c-inherit-over-resolve-parity-and-cycle = {
+      expr = inheritRead // {
+        cycleRefused = throws (S."inherit'" { } x cyc "a");
+        retiredCycleRefused = throws (retired."inherit'" { resolve = x; } cyc "a");
+      };
+      expected = {
+        reads = 384;
+        flips = 0;
+        nulls = 138;
+        answered = 246;
+        cycleRefused = true;
+        retiredCycleRefused = true;
       };
     };
 

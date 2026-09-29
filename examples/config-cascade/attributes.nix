@@ -7,10 +7,21 @@
 {
   children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
   imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+  # The boundary-mark floor every resolution reads; `[ ]` states none.
+  marks = _: _: [ ];
 
+  # The nearest declaration of `key`: `neron` (local, then imports, then the parent chain).
   config =
     self: id: key:
-    genScope.query { } (node: node.decls.${key} or null) self id;
+    (genScope.resolve (
+      genScope.neron
+      // {
+        mode = "visible";
+        dataFilter = node: node.decls.${key} or null;
+        groupBy = _: key;
+      }
+    ) self id).single
+      key;
 
   resolvedConfig =
     self: id:
@@ -40,7 +51,14 @@
   overriddenKeys =
     self: id:
     let
-      allResults = key: genScope.queryAll { } (node: node.decls.${key} or null) self id;
+      # Every resolution of `key`, one per acyclic path (the identify-all reading).
+      allResults =
+        key:
+        (genScope.resolve {
+          inherit (genScope.neron) wf;
+          mode = "witnesses";
+          dataFilter = node: node.decls.${key} or null;
+        } self id).answers;
       localKeys = builtins.filter (k: k != "__edges") (builtins.attrNames (self.node id).decls);
     in
     builtins.filter (key: builtins.length (allResults key) > 1) localKeys;
