@@ -1,12 +1,14 @@
 # HOAG evaluator: demand-driven with co-located _eval memoization.
 #
 # Nix's native lazy evaluation provides scheduling, memoization, and cycle
-# detection (Mokhov et al., 2018). For a NON-PARAMETERIZED attribute, evaluation happens exactly
-# once per (node, attrName) — including on dynamically synthesized nodes (Vogt et al., 1989). A
-# PARAMETERIZED attribute (`paramAttr`, `lib/resolve.nix`) is the excluded case: what the
-# co-located cache memoizes there is the CLOSURE the declaration returns, never an application of
-# it, so every application — even a repeated one, on the same node with the same argument —
-# recomputes. See `paramAttr`'s own comment for the measurement.
+# detection (Mokhov et al., 2018). Evaluation happens exactly once per (node, attrName) —
+# including on dynamically synthesized nodes (Vogt et al., 1989). Where an attribute's value is
+# itself a function (a caller-written parameterized attribute, hand-rolled with no combinator of
+# this library's own — `paramAttr` carried that shape and was retired, R§10.1 carry note in
+# `README.md`), the memo covers the CLOSURE the declaration returns, once, same as any other
+# value; it does not extend to that closure's own applications, which are ordinary Nix function
+# calls and recompute on every call. That is a fact about function application, not an exception
+# to this claim.
 #
 # The key insight: Nix attrset VALUES are lazy but KEYS are eager. The only way
 # to get O(1) attribute access is an attrset entry. We co-locate the memoization

@@ -42,11 +42,10 @@ in
   fieldCount = self: id: builtins.length (builtins.attrNames (allFields self id));
 
   # Type lookup in root's type namespace (scoped relations stored in decls).
-  typeKind = genScope.paramAttr (
+  typeKind =
     self: _id: typeName:
     let
       root = self.node "root";
     in
-    (root.decls.__typeDecl or { }).${typeName} or "unknown"
-  );
+    (root.decls.__typeDecl or { }).${typeName} or "unknown";
 }

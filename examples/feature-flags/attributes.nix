@@ -1,10 +1,9 @@
 # Feature flag attributes.
 { genScope, lib }:
 {
-  flag = genScope.paramAttr (
+  flag =
     self: id: flagName:
-    genScope.query { } (node: node.decls.${flagName} or null) self id
-  );
+    genScope.query { } (node: node.decls.${flagName} or null) self id;
 
   effectiveFlags =
     self: id:
@@ -17,7 +16,7 @@
       outer = parentFlags;
     };
 
-  flagWithDeps = genScope.paramAttr (
+  flagWithDeps =
     self: id: flagName:
     let
       raw = self.get id "flag" flagName;
@@ -27,8 +26,7 @@
       flagDeps = deps.${flagName} or [ ];
       allDepsMet = builtins.all (dep: self.get id "flag" dep == true) flagDeps;
     in
-    if flagDeps == [ ] then raw else raw && allDepsMet
-  );
+    if flagDeps == [ ] then raw else raw && allDepsMet;
 
   overrideCount =
     self: id:

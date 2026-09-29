@@ -13,10 +13,9 @@
   imports = _self: id: (_self.node id).decls.__edges.I or [ ];
 
   # Lookup a declaration name. Walks: local decls → imports → parent chain.
-  lookup = genScope.paramAttr (
+  lookup =
     self: id: name:
-    genScope.query { } (node: node.decls.${name} or null) self id
-  );
+    genScope.query { } (node: node.decls.${name} or null) self id;
 
   # All visible declarations from this scope (local + imports + parent).
   visibleDecls =

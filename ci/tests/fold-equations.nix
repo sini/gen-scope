@@ -347,10 +347,12 @@ in
     # formal, and `merge-surface` folds every module's exports into one flat surface. 93 rather
     # than 91: `build-nodes.nix` now also publishes `mintAttachmentId`/`parseParent`. 97 rather than
     # 93: the `nta` channel publishes `mintNtaId`/`decodeNta` and `childDepth`/`flattenChildren`. 96
-    # rather than 97: `isKindSet` retired, the entry guards deciding the registry as a type.
+    # rather than 97: `isKindSet` retired, the entry guards deciding the registry as a type. 95
+    # rather than 96: `paramAttr` is retired (`den-hoag-4kh.53.54`, R§10.1 carry note in
+    # `README.md`).
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 96;
+      expected = 95;
     };
     # One: the fold's entry, and nothing else. This cell is the module's inventory, and an export it
     # does not list is an export nothing measured.

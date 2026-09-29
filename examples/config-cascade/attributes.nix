@@ -8,10 +8,9 @@
   children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
   imports = _self: id: (_self.node id).decls.__edges.I or [ ];
 
-  config = genScope.paramAttr (
+  config =
     self: id: key:
-    genScope.query { } (node: node.decls.${key} or null) self id
-  );
+    genScope.query { } (node: node.decls.${key} or null) self id;
 
   resolvedConfig =
     self: id:

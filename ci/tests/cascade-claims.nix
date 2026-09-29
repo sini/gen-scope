@@ -1958,10 +1958,11 @@ in
     # also publishes `mintAttachmentId`/`parseParent`, the multi-parent attachment convention
     # `buildRoots`' own partial-function refusal recommends but did not, until now, ship. 93 rather
     # than 89: the `nta` channel publishes `mintNtaId`/`decodeNta` from `eval.nix` and
-    # `childDepth`/`flattenChildren` from `structural.nix`.
+    # `childDepth`/`flattenChildren` from `structural.nix`. 92 rather than 93: `paramAttr` is
+    # retired (`den-hoag-4kh.53.54`, R§10.1 carry note in `README.md`).
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 93;
+      expected = 92;
     };
     # Four doors. The doors are the registration and run entries and nothing else — the consumer
     # accessors that used to sit beside them reconstructed a list the run already computed, and the

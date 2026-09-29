@@ -35,7 +35,7 @@ in
       lib.unique (envGates ++ hostGates);
 
     # For a given user on a given host, resolve full access.
-    resolveUser = genScope.paramAttr (
+    resolveUser =
       self: hostId: userName:
       let
         hostNode = self.node hostId;
@@ -67,7 +67,6 @@ in
         allGroups = builtins.sort builtins.lessThan allGroupNames;
         inherit systemGroups unixGroups kanidmGroups;
         effectiveGates = gates;
-      }
-    );
+      };
   };
 }

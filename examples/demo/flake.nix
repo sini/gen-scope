@@ -626,15 +626,15 @@
               in
               local + childTotal;
 
-            # Parameterized attribute (Sloane 2010 §3)
-            configFor = genScope.paramAttr (
+            # Parameterized attribute, hand-written (no per-parameter cache; see gen-scope's
+            # README, "Retired: paramAttr").
+            configFor =
               self: id: param:
               let
                 node = self.node id;
               in
               node.decls.${param}
-                or (if node.parent != null then self.get node.parent "configFor" param else null)
-            );
+                or (if node.parent != null then self.get node.parent "configFor" param else null);
           };
 
           r = genScope.eval { } attributes nodes;

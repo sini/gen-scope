@@ -34,24 +34,21 @@ in
       self: id:
       lib.foldl' (acc: rid: acc // (rolePermissions self rid)) { } (genScope.followEdge "A" self id);
 
-    hasPermission = genScope.paramAttr (
+    hasPermission =
       self: id: perm:
-      (self.get id "permissions").${perm} or false
-    );
+      (self.get id "permissions").${perm} or false;
 
-    isDenied = genScope.paramAttr (
+    isDenied =
       self: id: args:
-      builtins.elem args.action (((self.node id).decls.__deny or { }).${args.resource} or [ ])
-    );
+      builtins.elem args.action (((self.node id).decls.__deny or { }).${args.resource} or [ ]);
 
-    canAccess = genScope.paramAttr (
+    canAccess =
       self: id: args:
       let
         hasPerm = self.get id "hasPermission" args.action;
         denied = self.get id "isDenied" args;
       in
-      hasPerm && !denied
-    );
+      hasPerm && !denied;
 
     sensitivity = genScope.inherit' { } (node: node.decls.sensitivity or null);
   };
