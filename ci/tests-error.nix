@@ -3709,6 +3709,69 @@ in
       };
     };
 
+  # ── THE DECLARED-NAME TABLES' REFUSALS ──
+  # `eval` classifies each attribute once per evaluation, and every reader tests "declared and not
+  # quotient" as one selection with a default. The default IS the encoding of an undeclared name,
+  # so each site that reads the tables has a cell here for the input its default decides: an
+  # undeclared and a quotient name at an `nta` child's own reader (its record's `get`), an undeclared
+  # name at `get`, and a record declaring `quotient` without being a circular declaration. The
+  # `getNta` sites' cells are `nta-getNta-refusals` above.
+  config.flake.testsError.eval-declared-name-refusals =
+    let
+      fx = import ./tests/_fixtures/nta.nix { inherit genScope; };
+      child = genScope.mintNtaId {
+        host = "r";
+        name = "sub";
+        group = "g";
+        key = "b";
+      };
+      # The root reads its child's `probe` through `getNta`; the child's body reads `attr` at its
+      # OWN identifier, so the read goes through the child's record reader.
+      childReads =
+        attr:
+        (fx.nestWith genScope.eval {
+          q =
+            circular
+              {
+                carrier = {
+                  bottom = 0;
+                  leq = a: b: a <= b;
+                  height = 1;
+                  quotient = true;
+                };
+              }
+              (
+                _: _: _:
+                0
+              );
+          probe = self: id: if id == "r" then self.getNta "sub" "g" "b" "probe" else self.get id attr;
+        }).get
+          "r"
+          "probe";
+      err = msg: {
+        type = "ThrownError";
+        msg = exactly msg;
+      };
+    in
+    {
+      test-an-undeclared-name-at-a-childs-own-reader-is-refused-by-name = {
+        expr = childReads "nosuch";
+        expectedError = err "gen-scope: unknown attribute 'nosuch' on node '${child}'";
+      };
+      test-a-quotient-name-at-a-childs-own-reader-is-refused = {
+        expr = childReads "q";
+        expectedError = err "gen-scope: self.get 'q' on '${child}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step. Read it with `getRepresentative`, which returns it tagged.";
+      };
+      test-an-undeclared-name-at-get-is-refused-as-unknown = {
+        expr = (fx.nestWith genScope.eval { }).get "r" "nosuch";
+        expectedError = err "gen-scope: unknown attribute 'nosuch' on node 'r'";
+      };
+      test-a-quotient-record-that-is-not-circular-is-refused-as-malformed = {
+        expr = (fx.nestWith genScope.eval { m.carrier.quotient = true; }).get "r" "m";
+        expectedError = err "gen-scope: attribute 'm' on 'r' is declared as a record that is not a circular declaration — an attribute is a function `self: id: value`, or the record `circular { carrier = { bottom; leq; height; quotient; }; } step` returns; anything else is refused by name rather than reaching Nix as an anonymous call error";
+      };
+    };
+
   # ── `getHostAt`'s REFUSALS (den-hoag-n6dh7 U2.0′) ──
   # The four refusals, total, in both evaluators: (1) a reader that is not an `nta` child's with no
   # round open, one cell per reader class; (2) an unknown attribute; (3) a quotient attribute, which

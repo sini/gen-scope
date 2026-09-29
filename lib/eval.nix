@@ -56,11 +56,10 @@ let
   # Disjointness from REGISTERED identifiers is not claimed here: a caller may register any string.
   # That collision is refused by name where an `nta` group's key set is forced (`ntaFrom` below).
   ntaIdPrefix = "nta:";
-  ntaIdField = s: "${toString (builtins.stringLength s)}:${s}";
 
   mintNtaId =
     host: name: group: key:
-    ntaIdPrefix + ntaIdField host + ntaIdField name + ntaIdField group + ntaIdField key;
+    "${ntaIdPrefix}${toString (builtins.stringLength host)}:${host}${toString (builtins.stringLength name)}:${name}${toString (builtins.stringLength group)}:${group}${toString (builtins.stringLength key)}:${key}";
 
   # Reads one `<len>:<text>` field at offset `at` of `s`, or null. The length is at most the
   # string's own length, so its digit run is bounded by the digit count of that length.
@@ -783,9 +782,12 @@ let
         # The host kind's value (`kindValue`, den-hoag-l0y) is stamped only when that kind declares
         # one, and the child constructor is chosen here, once per group, never tested per child: an
         # `nta` kind nests (gen-merge's module tree), so a per-child charge compounds per tree.
+        # Each constructor spells `mintNtaId`'s body in place, with the host bound to `id`, rather
+        # than calling it: the call is a per-child charge. The spelling is character-identical in
+        # both, and a cell per constructor holds it to `mintNtaId`'s image.
         else if host.kindValue == null then
           builtins.mapAttrs (key: seed: {
-            id = mintNtaId id name group key;
+            id = "${ntaIdPrefix}${toString (builtins.stringLength id)}:${id}${toString (builtins.stringLength name)}:${name}${toString (builtins.stringLength group)}:${group}${toString (builtins.stringLength key)}:${key}";
             parent = id;
             type = hostKind;
             ${kindField} = host;
@@ -793,7 +795,7 @@ let
           }) members
         else
           builtins.mapAttrs (key: seed: {
-            id = mintNtaId id name group key;
+            id = "${ntaIdPrefix}${toString (builtins.stringLength id)}:${id}${toString (builtins.stringLength name)}:${name}${toString (builtins.stringLength group)}:${group}${toString (builtins.stringLength key)}:${key}";
             parent = id;
             type = hostKind;
             ${kindField} = host;
@@ -997,6 +999,25 @@ let
       # declarations that agree only while someone keeps them in step, and a disagreement between
       # them is a node whose kind is registered here and absent there.
       runAttributes = effectiveAttributes "eval" checked attributes;
+      # An attribute's class is a property of its declaration, not of the node it is read at, so
+      # it is decided here, once per evaluation, and never per (node, attribute) application:
+      #   0 resolutional, 1 the `nta` channel, 2 another child-bearing structural, 3 other structural.
+      # `quotientAttrs` is the same once-per-evaluation reading of a quotient-carrying circular
+      # declaration; `quotientAttrs.${a} or true` is false exactly at a declared, non-quotient name.
+      attrClass = builtins.mapAttrs (
+        a: _:
+        if !(structural.structural a) then
+          0
+        else if a == ntaChannel then
+          1
+        else if structural.childBearing a then
+          2
+        else
+          3
+      ) runAttributes;
+      quotientAttrs = builtins.mapAttrs (
+        _: d: (d.kind or null) == "circular" && (d.carrier.quotient or null) == true
+      ) runAttributes;
 
       # The two arms of the binding above, taken once each so the divergence the five collapsed
       # copies carried has exactly two names instead of five inline spellings.
@@ -1118,21 +1139,25 @@ let
             # host's product carries and `ntaLookup` answers, so a read by id and a read through the
             # record reach one memo cell: one evaluation per node. While a round is open the child
             # takes `wrapChild`'s refusing cache, the lifetime rule unchanged.
+            #
+            # `attrName` must be a member of `runAttributes`: `attrClass.${attrName}` throws Nix's
+            # anonymous missing-attribute error on an undeclared name. Every caller guards it, by
+            # mapping over `runAttributes` or by testing `runAttributes ? ${attrName}` first.
             evalAttr =
               acc: nodeId: attrName: fn:
-              if structural.structural attrName then
+              if attrClass.${attrName} != 0 then
                 let
                   raw = applyAttr acc nodeId attrName fn;
                 in
-                if attrName == ntaChannel && !round.open then
+                if attrClass.${attrName} == 1 && !round.open then
                   let
                     # The host's attributes, each read once per host through the host's own accessor
                     # (its record's reader when the host is itself an `nta` child). One evaluation
                     # is the per-node memo `get` reaches; this table is cost only. A quotient
                     # attribute is `null` here, so it never reaches `get` and the miss names it.
                     hostVals = builtins.mapAttrs (
-                      a: _: if isQuotientAttr a then null else (if acc != null then acc else self).get nodeId a
-                    ) runAttributes;
+                      a: q: if q then null else (if acc != null then acc else self).get nodeId a
+                    ) quotientAttrs;
                   in
                   builtins.mapAttrs (
                     name:
@@ -1152,10 +1177,7 @@ let
                             node = tid: if tid == childNode.id then wrapped else self.node tid;
                             get =
                               tid: a:
-                              if tid == childNode.id && runAttributes ? ${a} && !(isQuotientAttr a) then
-                                wrapped._eval.${a}
-                              else
-                                self.get tid a;
+                              if tid == childNode.id && !(quotientAttrs.${a} or true) then wrapped._eval.${a} else self.get tid a;
                           };
                           wrapped = childNode // {
                             _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
@@ -1165,7 +1187,7 @@ let
                       )
                     )
                   ) raw
-                else if structural.childBearing attrName then
+                else if attrClass.${attrName} != 3 then
                   mapAtDepth (structural.childDepth attrName) wrapChild raw
                 else
                   raw
@@ -1207,8 +1229,9 @@ let
                 product = acc.get host ntaChannel;
               in
               name: group: key: attrName:
-              if !round.open && runAttributes ? ${attrName} && !(isQuotientAttr attrName) then
-                (ntaMember "`getNta`" product host name group key)._eval.${attrName}
+              if !round.open && !(quotientAttrs.${attrName} or true) then
+                product.${name}.${group}.${key}._eval.${attrName}
+                  or (ntaMember "`getNta`" product host name group key)._eval.${attrName}
               else
                 let
                   child = ntaMember "`getNta`" product host name group key;
@@ -1948,12 +1971,9 @@ let
 
             # `effectiveAttributes` yields one node-independent attribute set, so this test is total
             # over every attribute an accessor can name.
-            # `isQuotientDecl` at a declared name, read in place: a missing name, a function and a
-            # malformed carrier each select to `null`, so no argument is built per read.
-            isQuotientAttr =
-              attrName:
-              (runAttributes.${attrName}.kind or null) == "circular"
-              && (runAttributes.${attrName}.carrier.quotient or null) == true;
+            # `isQuotientDecl` at a declared name, read from `quotientAttrs`: a function and a
+            # malformed carrier are `false` there, and an undeclared name defaults to `false`.
+            isQuotientAttr = attrName: quotientAttrs.${attrName} or false;
 
             # The demand both accessors delegate to, kept off the record: a third published demand
             # form would stand outside the two-form contract. `who` names the entry the caller used.

@@ -239,15 +239,16 @@
           done
 
           # U2.0-h — the `nta` channel's cost per child (den-hoag-n6dh7 D2): the evaluator's thunks
-          # at 400 children less those at 100, over 300, is at most 38 — measured 38 on upstream Nix,
-          # Determinate and Lix alike, where c93a5c0 read 68. A binding paid per child that the
-          # channel does not need moves it; each value is the hand-derived 2n.
+          # at 400 children less those at 100, over 300, is at most 36 — measured 36 on upstream Nix,
+          # Determinate and Lix alike, where c93a5c0 read 68 and the per-application attribute
+          # classification read 38. A binding paid per child that the channel does not need moves
+          # it; each value is the hand-derived 2n.
           statOf child-cost-100 nrThunks
           [ "$val" = "200" ] || die child-cost-100 "expected value 200, got '$val'"
           t100=$stat
           statOf child-cost-400 nrThunks
           [ "$val" = "800" ] || die child-cost-400 "expected value 800, got '$val'"
-          [ $((stat - t100)) -le $((38 * 300)) ] || die child-cost-400 "the nta channel costs $((stat - t100)) thunks over 300 children, above 38 per child"
+          [ $((stat - t100)) -le $((36 * 300)) ] || die child-cost-400 "the nta channel costs $((stat - t100)) thunks over 300 children, above 36 per child"
 
           # 0/0 is a false pass: the runner must have executed every cell above.
           [ "$ran" = "31" ] || die runner "expected 31 evaluations, ran $ran"

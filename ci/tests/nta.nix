@@ -254,6 +254,74 @@ in
       expr = (fx.treeWith { s.s = { }; }).allNodeIds == (fx.treeWith { s = { }; }).allNodeIds;
       expected = false;
     };
+    # `groupOf` spells the encoder in place at each of its two child constructors, one per host kind
+    # value, so each needs its own cell. This one is the constructor of a kind DECLARING a kind value:
+    # its child's record carries `mintNtaId`'s image, is read by it, and carries the value. A read by
+    # id decodes coordinates and never compares the record's own `id`, so the record is asserted
+    # whole; the group and the key carry the separator and a two-digit length, so a dropped length
+    # prefix moves the string.
+    test-U1g-a-child-of-a-kind-with-a-kind-value-carries-the-minted-identifier = {
+      expr =
+        let
+          addr = k: {
+            attr = "defs";
+            def = 0;
+            at = [ k ];
+          };
+          nest = mkKind {
+            kindValue = {
+              kind = "nest";
+              __mint.minted = "nest:v";
+            };
+            nta.sub =
+              self: id:
+              let
+                d = builtins.head (self.get id "defs");
+              in
+              {
+                "g/1" = if id == "r" then builtins.mapAttrs (k: _: [ (addr k) ]) d else { };
+              };
+          } "nest";
+          ev =
+            genScope.eval { }
+              {
+                children = _: _: { };
+                defs =
+                  self: id:
+                  let
+                    ds = (self.node id).decls;
+                  in
+                  if ds ? seed then map (e: e.value) ds.seed else ds.defs;
+                v = self: id: if id == "r" then 0 else (builtins.head (self.get id "defs")).v;
+              }
+              {
+                kinds = mkKinds [ nest ];
+                nodes.r = {
+                  id = "r";
+                  type = "nest";
+                  decls.defs = [ { "key:10".v = 5; } ];
+                  parent = null;
+                };
+                nodeOrder = [ "r" ];
+              };
+          minted = mintNtaId {
+            host = "r";
+            name = "sub";
+            group = "g/1";
+            key = "key:10";
+          };
+        in
+        {
+          idIsMinted = (ev.get "r" "nta-children").sub."g/1"."key:10".id == minted;
+          readByMinted = ev.get minted "v";
+          kindValue = (ev.node minted).kindValue.__mint.minted or null;
+        };
+      expected = {
+        idIsMinted = true;
+        readByMinted = 5;
+        kindValue = "nest:v";
+      };
+    };
 
     # ── U1-i · the carriage is structural: a warm run never serves `nta-children` stale ──
     test-U1i-a-warm-run-reusing-nta-children-answers-the-current-key-set = {
