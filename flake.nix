@@ -46,32 +46,17 @@
       ...
     }:
     {
-      # `nix flake check` forces the WHNF of every top-level output and nothing deeper, so this root's
-      # green quantified over the `lib` SPINE alone: a member of the published surface could throw and
-      # the check still exited 0 (measured — den-hoag-z1ta6). Hanging the force on that spine is what
-      # makes the green mean "the surface evaluates", and a library needs no new output name for it.
-      # The depth is each member's WHNF and no deeper: a retirement tombstone is a published `throw`
-      # by design (gen-scope's `buildNodes`), so a deep force is red on a healthy tree.
-      # `buildNodes` is excluded BY NAME because it is exactly that tombstone — forcing it is red on a
-      # healthy tree. The exclusion states the check's domain rather than leaving a hole in it: every
-      # other member of the surface is forced.
-      lib =
-        let
-          # ★ THE ROOT, NOT `./lib`. `./.` and `./lib` were two independent constructions of one
-          # value and so free to disagree; there is ONE construction site now, and the two entry
-          # paths differ only in who supplies the arguments. Here the flake supplies them, so
-          # `follows` governs every argument passed, while the standalone path resolves each default
-          # from THIS file's own `flake.lock`, read as local data — never from `ci/flake.lock`, which
-          # is the TEST graph's pin source and which no library code reads (ADR-0037 as amended
-          # 2026-09-15; `default.nix` states the same rule at its head).
-          surface = import ./. {
-            prelude = gen-prelude.lib;
-            graph = gen-graph.lib;
-            identity = gen-identity.lib;
-          };
-        in
-        builtins.deepSeq (builtins.mapAttrs (_: builtins.typeOf) (
-          builtins.removeAttrs surface [ "buildNodes" ]
-        )) surface;
+      # ★ THE ROOT, NOT `./lib`. `./.` and `./lib` were two independent constructions of one
+      # value and so free to disagree; there is ONE construction site now, and the two entry
+      # paths differ only in who supplies the arguments. Here the flake supplies them, so
+      # `follows` governs every argument passed, while the standalone path resolves each default
+      # from THIS file's own `flake.lock`, read as local data — never from `ci/flake.lock`, which
+      # is the TEST graph's pin source and which no library code reads (ADR-0037 as amended
+      # 2026-09-15; `default.nix` states the same rule at its head).
+      lib = import ./. {
+        prelude = gen-prelude.lib;
+        graph = gen-graph.lib;
+        identity = gen-identity.lib;
+      };
     };
 }
