@@ -19,7 +19,7 @@
 let
   S = genScope;
 
-  # a imports b, b imports c; a's parent is root. The query family's options are read over it.
+  # a imports b, b imports c; a's parent is root. The resolution doors' options are read over it.
   roots = S.buildRoots {
     parentGraph = S.edge {
       from = "a";
@@ -94,10 +94,6 @@ in
     ;
 
   options = {
-    ambiguous.optional = [
-      "_seen"
-      "transitiveImports"
-    ];
     buildRoots.optional = [
       "decls"
       "edgeGraphs"
@@ -126,7 +122,7 @@ in
       "provenance"
     ];
     foldEquations.optional = [ "settings" ];
-    "inherit'".optional = [ "_visited" ];
+    "inherit'".optional = [ ];
     inheritAll.optional = [
       "_visited"
       "combine"
@@ -148,16 +144,6 @@ in
       "neg"
       "pos"
     ];
-    query.optional = [
-      "_seen"
-      "importShadowsParent"
-      "localShadowsImport"
-      "transitiveImports"
-    ];
-    queryAll.optional = [
-      "_seen"
-      "transitiveImports"
-    ];
     queryReverse.optional = [
       "_seen"
       "transitive"
@@ -168,7 +154,6 @@ in
 
   # The options doors whose next step is not a record: positional operands (or nothing) follow.
   notChained = [
-    "ambiguous"
     "buildRoots"
     "circular"
     "collect"
@@ -180,8 +165,6 @@ in
     "inheritSet"
     "mkKind"
     "mkRule"
-    "query"
-    "queryAll"
     "queryReverse"
     "resolveClaims"
     "subtypeOf"

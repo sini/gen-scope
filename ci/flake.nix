@@ -72,6 +72,15 @@
           gen.ci.rootSurface.retired.buildNodes =
             "gen-scope: `buildNodes` is retired. Use `buildRoots`, which returns `{ nodes, nodeOrder }` — the node set together with its declared vertex order. Renaming the call is NOT sufficient: the evaluators take that whole record as `scope`, not a bare node map as `roots`, so `eval { roots = buildRoots {…}; }` is refused too.";
         }
+        # The resolution surfaces the one calculus retired (den-hoag-gayc D16), pinned the same way.
+        {
+          gen.ci.rootSurface.retired = {
+            ambiguous = "gen-scope: `ambiguous` is retired. Use `length (unique (map (a: a.node) (resolve { inherit (neron) wf; mode = \"witnesses\"; dataFilter = f; } self id).answers)) > 1`: an ambiguity is more than one distinct declaring node, never one declaration reached along several paths. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+            query = "gen-scope: `query` is retired. Use the one resolution calculus: `(resolve (neron // { mode = \"visible\"; dataFilter = f; groupBy = _: \"k\"; }) self id).single \"k\"`. `transitiveImports = true` is `wf = wellFormed { alphabet = [ \"parent\" \"imports\" ]; expression = \"parent* imports*\"; }`, and the retired shadowing flags are a stated `order` (`labelOrder`). Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+            queryAll = "gen-scope: `queryAll` is retired. Use the one resolution calculus: `(resolve { inherit (neron) wf; mode = \"witnesses\"; dataFilter = f; } self id).answers`, one `{ node; value; path; state; }` per acyclic resolution path (a diamond answers twice). Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+            visibleFrom = "gen-scope: `visibleFrom` is retired. Use `(resolve (neron // { mode = \"visible\"; dataFilter = f; groupBy = _: \"k\"; }) self id).single \"k\"`. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+          };
+        }
       ];
     };
 }

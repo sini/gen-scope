@@ -55,19 +55,7 @@ let
   inherit (F) ev attributes roots;
   val = n: n.decls.val or null;
   ids = n: [ n.id ];
-  # Seen only through an import: `b` directly from `a`, `c` only transitively.
-  imported = n: if n.id == "b" || n.id == "c" then n.id else null;
-  onlyC = n: if n.id == "c" then n.id else null;
   g3 = {
-    ambiguous =
-      let
-        f = o: S.ambiguous o imported;
-      in
-      {
-        on = f { transitiveImports = true; } ev "a";
-        off = f { } ev "a";
-        full = S.ambiguous { transitiveImports = true; } imported ev "a";
-      };
     buildRoots =
       let
         f = o: builtins.attrNames (S.buildRoots o).nodes;
@@ -155,18 +143,6 @@ let
         off = (f { } F.foldRecord).settings;
         full = (S.foldEquations s F.foldRecord).settings;
       };
-    "inherit'" =
-      let
-        f = o: S."inherit'" o val;
-        v = {
-          _visited.a = true;
-        };
-      in
-      {
-        on = (builtins.tryEval (f v ev "a")).success;
-        off = (builtins.tryEval (f { } ev "a")).success;
-        full = (builtins.tryEval (S."inherit'" v val ev "a")).success;
-      };
     inheritAll =
       let
         f = o: S.inheritAll o ids;
@@ -214,30 +190,6 @@ let
         on = (f p "a").pos;
         off = (f { } "a").pos;
         full = (S.mkRule p "a").pos;
-      };
-    query =
-      let
-        f = o: S.query o onlyC;
-        i = {
-          transitiveImports = true;
-        };
-      in
-      {
-        on = f i ev "a";
-        off = f { } ev "a";
-        full = S.query i onlyC ev "a";
-      };
-    queryAll =
-      let
-        f = o: S.queryAll o val;
-        t = {
-          transitiveImports = true;
-        };
-      in
-      {
-        on = f t ev "a";
-        off = f { } ev "a";
-        full = S.queryAll t val ev "a";
       };
     queryReverse =
       let
@@ -304,10 +256,13 @@ let
   #   evalDebug      its one option, `parseParent`, answers a node the scope does not register, and
   #                  the debug evaluator refuses materialization, so no projection of a registered
   #                  scope's result reads it.
+  #   inherit'       it has no option: its walk is the calculus's (`parent*`, mode "visible"), and
+  #                  the recursion state it once took as `_visited` retired with the recursion.
   #   resolveClaims  its one option, `ctx`, reaches only a kind's `resolve`, whose result record is
   #                  closed and carries no field a caller could set to it.
   noG3 = [
     "evalDebug"
+    "inherit'"
     "resolveClaims"
   ];
 in

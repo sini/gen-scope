@@ -11,11 +11,21 @@
 {
   children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
   imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+  # The boundary-mark floor every resolution reads; `[ ]` states none.
+  marks = _: _: [ ];
 
-  # Lookup a declaration name. Walks: local decls → imports → parent chain.
+  # Lookup a declaration name. Walks: local decls → imports → parent chain (`neron`).
   lookup =
     self: id: name:
-    genScope.query { } (node: node.decls.${name} or null) self id;
+    (genScope.resolve (
+      genScope.neron
+      // {
+        mode = "visible";
+        dataFilter = node: node.decls.${name} or null;
+        groupBy = _: name;
+      }
+    ) self id).single
+      name;
 
   # All visible declarations from this scope (local + imports + parent).
   visibleDecls =

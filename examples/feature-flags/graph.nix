@@ -128,6 +128,8 @@ let
       baseAttrs = {
         children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
         imports = _self: _id: [ ];
+        # The boundary-mark floor every resolution reads; `[ ]` states none.
+        marks = _: _: [ ];
       };
     in
     baseAttrs // userAttrs;
