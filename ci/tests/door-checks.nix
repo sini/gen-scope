@@ -191,18 +191,6 @@ let
         off = (f { } "a").pos;
         full = (S.mkRule p "a").pos;
       };
-    queryReverse =
-      let
-        f = o: S.queryReverse o (n: n.id);
-        t = {
-          transitive = true;
-        };
-      in
-      {
-        on = f t ev "c";
-        off = f { } ev "c";
-        full = S.queryReverse t (n: n.id) ev "c";
-      };
     # The calculus is not an options door (its `wf` and `dataFilter` are required), so it has no row
     # in the table; its non-default option is `mode = "visible"` with `neron.order`, which answers
     # the D < I < P selection the retired selector made: from `a` the import `b` shadows the parent

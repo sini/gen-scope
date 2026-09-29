@@ -2064,7 +2064,7 @@ let
             # descendants. This is the survey order a gather or a reverse reference attribute is
             # defined over — contributions combine in a traversal order of the tree, not in a
             # codepoint order of node names. The rule is this library's own and is argued at
-            # `lib/resolve.nix:queryReverse` from the duality with `queryAll`; the citation it
+            # `lib/calculus.nix`'s converse from the duality with the outbound walk; the citation it
             # once carried ("Hedin & Magnusson 2003 inter-type declarations; Sloane 2010 §7
             # collection attributes") named nothing in either paper — see that comment for the
             # measurements.

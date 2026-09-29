@@ -89,7 +89,20 @@ let
   attrs = {
     children = _self: _id: { };
     imports = self: id: (self.node id).decls.__edges.I or [ ];
-    needed-by = genScope.queryReverse { } (node: node.id);
+    marks = _: _: [ ];
+    # The retired `queryReverse` (den-hoag-gayc U1d): witnesses over the converse of `imports`.
+    needed-by =
+      self: id:
+      map (a: a.value)
+        (genScope.resolve {
+          wf = genScope.wellFormed {
+            alphabet = [ "imports" ];
+            expression = "imports";
+          };
+          dataFilter = node: node.id;
+          mode = "witnesses";
+          direction = "inbound";
+        } self id).answers;
   };
   walkOf = scope: (genScope.eval { } attrs scope).allNodeIds;
   answerOf = scope: (genScope.eval { } attrs scope).get "t" "needed-by";
@@ -528,7 +541,7 @@ in
     };
 
     # ── O11 — queryReverse's ANSWER ORDER, the contract this remedy changes ──
-    # `queryReverse` enumerates `allNodeIds`, so the declared order reaches a published answer.
+    # The converse enumerates `allNodeIds`, so the declared order reaches a published answer.
     test-O11-the-answer-follows-the-declared-order = {
       expr = answerOf (genScope.buildRoots { importGraph = importers; });
       expected = [

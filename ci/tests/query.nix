@@ -1,7 +1,6 @@
 { lib, genScope, ... }:
 let
   inherit (genScope)
-    queryReverse
     collect
     collectByType
     ;
@@ -38,6 +37,23 @@ let
   ambiguous =
     dataFilter: self: id:
     builtins.length (lib.unique (map (a: a.node) (witnesses dataFilter self id))) > 1;
+  # The retired `queryReverse` (den-hoag-gayc U1d): witnesses over the converse of `imports`, one
+  # answer per acyclic reverse path, importers in `allNodeIds` order.
+  queryReverse =
+    {
+      transitive ? false,
+    }:
+    dataFilter: self: id:
+    map (a: a.value)
+      (genScope.resolve {
+        wf = genScope.wellFormed {
+          alphabet = [ "imports" ];
+          expression = if transitive then "imports imports*" else "imports";
+        };
+        inherit dataFilter;
+        mode = "witnesses";
+        direction = "inbound";
+      } self id).answers;
 
   # Graph: a imports b, b imports c. Parent: a → root.
   roots = genScope.buildRoots {
@@ -177,6 +193,7 @@ let
   revResult = genScope.eval { } {
     children = self: id: { };
     imports = self: id: (self.node id).decls.__edges.I or [ ];
+    marks = _: _: [ ];
     needed-by = queryReverse { } (node: node.decls.tag or null);
     needed-by-trans = queryReverse {
       transitive = true;
@@ -240,6 +257,7 @@ let
       {
         children = _self: id: lib.filterAttrs (_: n: n.parent == id) nestedNodes;
         imports = self: id: (self.node id).decls.imports or [ ];
+        marks = _: _: [ ];
         needed-by = queryReverse { } (node: node.decls.tag or null);
         needed-by-trans = queryReverse {
           transitive = true;

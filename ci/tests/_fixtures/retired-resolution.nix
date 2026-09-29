@@ -2,7 +2,8 @@
 #
 # gen-scope `query`, `queryAll`, `ambiguous` and `inherit'` as they stood at `gayc-u1b` (c8785fb,
 # `lib/resolve.nix`), copied without their doors and with the `_seen` citation corrected (den-hoag-gayc
-# U1c; it read "rule X", the seen-IMPORTS rule, for a set of scope ids). They are no
+# U1c; it read "rule X", the seen-IMPORTS rule, for a set of scope ids), and `queryReverse` as it
+# stood at `gayc-u1c` (00977a7, U1d). They are no
 # longer the library's: the library publishes tombstones under these names and resolves through
 # `resolve`. This copy is what "today" means in `tests/calculus.nix`'s grid cells, so each intended
 # answer change is counted against the construction it replaces rather than asserted from memory.
@@ -224,6 +225,43 @@ let
           ${id} = true;
         };
       } self node.parent;
+
+  # Reverse reference attribute: gather `dataFilter` over every node that imports `id`, importers
+  # enumerated in `allNodeIds` order, pre-order over the reverse relation with a per-path seen set,
+  # no sort, no dedup. As it stood at `gayc-u1c` (00977a7), before `resolve`'s converse retired it
+  # (den-hoag-gayc U1d).
+  queryReverse =
+    {
+      dataFilter,
+      transitive ? false,
+      _seen ? { },
+    }:
+    self: id:
+    let
+      allIds = self.allNodeIds;
+      importersOf =
+        nid: builtins.filter (other: builtins.elem nid (self.get other relations.imports)) allIds;
+      collectFrom =
+        seen: importerId:
+        let
+          v = dataFilter (self.node importerId);
+          direct = prelude.optional (v != null) v;
+          trans =
+            if transitive then
+              let
+                nextSeen = seen // {
+                  ${importerId} = true;
+                };
+                nextUnseen = builtins.filter (i: !(nextSeen ? ${i})) (importersOf importerId);
+              in
+              prelude.concatMap (collectFrom nextSeen) nextUnseen
+            else
+              [ ];
+        in
+        direct ++ trans;
+      directImporters = builtins.filter (i: !(_seen ? ${i})) (importersOf id);
+    in
+    prelude.concatMap (collectFrom (_seen // { ${id} = true; })) directImporters;
 in
 {
   inherit
@@ -231,5 +269,6 @@ in
     queryAll
     ambiguous
     inherit'
+    queryReverse
     ;
 }

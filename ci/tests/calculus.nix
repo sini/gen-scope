@@ -1,4 +1,4 @@
-# THE ONE RESOLUTION CALCULUS (`lib/calculus.nix`, den-hoag-gayc U1b, U1c) — the gating cells.
+# THE ONE RESOLUTION CALCULUS (`lib/calculus.nix`, den-hoag-gayc U1b, U1c, U1d) — the gating cells.
 #
 # Every fixture is an EVALUATED scope: a node set lifted by `buildRoots`, each letter `l` read from
 # an `edges-l` attribute, `imports` from the import relation, `parent` from the node record, and the
@@ -712,6 +712,83 @@ let
       withheld = r.withheld "b";
     };
 
+  # ── U1d: the converse ──
+  # The spec's O3 fixture: importers a —→ t, b —→ t, c —→ a, c —→ b (c reaches t along two reverse
+  # paths), and a cycle t —→ c.
+  reverseScope =
+    marks:
+    lift {
+      nodes = [
+        "t"
+        "a"
+        "b"
+        "c"
+      ];
+      imports = {
+        a = [ "t" ];
+        b = [ "t" ];
+        c = [
+          "a"
+          "b"
+        ];
+        t = [ "c" ];
+      };
+      decls = {
+        t.x = "t";
+        a.x = "a";
+        b.x = "b";
+        c.x = "c";
+      };
+      inherit marks;
+    };
+  inbound =
+    mode: alphabet: expression: ev: from:
+    S.resolve {
+      wf = wf alphabet expression;
+      dataFilter = x;
+      inherit mode;
+      direction = "inbound";
+    } ev from;
+  shut =
+    who: _: id:
+    if id == who then
+      [
+        {
+          name = "shut";
+          admits = _: false;
+        }
+      ]
+    else
+      [ ];
+  converseRead =
+    ev: at:
+    let
+      r = inbound "witnesses" [ "imports" ] "imports imports*" ev "t";
+    in
+    {
+      answers = valuesOf r.answers;
+      withheld = r.withheld at;
+    };
+  # `tack` edges a —→ t and b —→ t twice: a converse source is enumerated once.
+  tacks = lift {
+    nodes = [
+      "t"
+      "a"
+      "b"
+    ];
+    edges.tack = {
+      a = [ "t" ];
+      b = [
+        "t"
+        "t"
+      ];
+    };
+    decls = {
+      a.x = "a";
+      b.x = "b";
+    };
+  };
+
   # A scope whose one edge attribute throws a named error of its own.
   throwing = lift {
     nodes = [ "a" ];
@@ -1196,6 +1273,136 @@ in
         answered = 246;
         cycleRefused = true;
         retiredCycleRefused = true;
+      };
+    };
+
+    # ── U1d (den-hoag-gayc; ADR-0024 `direction`): the converse ──
+    # O3: the retired `queryReverse`'s counting contract IS (NR-Cons) witnesses over the converse,
+    # order included — read against the frozen reference on the spec's own fixture.
+    test-U1d-O3-witnesses-over-the-converse-are-queryReverse = {
+      expr =
+        let
+          ev = reverseScope (_: _: [ ]);
+        in
+        {
+          order = ev.allNodeIds;
+          direct = valuesOf (inbound "witnesses" [ "imports" ] "imports" ev "t").answers;
+          transitive = valuesOf (inbound "witnesses" [ "imports" ] "imports imports*" ev "t").answers;
+          retiredDirect = retired.queryReverse { dataFilter = x; } ev "t";
+          retiredTransitive = retired.queryReverse {
+            dataFilter = x;
+            transitive = true;
+          } ev "t";
+          reachable = nodesOf (inbound "reachable" [ "imports" ] "imports*" ev "t");
+        };
+      expected = {
+        order = [
+          "t"
+          "a"
+          "b"
+          "c"
+        ];
+        direct = [
+          "a"
+          "b"
+        ];
+        transitive = [
+          "a"
+          "c"
+          "b"
+          "c"
+        ];
+        retiredDirect = [
+          "a"
+          "b"
+        ];
+        retiredTransitive = [
+          "a"
+          "c"
+          "b"
+          "c"
+        ];
+        reachable = [
+          "a"
+          "b"
+          "c"
+          "t"
+        ];
+      };
+    };
+    # The marks are applied to the AUTHORED graph before the converse is taken. `c` shut: its
+    # authored edges c —→ a and c —→ b are withheld, so `c` is never reached. `t` shut: its one
+    # authored edge t —→ c is withheld, and the importers of `t` are reached as if unmarked — a
+    # reading of the marks at the transposed source would shut every step out of `t` instead.
+    test-U1d-marks-read-at-the-authored-source = {
+      expr = {
+        cShut = converseRead (reverseScope (shut "c")) "c";
+        tShut = converseRead (reverseScope (shut "t")) "t";
+      };
+      expected = {
+        cShut = {
+          answers = [
+            "a"
+            "b"
+          ];
+          withheld =
+            map
+              (t: {
+                label = "imports";
+                target = t;
+                marks = [ "shut" ];
+              })
+              [
+                "a"
+                "b"
+              ];
+        };
+        tShut = {
+          answers = [
+            "a"
+            "c"
+            "b"
+            "c"
+          ];
+          withheld = [
+            {
+              label = "imports";
+              target = "c";
+              marks = [ "shut" ];
+            }
+          ];
+        };
+      };
+    };
+    # `edges-l` has a converse as `imports` does; a letter the evaluation does not declare is
+    # refused inbound as outbound (row 20).
+    test-U1d-an-edge-letter-has-a-converse = {
+      expr = {
+        tack = valuesOf (inbound "witnesses" [ "tack" ] "tack" tacks "t").answers;
+        undeclared = throws (inbound "reachable" [ "l1" ] "l1" tacks "t");
+      };
+      expected = {
+        tack = [
+          "a"
+          "b"
+        ];
+        undeclared = true;
+      };
+    };
+    # Containment's converse is `children`, a different relation: `parent` is refused in an inbound
+    # alphabet, catchably, and the same alphabet walked outbound answers.
+    test-U1d-parent-is-refused-in-an-inbound-alphabet = {
+      expr = {
+        inbound = throws (inbound "reachable" [ "parent" "imports" ] "parent* imports?" flags "child");
+        outbound = nodesOf (run "reachable" [ "parent" "imports" ] "parent* imports?" flags "child");
+      };
+      expected = {
+        inbound = true;
+        outbound = [
+          "child"
+          "parent"
+          "provider"
+        ];
       };
     };
 
