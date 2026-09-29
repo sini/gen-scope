@@ -11,6 +11,39 @@
     let
       lib = nixpkgs.lib;
       genScope = gen-scope.lib;
+
+      # Neron's D < I < P under the one calculus: `neron` (WFL `parent* imports?`, order
+      # $ < imports < parent), mode "visible", one competition group, and its `single` answer.
+      nearest =
+        {
+          wf ? genScope.neron.wf,
+          order ? genScope.neron.order,
+        }:
+        dataFilter: self: id:
+        (genScope.resolve {
+          inherit wf order dataFilter;
+          mode = "visible";
+          groupBy = _: "k";
+        } self id).single
+          "k";
+      # Every resolution, one per acyclic path (mode "witnesses", Neron Fig. 3 rule R).
+      resolutions =
+        {
+          wf ? genScope.neron.wf,
+        }:
+        dataFilter: self: id:
+        (genScope.resolve {
+          inherit wf dataFilter;
+          mode = "witnesses";
+        } self id).answers;
+      # Transitive imports: the WFL `parent* imports*`.
+      transitiveWf = genScope.wellFormed {
+        alphabet = [
+          "parent"
+          "imports"
+        ];
+        expression = "parent* imports*";
+      };
     in
     {
 
@@ -399,16 +432,16 @@
             ) result "inner").single
               "color"; # -> "green"
 
-          # query: generalized combinator (van Antwerpen §2.1)
+          # The nearest declaration (van Antwerpen §2.1, under the Neron preset)
           # inner has local color=green, import color=red, parent color=blue
           # D < I means local green wins
-          query-inner-color = genScope.query { } (n: n.decls.color or null) result "inner"; # -> "green"
+          query-inner-color = nearest { } (n: n.decls.color or null) result "inner"; # -> "green"
 
           # deep has no local color, no imports, walks parent to inner (green)
-          query-deep-inherits = genScope.query { } (n: n.decls.color or null) result "deep"; # -> "green"
+          query-deep-inherits = nearest { } (n: n.decls.color or null) result "deep"; # -> "green"
 
-          # Import-only query: tool comes from import (lib has tool)
-          query-import-tool = genScope.query { } (n: n.decls.tool or null) result "inner"; # -> "hammer"
+          # Import-only: tool comes from import (lib has tool)
+          query-import-tool = nearest { } (n: n.decls.tool or null) result "inner"; # -> "hammer"
 
           # inherit': walks parent chain (Neron §2.3)
           inherit-size = genScope.inherit' { } (n: n.decls.size or null) result "deep"; # -> "large" (deep -> inner -> outer)
@@ -444,16 +477,24 @@
           result = genScope.eval { } {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
             imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+            # The boundary-mark floor `resolve` reads at every edge source; `[ ]` states none.
+            marks = _self: _id: [ ];
           } nodes;
+          # An ambiguity is more than one DISTINCT declaring node among the resolutions (Neron
+          # §2.2) — one declaration reached along several paths is one.
+          ambiguous =
+            id:
+            builtins.length (lib.unique (map (a: a.node) (resolutions { } (n: n.decls.name or null) result id)))
+            > 1;
         in
         {
           all-reachable = builtins.sort builtins.lessThan (
-            genScope.queryAll { } (n: n.decls.name or null) result "scope"
+            map (a: a.value) (resolutions { } (n: n.decls.name or null) result "scope")
           );
 
-          is-ambiguous = genScope.ambiguous { } (n: n.decls.name or null) result "scope"; # -> true
+          is-ambiguous = ambiguous "scope"; # -> true
 
-          not-ambiguous = genScope.ambiguous { } (n: n.decls.name or null) result "parent"; # -> false
+          not-ambiguous = ambiguous "parent"; # -> false
         };
 
       # ===================================================================
@@ -497,42 +538,47 @@
           result = genScope.eval { } {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
             imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+            # The boundary-mark floor `resolve` reads at every edge source; `[ ]` states none.
+            marks = _self: _id: [ ];
           } nodes;
         in
         {
-          non-transitive = genScope.query { } (n: n.decls.z or null) result "modA";
+          non-transitive = nearest { } (n: n.decls.z or null) result "modA";
 
-          transitive = genScope.query {
-            transitiveImports = true;
-          } (n: n.decls.z or null) result "modA";
+          transitive = nearest { wf = transitiveWf; } (n: n.decls.z or null) result "modA";
 
-          # Two declarers on one transitive route is an AMBIGUITY, and the query refuses by name.
-          # `modB` and `modC` both declare `y`, so under transitive imports `modA`'s read has two
-          # distinct contributing nodes -- two declaration occurrences for one read (Neron 2015
-          # §2.2, Duplicate Declarations). This output was once called `transitive-shadowing` and
-          # showed the answer the query picked: it took whichever candidate the traversal reached
-          # first and dropped the other without saying so. A defining query answers with a single
-          # declaration or refuses; the refusal is caught here so the demo still evaluates.
-          transitive-ambiguity-refuses =
-            (builtins.tryEval (
-              genScope.query {
-                transitiveImports = true;
-              } (n: n.decls.y or null) result "modA"
-            )).success; # -> false
+          # Two declarers on one transitive route: the NEARER shadows the farther. `modB` and
+          # `modC` both declare `y`; `modA` reaches `modB` along `imports` and `modC` along
+          # `imports imports`, and the visibility order ranks `$` before `imports`, so the one-step
+          # path is strictly more specific (van Antwerpen 2018 Fig. 1). An AMBIGUITY is two origins
+          # in the minimal set; this one has one.
+          transitive-nearer-shadows = nearest { wf = transitiveWf; } (n: n.decls.y or null) result "modA"; # -> "from-B"
 
-          # The remedy the refusal names: `queryAll` identifies ALL the resolutions without
-          # shadowing (Neron 2015 Fig. 3, rule R) and leaves the choice at the call site.
-          transitive-ambiguity-read-in-full = genScope.queryAll {
-            transitiveImports = true;
-          } (n: n.decls.y or null) result "modA"; # -> [ "from-B" "from-C" ]
+          # Every resolution, unshadowed (Neron 2015 Fig. 3, rule R): the choice at the call site.
+          transitive-read-in-full = map (a: a.value) (
+            resolutions { wf = transitiveWf; } (n: n.decls.y or null) result "modA"
+          ); # -> [ "from-B" "from-C" ]
 
-          include-semantics = genScope.query {
-            localShadowsImport = false;
+          # Imports before the local declaration: `imports` < `$` < `parent`, through an empty
+          # middle rank.
+          include-semantics = nearest {
+            order = genScope.labelOrder {
+              alphabet = [
+                "parent"
+                "imports"
+              ];
+              layers = [
+                [ "imports" ]
+                [ ]
+                [ "parent" ]
+              ];
+              endOfPath = 1;
+            };
           } (n: n.decls.x or null) result "modA";
         };
 
       # ===================================================================
-      # 7. SEEN-IMPORTS: CYCLE PREVENTION (Neron 2015 §2.4, rule X)
+      # 7. CYCLE PREVENTION: ACYCLIC RESOLUTION PATHS (NR-Cons, seen scopes)
       # ===================================================================
 
       seenImports =
@@ -566,12 +612,14 @@
           result = genScope.eval { } {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
             imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+            # The boundary-mark floor `resolve` reads at every edge source; `[ ]` states none.
+            marks = _self: _id: [ ];
           } nodes;
         in
         {
-          a-resolves = genScope.query { } (n: n.decls.val or null) result "a";
+          a-resolves = nearest { } (n: n.decls.val or null) result "a";
 
-          b-resolves = genScope.query { } (n: n.decls.val or null) result "b";
+          b-resolves = nearest { } (n: n.decls.val or null) result "b";
         };
 
       # ===================================================================
@@ -620,7 +668,8 @@
           attributes = {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
             imports = _self: _id: [ ];
-
+            # The boundary-mark floor `resolve` reads at every edge source; `[ ]` states none.
+            marks = _self: _id: [ ];
             # Inherited: flows top-down via parent chain (Knuth 1968)
             location = genScope.inherit' { } (n: n.decls.location or null);
 
@@ -987,17 +1036,19 @@
           result = genScope.eval { } {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
             imports = _self: _id: [ ];
+            # The boundary-mark floor `resolve` reads at every edge source; `[ ]` states none.
+            marks = _self: _id: [ ];
           } nodes;
         in
         {
           # Value namespace (via decls)
-          value-x = genScope.query { } (n: n.decls.x or null) result "inner"; # -> 42
+          value-x = nearest { } (n: n.decls.x or null) result "inner"; # -> 42
 
           # Type namespace (via decls.__typeRel)
-          type-x = genScope.query { } (n: (n.decls.__typeRel or { }).x or null) result "inner"; # -> "Int"
+          type-x = nearest { } (n: (n.decls.__typeRel or { }).x or null) result "inner"; # -> "Int"
 
           # Doc namespace
-          doc-x = genScope.query { } (n: (n.decls.__docRel or { }).x or null) result "inner"; # -> "The x coordinate"
+          doc-x = nearest { } (n: (n.decls.__docRel or { }).x or null) result "inner"; # -> "The x coordinate"
 
           # Direct decl access
           decl-via-node = (result.node "outer").decls.x; # -> 42

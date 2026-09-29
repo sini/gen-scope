@@ -1,9 +1,18 @@
 # Feature flag attributes.
 { genScope, lib }:
 {
+  # The nearest declaration of the flag: `neron` (local, then imports, then the parent chain).
   flag =
     self: id: flagName:
-    genScope.query { } (node: node.decls.${flagName} or null) self id;
+    (genScope.resolve (
+      genScope.neron
+      // {
+        mode = "visible";
+        dataFilter = node: node.decls.${flagName} or null;
+        groupBy = _: flagName;
+      }
+    ) self id).single
+      flagName;
 
   effectiveFlags =
     self: id:
