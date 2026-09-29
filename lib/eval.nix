@@ -573,6 +573,8 @@ let
               childId: record:
               if record ? type then
                 throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
+              else if record ? kindValue then
+                throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `kindValue`. A spawn does not choose its child's kind value any more than its kind: the value is the one the produced kind declares (`mkKind { kindValue = …; }`), stamped by the substrate with its `type` — a value chosen while the spawn fires is one no kind declared. Drop the field."
               else if (record.parent or id) != id then
                 throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
               else
