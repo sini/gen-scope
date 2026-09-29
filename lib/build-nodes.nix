@@ -228,16 +228,33 @@ let
       # `null` is the no-kinds case and reads as one: an evaluator handed it runs no spawn channel,
       # which is exactly right for a scope whose nodes have no kinds to descend from.
       inherit kinds;
-      nodes = prelude.genAttrs nodeOrder (id: {
-        inherit id;
-        # Checked above against the registry, so this is a lookup rather than an admission.
-        type = types.${id} or null;
-        parent = parentIndex.${id} or null;
-        decls = (decls.${id} or { }) // {
-          # Store edge declarations for consumers to build computed attributes from
-          __edges = prelude.mapAttrs (_label: idx: idx.${id} or [ ]) edgeIndex;
-        };
-      });
+      # A node carries its kind's VALUE (`kindValue`, den-hoag-l0y) only in a scope where some
+      # registered kind declares one, and that is decided ONCE per scope, by choosing the node
+      # constructor here rather than testing per node: a scope with no kinds, or kinds carrying no
+      # value, keeps the record it always had and pays nothing per node.
+      nodes = prelude.genAttrs nodeOrder (
+        if kinds == null || !(prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds)) then
+          id: {
+            inherit id;
+            # Checked above against the registry, so this is a lookup rather than an admission.
+            type = types.${id} or null;
+            parent = parentIndex.${id} or null;
+            decls = (decls.${id} or { }) // {
+              # Store edge declarations for consumers to build computed attributes from
+              __edges = prelude.mapAttrs (_label: idx: idx.${id} or [ ]) edgeIndex;
+            };
+          }
+        else
+          id: {
+            inherit id;
+            type = types.${id} or null;
+            kindValue = if (types.${id} or null) == null then null else kinds.kinds.${types.${id}}.kindValue;
+            parent = parentIndex.${id} or null;
+            decls = (decls.${id} or { }) // {
+              __edges = prelude.mapAttrs (_label: idx: idx.${id} or [ ]) edgeIndex;
+            };
+          }
+      );
     };
 
   # ── THE RETIRED NAME ──

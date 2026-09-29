@@ -555,6 +555,15 @@ let
           # check living in that lazy per-record thunk would never be demanded and never fire for
           # exactly the case it exists to catch.
           collidingWithRegistered = builtins.filter (childId: nodes ? ${childId}) (builtins.attrNames raw);
+          # The fields the substrate stamps, built once per produced kind and shared by its children.
+          # The kind's value (`kindValue`, den-hoag-l0y) is stamped only when the kind declares one,
+          # decided here and never per child.
+          stamp = {
+            type = produced;
+            parent = id;
+            ${kindField} = producedKind;
+          }
+          // (if producedKind.kindValue == null then { } else { inherit (producedKind) kindValue; });
         in
         builtins.seq producedKind (
           if collidingWithRegistered != [ ] then
@@ -567,12 +576,7 @@ let
               else if (record.parent or id) != id then
                 throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
               else
-                record
-                // {
-                  type = produced;
-                  parent = id;
-                  ${kindField} = producedKind;
-                }
+                record // stamp
             ) raw
         );
     in
@@ -774,12 +778,24 @@ let
           throw "${at name}: group '${group}' key '${builtins.head colliding}' mints the identifier '${
             mintNtaId id name group (builtins.head colliding)
           }', which is already a registered node's. A registered id is answered from the scope's roots, so this child would be discarded silently. Register the node under another id."
+        # The host kind's value (`kindValue`, den-hoag-l0y) is stamped only when that kind declares
+        # one, and the child constructor is chosen here, once per group, never tested per child: an
+        # `nta` kind nests (gen-merge's module tree), so a per-child charge compounds per tree.
+        else if host.kindValue == null then
+          builtins.mapAttrs (key: seed: {
+            id = mintNtaId id name group key;
+            parent = id;
+            type = hostKind;
+            ${kindField} = host;
+            decls.seed = seedOf name group key seed;
+          }) members
         else
           builtins.mapAttrs (key: seed: {
             id = mintNtaId id name group key;
             parent = id;
             type = hostKind;
             ${kindField} = host;
+            inherit (host) kindValue;
             decls.seed = seedOf name group key seed;
           }) members;
 

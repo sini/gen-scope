@@ -560,6 +560,7 @@ let
     nta = { };
     dedupKey = null;
     fold = null;
+    kindValue = null;
   };
   # The registry projects `spawns` off an entry exactly as it projects the others — a kind that
   # expands declares its produced kinds there — so a forged record missing it is the same defect
@@ -664,6 +665,7 @@ let
     nta = { };
     dedupKey = null;
     fold = null;
+    kindValue = null;
   };
   entryNoSpawns = {
     below = [ ];

@@ -563,6 +563,7 @@ in
           spawns = { };
           dedupKey = null;
           fold = null;
+          kindValue = null;
         }
       ];
       expectedError = {
@@ -2972,7 +2973,7 @@ in
         "gen-scope.${entry}: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it; ${detail}. Mint the kinds with `mkKinds` over their declarations and pass the result.";
 
       declarationDetail = ''holds entries that are not minted kinds: ["`k` is a kind declaration built by `mkKind`, not a kind `mkKinds` minted: pass the declarations through `mkKinds`"]'';
-      mergeDetail = "files under 'k' a kind that differs from the kind 'k' that entry 'item' resolved in its `below` (compared on `name`, `below`, `depth` and the `spawns`/`nta` key sets). Two different kinds share one name — a merge of registries built from different declarations";
+      mergeDetail = "files under 'k' a kind that differs from the kind 'k' that entry 'item' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value's mark). Two different kinds share one name — a merge of registries built from different declarations";
     in
     {
       # G4 — the EVALUATOR, on a hand-built registry of declarations: a TYPE refusal naming it.
@@ -3075,6 +3076,98 @@ in
         expectedError = {
           type = "ThrownError";
           msg = exactly (registryRefusal "evalDebug" declarationDetail);
+        };
+      };
+    };
+
+  # ── A KIND'S VALUE, REFUSED BY NAME AT EVERY DOOR IT CROSSES (den-hoag-l0y, arm (B′)) ──
+  # Each cell pins its MESSAGE: before the value had a door, the name and the hand-written stand-in
+  # were refused alike, by `mkKind`'s closed options, so a cell reading only that a refusal fired
+  # stays green on the tree this suite exists to move off. The admitting half is `ci/tests/kind-value.nix`.
+  config.flake.testsError.kind-value-refusals =
+    let
+      standIn = {
+        kind = "host";
+        options = { };
+      };
+      valueOf = name: mark: {
+        kind = name;
+        __mint.minted = mark;
+      };
+      plain = mkKinds [
+        (mkKind { } "host")
+        (mkKind { below = [ "host" ]; } "leaf")
+      ];
+      withValue = r: v: r // { kindValue = v; };
+      buildWith =
+        kinds:
+        (genScope.buildRoots {
+          types.a = "host";
+          inherit kinds;
+        }).nodes;
+      registryRefusal =
+        detail:
+        "gen-scope.buildRoots: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it; ${detail}. Mint the kinds with `mkKinds` over their declarations and pass the result.";
+    in
+    {
+      # c3: the hand-written stand-in carries no mint, so it is not a kind value.
+      test-c3-mkKind-refuses-a-hand-written-stand-in = {
+        expr = mkKind { kindValue = standIn; } "host";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.mkKind: kind 'host' carries a `kindValue` with no mint-backed mark (`__mint.minted`); a hand-written `{ kind = ...; ... }` is not a kind value: take the kind from a schema";
+        };
+      };
+      # c4: a name is a reference, not a declaration.
+      test-c4-mkKind-refuses-a-kind-name = {
+        expr = mkKind { kindValue = "host"; } "host";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope.mkKind: kind 'host' carries the kind name "host" as its `kindValue`; a name is a reference, not a kind declaration: pass the kind value itself (e.g. `schema.widget`)'';
+        };
+      };
+      test-mkKind-refuses-a-kind-value-of-another-type = {
+        expr = mkKind { kindValue = 42; } "host";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.mkKind: kind 'host' carries a `kindValue` that is a int, not a kind value";
+        };
+      };
+      # c10: a minted record edited past `mkKind` meets the same shape arm at the registry door.
+      test-c10-buildRoots-refuses-a-forged-kind-value = {
+        expr = buildWith { kinds.host = withValue plain.kinds.host standIn; };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (
+            registryRefusal ''holds entries that are not minted kinds: ["`host` carries a `kindValue` with no mint-backed mark (`__mint.minted`); a hand-written `{ kind = ...; ... }` is not a kind value: take the kind from a schema"]''
+          );
+        };
+      };
+      # The presence arm: a record hand-built without the field is refused by naming it.
+      test-buildRoots-refuses-a-kind-record-carrying-no-kind-value-field = {
+        expr = buildWith { kinds.host = builtins.removeAttrs plain.kinds.host [ "kindValue" ]; };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (
+            registryRefusal ''holds entries that are not minted kinds: ["`host` carries no `kindValue` field"]''
+          );
+        };
+      };
+      # c11: a merge filing under `host` a kind whose value differs from the one `leaf` resolved.
+      test-c11-buildRoots-refuses-a-merge-whose-kind-values-differ = {
+        expr = buildWith {
+          kinds = {
+            host = withValue plain.kinds.host (valueOf "host" "host:a");
+            leaf = plain.kinds.leaf // {
+              belowKinds.host = withValue plain.kinds.host (valueOf "host" "host:b");
+            };
+          };
+        };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (
+            registryRefusal "files under 'host' a kind that differs from the kind 'host' that entry 'leaf' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value's mark). Two different kinds share one name — a merge of registries built from different declarations"
+          );
         };
       };
     };

@@ -308,6 +308,25 @@ let
   inherit (leastModelLib) forceFields;
 
   kindMarker = "gen-scope/kind";
+
+  # ── THE KIND VALUE A KIND CARRIES (den-hoag-l0y) ──
+  # A kind's canonical declaration is a gen-schema kind value, passed IN as a value: this library
+  # takes no gen-schema input, so it mints nothing and reads only the tagged sum gen-schema stamps.
+  # The predicate is gen-select's `kind-mark.nix`, copied rather than imported, for the reason that
+  # file gives: the seam's test is each library's own business. It reads `__mint ? minted` and stops,
+  # so it forces the mark record and never the digest. A name is a reference and a hand-written
+  # `{ kind = ...; }` carries no mint, so each is refused by name rather than admitted as a kind.
+  isKindValue = v: isAttrs v && v ? kind && v ? __mint && v.__mint ? minted;
+  kindValueDefect =
+    v:
+    if v == null || isKindValue v then
+      null
+    else if isString v then
+      "carries the kind name \"${v}\" as its `kindValue`; a name is a reference, not a kind declaration: pass the kind value itself (e.g. `schema.widget`)"
+    else if isAttrs v then
+      "carries a `kindValue` with no mint-backed mark (`__mint.minted`); a hand-written `{ kind = ...; ... }` is not a kind value: take the kind from a schema"
+    else
+      "carries a `kindValue` that is a ${typeOf v}, not a kind value";
   declarationMarker = "gen-scope/kind-declaration";
 
   # ★★ THIS IS THE SUBSTRATE'S KIND REGISTRY, AND `resolve` IS ONE VOCABULARY INSIDE IT.
@@ -350,8 +369,10 @@ let
       nta ? { },
       dedupKey ? null,
       fold ? null,
+      kindValue ? null,
     }:
     let
+      kvDefect = kindValueDefect kindValue;
       hasDedup = dedupKey != null;
       hasFold = fold != null;
       # ── THE SPAWN DECLARATION, AND WHY ITS DESCENT IS DECIDED HERE ──
@@ -387,6 +408,8 @@ let
     in
     if !isString name then
       throw "gen-scope.mkKind: `name` must be a string"
+    else if kvDefect != null then
+      throw "gen-scope.mkKind: kind '${name}' ${kvDefect}"
     else if !isList below then
       throw "gen-scope.mkKind: kind '${name}' declares a `below` that is a ${typeOf below} rather than a list"
     else if !(all isString below) then
@@ -420,6 +443,7 @@ let
           nta
           dedupKey
           fold
+          kindValue
           ;
       };
 
@@ -492,6 +516,10 @@ let
       "carries no `dedupKey` field"
     else if !(k ? fold) then
       "carries no `fold` field"
+    else if !(k ? kindValue) then
+      "carries no `kindValue` field"
+    else if kindValueDefect k.kindValue != null then
+      kindValueDefect k.kindValue
     # `resolve` is an OPTION now — a kind without one is structural and cannot answer a demand,
     # which the run refuses at the claim rather than here. What stays refused is a resolve that is
     # PRESENT and unapplicable, because that one aborts at the call site with no name of ours.
@@ -595,8 +623,11 @@ let
   # but a registry filing two different kinds under one name gives a reader looking a spawned
   # node's kind up by name a different kind from the one the evaluator follows, and the caller's
   # declared expansion silently does not happen. So it is refused by name. Two kinds are compared on
-  # `name`, `below`, `depth` and the key sets of `spawns` and `nta`; builders are functions and are
-  # not compared, so two kinds differing only in a builder's body are one kind to this door.
+  # `name`, `below`, `depth`, the key sets of `spawns` and `nta`, and their kind values' MARKS;
+  # builders are functions and are not compared, so two kinds differing only in a builder's body are
+  # one kind to this door. The kind value is compared by its mark for the same reason — it holds
+  # functions — so two constructions of one declaration differing only at a sealed component share
+  # a mark and are one kind here too: the same residue, one class.
   #
   # COST: one pass over the entries and one over each entry's resolved `below`, paid per door
   # crossing (every `eval` and `buildRoots` handed a registry) and never per node.
@@ -608,7 +639,9 @@ let
     && a.below == b.below
     && a.depth == b.depth
     && attrNames a.spawns == attrNames b.spawns
-    && attrNames a.nta == attrNames b.nta;
+    && attrNames a.nta == attrNames b.nta
+    && markOf a.kindValue == markOf b.kindValue;
+  markOf = v: if v == null then null else v.__mint.minted;
 
   # ADMISSION FIRST, THE REASON ONLY ON A REFUSAL. `kindSetAdmitted` decides the set
   # `kindSetDefect'` accepts, conjunct for conjunct and in its order — every entry a kind, every
@@ -675,7 +708,7 @@ let
       else if absent != [ ] then
         "holds kind '${(head absent).host}', whose resolved `below` carries kind '${(head absent).name}', which the registry does not"
       else if split != [ ] then
-        "files under '${(head split).name}' a kind that differs from the kind '${(head split).name}' that entry '${(head split).host}' resolved in its `below` (compared on `name`, `below`, `depth` and the `spawns`/`nta` key sets). Two different kinds share one name — a merge of registries built from different declarations"
+        "files under '${(head split).name}' a kind that differs from the kind '${(head split).name}' that entry '${(head split).host}' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value's mark). Two different kinds share one name — a merge of registries built from different declarations"
       else
         null;
 
