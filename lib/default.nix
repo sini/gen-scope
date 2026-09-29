@@ -59,7 +59,12 @@ let
   };
   # `inherit'` is read by the calculus, so the resolver module takes it rather than a second walker.
   resolve = import ./resolve.nix { inherit prelude calculus; };
-  structural = import ./structural.nix { inherit prelude; };
+  # The mark attribute's name and the endpoint projection's predicate are the calculus's and the
+  # evaluator's own reads, which import `structural.nix` themselves; they leave before the merge.
+  structural = builtins.removeAttrs (import ./structural.nix { inherit prelude; }) [
+    "markAttribute"
+    "projected"
+  ];
   interface = import ./interface.nix { inherit prelude; };
   inherit
     (import ./require-scope.nix {

@@ -1959,13 +1959,12 @@ in
     # `buildRoots`' own partial-function refusal recommends but did not, until now, ship. 93 rather
     # than 89: the `nta` channel publishes `mintNtaId`/`decodeNta` from `eval.nix` and
     # `childDepth`/`flattenChildren` from `structural.nix`. 92 rather than 93: `paramAttr` is
-    # retired (`den-hoag-4kh.53.54`, R§10.1 carry note in `README.md`). 98 rather than 92: the
+    # retired (`den-hoag-4kh.53.54`, R§10.1 carry note in `README.md`). 96 rather than 92: the
     # calculus (`calculus.nix`) publishes `wellFormed`, `labelOrder`, `neron` and `wfl` beside
-    # `resolve`, a name it takes over from the retired selector, and `structural.nix` publishes
-    # `markAttribute` and `projected`.
+    # `resolve`, a name it takes over from the retired selector.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 98;
+      expected = 96;
     };
     # Four doors. The doors are the registration and run entries and nothing else — the consumer
     # accessors that used to sit beside them reconstructed a list the run already computed, and the

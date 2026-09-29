@@ -359,31 +359,13 @@ let
         else
           refuse "resolve" "node ${renderId id}, letter '${l}': the edge attribute is a ${typeOf v}, not a list of node ids";
 
-      # D9: a parent cycle is refused only when it is made of parent edges alone. The chain from `id`
-      # is walked once per parent read; a finite chain ends at a root, so a chain whose every member
-      # has a parent has closed on itself.
-      # ponytail: O(depth) per parent read, O(depth²) per resolution; memoize the chain if deep
-      # containment trees make it measurable.
+      # The `parent` read is the node record's field; D9's cycle verdict is `parentCheck`'s, below.
       parentOf =
         id:
         let
           p = (self.node id).parent;
-          chain = builtins.genericClosure {
-            startSet = [ { key = id; } ];
-            operator =
-              x:
-              let
-                q = (self.node x.key).parent;
-              in
-              if q == null then [ ] else [ { key = q; } ];
-          };
         in
-        if p == null then
-          [ ]
-        else if builtins.all (x: (self.node x.key).parent != null) chain then
-          refuse "resolve" "node ${renderId id} is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk"
-        else
-          [ p ];
+        if p == null then [ ] else [ p ];
 
       targetsAt =
         id: l:
@@ -440,26 +422,32 @@ let
         let
           blockers = filter (m: !(admitsLetter src x.l m)) (marksAt src);
         in
-        if blockers == [ ] then
-          {
-            admitted = map (s: {
-              label = x.l;
-              target = s.to;
-              st = x.d;
-              inherit (x) k;
-            }) steps;
-            withheld = [ ];
-          }
-        else
-          {
-            admitted = [ ];
-            withheld = map (s: {
-              from = src;
-              label = x.l;
-              inherit (s) target;
-              marks = map (nameOf src) blockers;
-            }) steps;
-          };
+        {
+          label = x.l;
+          blocked = blockers != [ ];
+        }
+        // (
+          if blockers == [ ] then
+            {
+              admitted = map (s: {
+                label = x.l;
+                target = s.to;
+                st = x.d;
+                inherit (x) k;
+              }) steps;
+              withheld = [ ];
+            }
+          else
+            {
+              admitted = [ ];
+              withheld = map (s: {
+                from = src;
+                label = x.l;
+                inherit (s) target;
+                marks = map (nameOf src) blockers;
+              }) steps;
+            }
+        );
       expand =
         id: st:
         let
@@ -497,16 +485,22 @@ let
                 ))
               ]
           ) live;
+          # The `parent` classification at this node, if the walk read one (outbound only).
+          parentRead = filter (p: p.label == parentLetter) perLetter;
         in
         if live == [ ] then
           {
             admitted = [ ];
             withheld = [ ];
+            readsParent = false;
+            admitsParent = false;
           }
         else
           {
             admitted = concatMap (p: p.admitted) perLetter;
             withheld = concatMap (p: p.withheld) perLetter;
+            readsParent = parentRead != [ ];
+            admitsParent = parentRead != [ ] && !(head parentRead).blocked;
           };
 
       k0 = regex.stateKey st0;
@@ -578,6 +572,57 @@ let
 
       visits =
         if mode == "reachable" then closure else go { ${attrKey "resolve" from} = true; } [ ] from st0 k0;
+
+      # D9: a parent cycle is refused only when it is made of parent edges alone. The verdict is
+      # decided ONCE per resolution, over the union of the parent chains of every node the walk read
+      # `parent` at: one closure up those chains, one down from the roots they reach, and a node is
+      # well-formed iff it was reached from a root. Linear in the union, where a chain walk per
+      # `parent` read made a `parent*` resolution O(depth²) (`ci/bench/resolve-parent-chain.sh`).
+      # The walk itself terminates on a cycle either way (the closure's key, NR-Cons's seen set), so
+      # the refusal is applied where a read would have met it: an admitted `parent` edge for every
+      # answer, a withheld one too for `withheld`, which reads it.
+      up = builtins.genericClosure {
+        startSet = map (v: {
+          key = v.node;
+          parent = (self.node v.node).parent;
+        }) (filter (v: v.x.readsParent) visits);
+        operator =
+          x:
+          if x.parent == null then
+            [ ]
+          else
+            [
+              {
+                key = x.parent;
+                parent = (self.node x.parent).parent;
+              }
+            ];
+      };
+      below = builtins.groupBy (x: attrKey "resolve" x.parent) (filter (x: x.parent != null) up);
+      rooted = builtins.listToAttrs (
+        map
+          (x: {
+            name = attrKey "resolve" x.key;
+            value = true;
+          })
+          (
+            builtins.genericClosure {
+              startSet = filter (x: x.parent == null) up;
+              operator = x: below.${attrKey "resolve" x.key} or [ ];
+            }
+          )
+      );
+      parentCheck =
+        reads:
+        let
+          cyclic = filter (v: reads v.x && !(rooted ? ${attrKey "resolve" v.node})) visits;
+        in
+        if cyclic == [ ] then
+          true
+        else
+          refuse "resolve" "node ${renderId (head cyclic).node} is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk";
+      admittedChecked = builtins.seq (parentCheck (x: x.admitsParent));
+      withheldChecked = builtins.seq (parentCheck (x: x.readsParent));
 
       withheldBy = builtins.groupBy (w: attrKey "resolve" w.from) (concatMap (v: v.x.withheld) visits);
       # Each withheld edge once, in first-classified order: one visit per ⟨node, state⟩ or per path
@@ -716,22 +761,28 @@ let
         else
           (head part.visible).value;
     in
+    # `marksAt from` is forced with the door's other operands, so a scope that declares no `marks`
+    # is refused in every direction and mode, whether or not the walk considers any edge (row 19).
     builtins.seq (identifier "resolve" from) (
       builtins.seq dataFilter (
-        {
-          inherit mode withheld;
-          answers =
-            if mode == "reachable" then
-              reachableAnswers
-            else if mode == "witnesses" then
-              witnessAnswers
-            else
-              concatMap (g: visibleParts.${g}.visible) groupNames;
-        }
-        // prelude.optionalAttrs (mode == "visible") {
-          shadowed = concatMap (g: visibleParts.${g}.shadowed) groupNames;
-          inherit single;
-        }
+        builtins.seq (marksAt from) (
+          {
+            inherit mode;
+            withheld = id: withheldChecked (withheld id);
+            answers = admittedChecked (
+              if mode == "reachable" then
+                reachableAnswers
+              else if mode == "witnesses" then
+                witnessAnswers
+              else
+                concatMap (g: visibleParts.${g}.visible) groupNames
+            );
+          }
+          // prelude.optionalAttrs (mode == "visible") {
+            shadowed = admittedChecked (concatMap (g: visibleParts.${g}.shadowed) groupNames);
+            single = group: admittedChecked (single group);
+          }
+        )
       )
     );
 
