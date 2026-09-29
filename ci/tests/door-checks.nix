@@ -251,11 +251,40 @@ let
         off = f { } ev "c";
         full = S.queryReverse t (n: n.id) ev "c";
       };
-    resolve = {
-      on = S.resolve { local = 1; };
-      off = S.resolve { };
-      full = S.resolve { local = 1; };
-    };
+    # The calculus is not an options door (its `wf` and `dataFilter` are required), so it has no row
+    # in the table; its non-default option is `mode = "visible"` with `neron.order`, which answers
+    # the D < I < P selection the retired selector made: from `a` the import `b` shadows the parent
+    # `root`, where the default `reachable` walk answers both.
+    resolve =
+      let
+        f =
+          o:
+          (S.resolve (
+            {
+              inherit (S.neron) wf;
+              dataFilter = val;
+            }
+            // o
+          ) ev "a").answers;
+        v = {
+          mode = "visible";
+          inherit (S.neron) order;
+          groupBy = _: "val";
+        };
+      in
+      {
+        on = f v;
+        off = f { };
+        full =
+          (S.resolve (
+            S.neron
+            // {
+              mode = "visible";
+              dataFilter = val;
+              groupBy = _: "val";
+            }
+          ) ev "a").answers;
+      };
     subtypeOf =
       let
         f = o: S.subtypeOf o;

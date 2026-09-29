@@ -33,6 +33,19 @@ let
   # accessor's name before it reaches an attribute lookup.
   identifier = who: import ./string-argument.nix who "a node identifier";
 
+  # A read of an attribute the evaluation does not declare. Two names the calculus reads by
+  # construction are refused with what the caller has to declare (`calculus.nix`): the boundary-mark
+  # floor, which is never read as open when absent, and a letter's `edges-<l>`, which is never read
+  # as no edges. Every other name keeps the generic text.
+  unknownAttribute =
+    id: attrName:
+    if attrName == structural.markAttribute then
+      "gen-scope: node '${id}' is read for its boundary marks, but this evaluation declares no `${attrName}` attribute — a scope that declares no boundary mark; `_: _: [ ]` states none. An absent mark is never read as an open floor (ADR-0026)."
+    else if prelude.hasPrefix structural.edgePrefix attrName then
+      "gen-scope: node '${id}' is read for the edges of letter '${prelude.removePrefix structural.edgePrefix attrName}', but this evaluation declares no `${attrName}` attribute; an undeclared letter is refused rather than read as no edges (declare `${attrName}`, answering `[ ]` where a node has none)."
+    else
+      "gen-scope: unknown attribute '${attrName}' on node '${id}'";
+
   # THE `nta` CHILD IDENTIFIER — an injective encoding of (host id, NTA name, group, key), and its
   # total decoder.
   #
@@ -1945,7 +1958,7 @@ let
               builtins.seq (identifier who id) (
                 builtins.addErrorContext "evaluating '${attrName}' on '${id}'" (
                   if !(runAttributes ? ${attrName}) then
-                    throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
+                    throw (unknownAttribute id attrName)
                   else if rootEval ? ${id} then
                     rootEval.${id}.${attrName}
                   else
@@ -2162,7 +2175,7 @@ let
             # shape the projection below reads; the others pass through unchanged.
             structuralAttributes =
               let
-                structuralNamesAll = builtins.filter structural.structural (builtins.attrNames runAttributes);
+                structuralNamesAll = builtins.filter structural.projected (builtins.attrNames runAttributes);
               in
               id: prelude.genAttrs structuralNamesAll (name: structural.flattenChildren name (self.get id name));
 
@@ -2317,7 +2330,7 @@ let
                 trace = path;
                 value =
                   if !(runAttributes ? ${attrName}) then
-                    throw "gen-scope: unknown attribute '${attrName}' on node '${id}'"
+                    throw (unknownAttribute id attrName)
                   else
                     applyTraced id at attrName traceEntry path;
               }
