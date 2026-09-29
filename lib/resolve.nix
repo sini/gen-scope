@@ -39,84 +39,6 @@ let
   # Shadow: merge two declaration sets, inner shadows outer (Neron §5 Def. 1).
   shadow = inner: outer: inner // prelude.filterAttrs (k: _: !(inner ? ${k})) outer;
 
-  # Reverse reference attribute — `neededBy`, and this library's OWN dual, claimed from no
-  # paper: gather `dataFilter` over every node that IMPORTS `id` (the reverse of
-  # the `includes`/imports relation). A node does not know its importers locally, so this
-  # forces the full node set via `allNodes` (Tier 2, like `collect`). Gather-all, no
-  # shadowing; DIRECT importers by default — set `transitive = true` to walk the
-  # reverse-import closure. Dual of the forward import walk (`resolve` mode "witnesses").
-  #
-  # ORDER — reverse-walk DISCOVERY order. The result is emitted in the order the reverse
-  # walk reaches its contributors: a pre-order depth-first traversal of the reverse-import
-  # relation rooted at `id`, in which a node's importers are enumerated in MATERIALIZATION
-  # order (`self.allNodeIds` — root order, then pre-order through children; see eval.nix).
-  # The duality is what fixes the choice. The forward walk's answer order is its traversal order,
-  # taken from each node's DECLARED `imports` list; a dual whose order came instead from
-  # the codepoint key order of the node set would not be the dual of a traversal-ordered
-  # read, and the reverse relation carries no declared list of its own to walk. A reverse
-  # reference attribute is a survey of the tree, and its contributions combine in a
-  # traversal order of the tree.
-  #
-  # THE CITATION THIS COMMENT USED TO CARRY WAS WRONG TWICE OVER, so it is gone rather than
-  # softened. It read "Hedin & Magnusson 2003, inter-type declarations" for the construct
-  # and "Hedin & Magnusson 2003; Sloane 2010 §7 collection attributes" for the order.
-  # Measured at the primaries: `inter-type` occurs 0 times in Hedin & Magnusson (live
-  # controls in the same run: `aspect` 80, `attribute` 93) — their word is `introduction`,
-  # credited to AspectJ, and an introduction adds a member to a class, which is not a
-  # reverse query; `contribution` and `traversal order` are likewise 0 there; and Sloane §7
-  # is Conclusion and Future Work, whose whole content on the subject is "we are adding
-  # collection attributes". Hedin 2000, the reference-attribute paper gen-scope does
-  # implement, carries no reverse direction either (`reverse`/`inverse`/`backward` 0 against
-  # `reference attribute` 47). The duality argument above needs none of them.
-  #
-  # This library does NOT sort and does NOT deduplicate the answer. A node reachable along
-  # two reverse paths contributes twice, because a reverse gather counts contributions. A
-  # caller that needs a stable total order regardless of walk shape — or a set — sorts or
-  # deduplicates at its own call site and says so there.
-  #
-  # Where the tree settles no order, the tie-break is `allNodeIds`' and is declared with it:
-  # SIBLING ties break on `attrNames`, i.e. BYTEWISE CODEPOINT order, and a `derived-children`
-  # node interleaves with its `children` siblings under the same rule. That tie-break is a
-  # residue, not a law of attrsets — `childRecordsOf` merges the two child halves into ONE
-  # attrset and the walk descends its `attrNames`. ROOTS are not tie-broken at all: `eval`
-  # enters the walk at `scope.nodeOrder`, the declared vertex order `buildRoots` returns beside
-  # the node set, so the top level answers in DECLARATION order. On a FLAT graph (every node a
-  # root, no children) the walk is therefore the declared order and NOT the codepoint key order
-  # `attrNames self.allNodes` gives; on a nested one the sibling residue shows inside each
-  # subtree, and subtree contiguity is what the reader sees.
-  queryReverse =
-    {
-      dataFilter,
-      transitive ? false,
-      _seen ? { },
-    }:
-    self: id:
-    let
-      allIds = self.allNodeIds;
-      importersOf =
-        nid: builtins.filter (other: builtins.elem nid (self.get other relations.imports)) allIds;
-      collectFrom =
-        seen: importerId:
-        let
-          v = dataFilter (self.node importerId);
-          direct = prelude.optional (v != null) v;
-          trans =
-            if transitive then
-              let
-                nextSeen = seen // {
-                  ${importerId} = true;
-                };
-                nextUnseen = builtins.filter (i: !(nextSeen ? ${i})) (importersOf importerId);
-              in
-              prelude.concatMap (collectFrom nextSeen) nextUnseen
-            else
-              [ ];
-        in
-        direct ++ trans;
-      directImporters = builtins.filter (i: !(_seen ? ${i})) (importersOf id);
-    in
-    prelude.concatMap (collectFrom (_seen // { ${id} = true; })) directImporters;
-
   # Inherited attribute: the first non-null up the parent chain, as the one calculus reads it —
   # `parent*` under mode "visible", one rank (`$ < parent`, so the nearest declaration shadows every
   # farther one), one competition group, and `single`. A parent chain that returns to itself is
@@ -416,8 +338,8 @@ let
 
   # Global collection (WARNING: forces full tree — Tier 2). Answers in MATERIALIZATION
   # order (`self.allNodeIds`), not the codepoint key order `attrNames self.allNodes` would
-  # give — the same undeclared-order defect `queryReverse` had (see its ORDER comment
-  # above): an attrset is a set, so enumerating it and discarding the walk that built it
+  # give — the same undeclared-order defect the reverse walk had (see the ORDER comment at
+  # `calculus.nix`'s converse): an attrset is a set, so enumerating it and discarding the walk that built it
   # loses a declared order to an incidental one. `allNodeIds` is the walk kept.
   collect =
     {
@@ -470,7 +392,6 @@ in
     ;
   # THE DOORS (den-hoag-7gp66 P2, R7): options first, one closed set checked when `f opts` is formed,
   # then the operands, then the protocol tail (`self id`), which stays positional and last (OQ5).
-  queryReverse = door.options "queryReverse" [ "dataFilter" ] queryReverse;
   inherit' = door.options "inherit'" [ "resolve" ] inherit';
   # RETIRED BY THE ONE CALCULUS (den-hoag-gayc D16): each name is a tombstone naming its
   # replacement, so an un-migrated call is refused where it is written rather than answering.
@@ -478,6 +399,7 @@ in
   queryAll = throw "gen-scope: `queryAll` is retired. Use the one resolution calculus: `(resolve { inherit (neron) wf; mode = \"witnesses\"; dataFilter = f; } self id).answers`, one `{ node; value; path; state; }` per acyclic resolution path (a diamond answers twice). Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
   ambiguous = throw "gen-scope: `ambiguous` is retired. Use `length (unique (map (a: a.node) (resolve { inherit (neron) wf; mode = \"witnesses\"; dataFilter = f; } self id).answers)) > 1`: an ambiguity is more than one distinct declaring node, never one declaration reached along several paths. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
   visibleFrom = throw "gen-scope: `visibleFrom` is retired. Use `(resolve (neron // { mode = \"visible\"; dataFilter = f; groupBy = _: \"k\"; }) self id).single \"k\"`. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+  queryReverse = throw "gen-scope: `queryReverse` is retired. Use the one resolution calculus over the converse: `map (a: a.value) (resolve { wf = wellFormed { alphabet = [ \"imports\" ]; expression = \"imports\"; }; mode = \"witnesses\"; direction = \"inbound\"; dataFilter = f; } self id).answers`; `transitive = true` is `expression = \"imports imports*\"`. One answer per acyclic reverse path, importers in `allNodeIds` order, so a node on two reverse paths answers twice. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
   inheritAll = door.options "inheritAll" [ "extract" ] inheritAll;
   inheritSet = door.options "inheritSet" [ "extract" ] inheritSet;
   circular = door.options "circular" [ ] circular;

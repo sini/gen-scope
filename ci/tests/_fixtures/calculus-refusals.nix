@@ -202,6 +202,18 @@ in
     plant = go { follow = 1; } ok;
     twin = go { } ok;
   };
+  row10-unknown-direction = {
+    plant = go { direction = "sideways"; } ok;
+    twin = go { direction = "inbound"; } ok;
+  };
+  # The twin is the same alphabet walked outbound: what is refused is `parent` under the converse.
+  row10-parent-in-an-inbound-alphabet = {
+    plant = go {
+      inherit (S.neron) wf;
+      direction = "inbound";
+    } ok;
+    twin = go { inherit (S.neron) wf; } ok;
+  };
   row11-dataFilter-not-callable = {
     plant = go { dataFilter = 1; } ok;
     twin = go { } ok;

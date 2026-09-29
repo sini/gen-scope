@@ -1,7 +1,7 @@
 # THE ONE RESOLUTION CALCULUS — van Antwerpen, Poulsen, Rouvoet & Visser 2018 ("Scopes as Types"),
 # Fig. 1, run over an EVALUATED scope (den-hoag-gayc; ADR-0008, ADR-0024 carrier (L, E, <, r) + k).
 #
-#   resolve { wf; dataFilter; mode ? "reachable"; order ?; groupBy ?; bound ?; } self from
+#   resolve { wf; dataFilter; mode ? "reachable"; order ?; groupBy ?; bound ?; direction ? "outbound"; } self from
 #
 # `wf` is WFL (label well-formedness, a regular expression over the alphabet L, stepped by
 # Brzozowski derivatives — `regex.nix`); `dataFilter` is the relation's lookup composed with WFD,
@@ -28,6 +28,13 @@
 # edge labelled `l` iff every mark in `marks src ++ bound src` admits `l`. `bound` is the query's
 # narrowing: it only removes edges, and the floor is never reachable from here. A scope that declares
 # no `marks` is refused by name at the first read; `_: _: [ ]` is the declaration of none.
+#
+# THE CONVERSE (ADR-0024; Mokhov 2017 §5.2). `direction = "inbound"` is the same query over the
+# converse of each letter's edges: from `id` the letter `imports` steps to every node that imports
+# `id`, enumerated in `self.allNodeIds` order, and `edges-l` likewise. The marks are applied to the
+# AUTHORED graph before the converse is taken, so the edge s —l→ id is admitted or withheld by the
+# marks of `s`, its authored source, and `withheld s` reports it as it was authored. `parent` has
+# no place in an inbound alphabet: containment's converse is `children`, a different relation.
 #
 # The parameter constructors (`wellFormed`, `labelOrder`) and the WFL syntax (`wfl`) are published;
 # the derivative engine (`deriv`, `nullable`, `stateKey`, `parse`) is not.
@@ -284,10 +291,14 @@ let
     "witnesses"
     "visible"
   ];
+  directions = [
+    "outbound"
+    "inbound"
+  ];
 
   # ── THE WALK ───────────────────────────────────────────────────────────────────────────────────
   run =
-    o: mode: self: from:
+    o: mode: direction: self: from:
     let
       alphabet = o.wf.alphabet;
       st0 = o.wf.term;
@@ -383,8 +394,72 @@ let
         else
           edgeList id l (self.get id (structural.edgePrefix + l));
 
+      inbound = direction == "inbound";
+      # The converse, per letter, built once per resolution and only for a letter the walk reads:
+      # target → its authored sources in `allNodeIds` order, each source once. A node does not
+      # know its importers locally, so an inbound read forces the full node set (Tier 2, like
+      # `collect`).
+      #
+      # ORDER — the sources are enumerated in MATERIALIZATION order (`self.allNodeIds`: root
+      # order, then pre-order through children; see eval.nix). The duality is what fixes the
+      # choice. The outbound walk's order is its traversal order, taken from each node's DECLARED
+      # edge list; a converse whose order came instead from the codepoint key order of the node
+      # set would not be the dual of a traversal-ordered read, and the converse carries no
+      # declared list of its own to walk. The rule is this library's own, claimed from no paper:
+      # the citation the retired `queryReverse` once carried ("Hedin & Magnusson 2003, inter-type
+      # declarations"; "Sloane 2010 §7 collection attributes") named nothing in either primary —
+      # `inter-type` occurs 0 times in Hedin & Magnusson (live controls, same run: `aspect` 80,
+      # `attribute` 93), and Sloane §7 is Conclusion and Future Work.
+      #
+      # Where the tree settles no order, the tie-break is `allNodeIds`' and is declared there:
+      # SIBLING ties break on `attrNames` (bytewise codepoint), ROOTS follow `scope.nodeOrder`, the
+      # declared vertex order. The answer is neither sorted nor deduplicated: a node on two
+      # acyclic reverse paths answers twice, as a diamond does outbound.
+      converse = builtins.listToAttrs (
+        map (l: {
+          name = l;
+          value = builtins.groupBy (e: attrKey "resolve" e.to) (
+            concatMap (
+              s:
+              map (t: {
+                to = t;
+                src = s;
+              }) (prelude.unique (targetsAt s l))
+            ) self.allNodeIds
+          );
+        }) alphabet
+      );
+      sourcesOf = id: l: map (e: e.src) (converse.${l}.${attrKey "resolve" id} or [ ]);
+
       # One ⟨node, state⟩ expansion: the live letters in the alphabet's order, the edges within a
-      # letter in the attribute's order, each admitted or withheld by the marks at the source.
+      # letter in the attribute's (outbound) or `allNodeIds`' (inbound) order, each admitted or
+      # withheld by the marks at its AUTHORED source. `steps` are `{ to; target; }`: where the walk
+      # goes, and the authored edge's target.
+      classify =
+        src: x: steps:
+        let
+          blockers = filter (m: !(admitsLetter src x.l m)) (marksAt src);
+        in
+        if blockers == [ ] then
+          {
+            admitted = map (s: {
+              label = x.l;
+              target = s.to;
+              st = x.d;
+              inherit (x) k;
+            }) steps;
+            withheld = [ ];
+          }
+        else
+          {
+            admitted = [ ];
+            withheld = map (s: {
+              from = src;
+              label = x.l;
+              inherit (s) target;
+              marks = map (nameOf src) blockers;
+            }) steps;
+          };
       expand =
         id: st:
         let
@@ -400,32 +475,27 @@ let
               }
             ) alphabet
           );
-          marks = marksAt id;
-          perLetter = map (
+          perLetter = concatMap (
             x:
-            let
-              blockers = filter (m: !(admitsLetter id x.l m)) marks;
-              ts = targetsAt id x.l;
-            in
-            if blockers == [ ] then
-              {
-                admitted = map (t: {
-                  label = x.l;
-                  target = t;
-                  st = x.d;
-                  inherit (x) k;
-                }) ts;
-                withheld = [ ];
-              }
+            if inbound then
+              map (
+                s:
+                classify s x [
+                  {
+                    to = s;
+                    target = id;
+                  }
+                ]
+              ) (sourcesOf id x.l)
             else
-              {
-                admitted = [ ];
-                withheld = map (t: {
-                  label = x.l;
-                  target = t;
-                  marks = map (nameOf id) blockers;
-                }) ts;
-              }
+              [
+                (classify id x (
+                  map (t: {
+                    to = t;
+                    target = t;
+                  }) (targetsAt id x.l)
+                ))
+              ]
           ) live;
         in
         if live == [ ] then
@@ -509,9 +579,7 @@ let
       visits =
         if mode == "reachable" then closure else go { ${attrKey "resolve" from} = true; } [ ] from st0 k0;
 
-      withheldBy = builtins.groupBy (w: attrKey "resolve" w.from) (
-        concatMap (v: map (w: w // { from = v.node; }) v.x.withheld) visits
-      );
+      withheldBy = builtins.groupBy (w: attrKey "resolve" w.from) (concatMap (v: v.x.withheld) visits);
       # Each withheld edge once, in first-classified order: one visit per ⟨node, state⟩ or per path
       # may classify it again (`listToAttrs` keeps the first index of a name).
       withheld =
@@ -680,12 +748,14 @@ let
           "order"
           "groupBy"
           "bound"
+          "direction"
         ];
       }
       (
         o:
         let
           mode = o.mode or "reachable";
+          direction = o.direction or "outbound";
         in
         if !(elem mode modes) then
           refuse "resolve" "unknown mode ${toJSON mode} (one of ${quote modes})"
@@ -701,8 +771,12 @@ let
           refuse "resolve" "wf is not a `wellFormed` value (build it with `wellFormed { alphabet; expression; }`)"
         else if mode == "visible" && (o.order.__element or null) != "labelOrder" then
           refuse "resolve" "order is not a `labelOrder` value (build it with `labelOrder { alphabet; layers; endOfPath; }`)"
+        else if !(elem direction directions) then
+          refuse "resolve" "unknown direction ${toJSON direction} (one of ${quote directions})"
+        else if direction == "inbound" && elem parentLetter o.wf.alphabet then
+          refuse "resolve" "direction \"inbound\" walks the converse of each letter's edges, and the alphabet carries '${parentLetter}': the converse of containment is `children`, a different relation, so an inbound alphabet cannot name it"
         else
-          run o mode
+          run o mode direction
       );
 in
 {

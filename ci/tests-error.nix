@@ -4234,7 +4234,11 @@ in
         "row10-unknown-mode" =
           ''gen-scope.resolve: unknown mode "all" (one of ["reachable","witnesses","visible"])'';
         "row10-unknown-option" =
-          "gen-scope.resolve: 'follow' is not an option of this door; the options are closed (accepted: 'wf', 'dataFilter', 'mode', 'order', 'groupBy', 'bound') (in prelude.checkOptions)";
+          "gen-scope.resolve: 'follow' is not an option of this door; the options are closed (accepted: 'wf', 'dataFilter', 'mode', 'order', 'groupBy', 'bound', 'direction') (in prelude.checkOptions)";
+        "row10-unknown-direction" =
+          ''gen-scope.resolve: unknown direction "sideways" (one of ["outbound","inbound"])'';
+        "row10-parent-in-an-inbound-alphabet" =
+          ''gen-scope.resolve: direction "inbound" walks the converse of each letter's edges, and the alphabet carries 'parent': the converse of containment is `children`, a different relation, so an inbound alphabet cannot name it'';
         "row10-visible-without-order" =
           ''gen-scope.resolve: mode "visible" requires `order`, a `labelOrder` value (<l over the alphabet, with `$`'s rank)'';
         "row11-admits-not-a-bool" =

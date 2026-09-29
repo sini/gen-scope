@@ -144,10 +144,6 @@ in
       "neg"
       "pos"
     ];
-    queryReverse.optional = [
-      "_seen"
-      "transitive"
-    ];
     resolveClaims.optional = [ "ctx" ];
     subtypeOf.optional = [ "eq" ];
   };
@@ -165,7 +161,6 @@ in
     "inheritSet"
     "mkKind"
     "mkRule"
-    "queryReverse"
     "resolveClaims"
     "subtypeOf"
   ];
