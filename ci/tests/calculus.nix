@@ -307,6 +307,37 @@ let
       b = "a";
     };
   };
+  # D9's verdict is decided once per resolution; these pin WHERE it refuses. `rho`'s start is not on
+  # the cycle, its chain enters one; `shutParents` withholds every `parent` edge, so no answer
+  # reads one.
+  rho = lift {
+    nodes = [
+      "t"
+      "a"
+      "b"
+    ];
+    parents = {
+      t = "a";
+      a = "b";
+      b = "a";
+    };
+  };
+  shutParents = lift {
+    nodes = [
+      "a"
+      "b"
+    ];
+    parents = {
+      a = "b";
+      b = "a";
+    };
+    marks = _: _: [
+      {
+        name = "shut";
+        admits = l: l != "parent";
+      }
+    ];
+  };
 
   # ── the neron = query grid (gate v1 grid2): every 3-node scope — acyclic parent map, import
   # subsets, declaration flags — read by the retired `query` (frozen in
@@ -802,6 +833,7 @@ let
   # The 4ok8y chain shape, `seq [ lit a, star acc ]` nested 5,000 deep, built by the published
   # constructors; keyed by the engine the calculus reads.
   regex = import ../../lib/regex.nix { prelude = genPreludeLib; };
+  structural = import ../../lib/structural.nix { prelude = genPreludeLib; };
   chain =
     k:
     builtins.foldl' (
@@ -980,8 +1012,8 @@ in
     # ── D6: the mark attribute is structural and out of the edge projection ──
     test-D6-marks-is-structural-and-not-projected = {
       expr = {
-        structural = S.structural S.markAttribute;
-        projected = S.projected S.markAttribute;
+        structural = S.structural structural.markAttribute;
+        projected = structural.projected structural.markAttribute;
         edges = c22.structuralEdges "grommet";
         findings = c22.projectionFindings "grommet";
       };
@@ -1063,6 +1095,20 @@ in
     test-N3-a-parent-cycle-is-refused-catchably = {
       expr = throws (run "reachable" [ "parent" ] "parent*" cyc "a");
       expected = true;
+    };
+    test-D9-refused-where-a-read-meets-the-cycle = {
+      expr = {
+        rhoReachable = throws (run "reachable" [ "parent" ] "parent*" rho "t");
+        rhoWitnesses = throws (run "witnesses" [ "parent" ] "parent*" rho "t");
+        shutAnswers = nodesOf (run "witnesses" [ "parent" ] "parent*" shutParents "a");
+        shutWithheld = throws ((run "witnesses" [ "parent" ] "parent*" shutParents "a").withheld "a");
+      };
+      expected = {
+        rhoReachable = true;
+        rhoWitnesses = true;
+        shutAnswers = [ "a" ];
+        shutWithheld = true;
+      };
     };
 
     # ── P1: the preset constructs over the plain alphabet ──
@@ -1475,6 +1521,8 @@ in
           "stateKey"
           "parse"
           "parseWith"
+          "markAttribute"
+          "projected"
         ];
         syntax = builtins.attrNames S.wfl;
       };

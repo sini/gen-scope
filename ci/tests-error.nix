@@ -4269,6 +4269,8 @@ in
         "row18-edge-read-refusal-propagates" = "planted: the edge read's own refusal";
         "row19-no-marks" =
           "gen-scope: node 'a' is read for its boundary marks, but this evaluation declares no `marks` attribute — a scope that declares no boundary mark; `_: _: [ ]` states none. An absent mark is never read as an open floor (ADR-0026).";
+        "row19-no-marks-inbound" =
+          "gen-scope: node 'a' is read for its boundary marks, but this evaluation declares no `marks` attribute — a scope that declares no boundary mark; `_: _: [ ]` states none. An absent mark is never read as an open floor (ADR-0026).";
         "row20-undeclared-letter" =
           "gen-scope: node 'a' is read for the edges of letter 'l1', but this evaluation declares no `edges-l1` attribute; an undeclared letter is refused rather than read as no edges (declare `edges-l1`, answering `[ ]` where a node has none).";
         "row21-reserved-lifted-label" =

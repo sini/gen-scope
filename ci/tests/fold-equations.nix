@@ -352,12 +352,11 @@ in
     # rather than 96: `paramAttr` is retired (`den-hoag-4kh.53.54`, R§10.1 carry note in
     # `README.md`). 96 rather than 95: the minting module publishes `argumentBinding` beside
     # `mintStrata` (`den-hoag-0cmbt`).
-    # 102 rather than 96: the calculus publishes `wellFormed`, `labelOrder`, `neron` and `wfl` beside
-    # `resolve`, a name it takes over from the retired selector, and `structural.nix` publishes
-    # `markAttribute` and `projected`.
+    # 100 rather than 96: the calculus publishes `wellFormed`, `labelOrder`, `neron` and `wfl` beside
+    # `resolve`, a name it takes over from the retired selector.
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 102;
+      expected = 100;
     };
     # One: the fold's entry, and nothing else. This cell is the module's inventory, and an export it
     # does not list is an export nothing measured.

@@ -388,6 +388,14 @@ in
     });
     twin = go { } ok;
   };
+  # The inbound twin: nothing imports or edges into `a`, so the walk considers no edge, and the
+  # author error is refused all the same — at the door, not at the first edge.
+  row19-no-marks-inbound = {
+    plant = go { direction = "inbound"; } (scope {
+      marks = null;
+    });
+    twin = go { direction = "inbound"; } ok;
+  };
   row20-undeclared-letter = {
     plant =
       (S.resolve {
