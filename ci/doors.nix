@@ -136,6 +136,7 @@ in
       "below"
       "dedupKey"
       "fold"
+      "kindValue"
       "nta"
       "resolve"
       "spawns"
