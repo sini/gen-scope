@@ -1,14 +1,13 @@
 {
   description = "Dependency resolver: package resolution with version constraints and conflict detection";
   inputs = {
-    gen-scope.url = "github:sini/gen-scope";
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
   };
   outputs =
-    { gen-scope, nixpkgs, ... }:
+    { nixpkgs, ... }:
     let
       lib = nixpkgs.lib;
-      genScope = gen-scope.lib;
+      genScope = import ../.. { };
       graph = import ./graph.nix { inherit genScope lib; };
       attributes = import ./attributes.nix { inherit genScope lib; };
       inherit (graph) roots;

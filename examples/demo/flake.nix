@@ -2,15 +2,14 @@
   description = "gen-scope demo: algebraic graphs, scope resolution, HOAG evaluation";
 
   inputs = {
-    gen-scope.url = "github:sini/gen-scope";
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
   };
 
   outputs =
-    { gen-scope, nixpkgs, ... }:
+    { nixpkgs, ... }:
     let
       lib = nixpkgs.lib;
-      genScope = gen-scope.lib;
+      genScope = import ../.. { };
     in
     {
 

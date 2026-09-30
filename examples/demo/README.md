@@ -47,9 +47,13 @@ Compare any output against the `# ->` comments next to its definition in
 
 ## Inputs
 
-Pinned to the published `github:sini/gen-scope`. The library is consumed through
-its single `.lib` value:
+The library is bound from the checkout this example ships in, through its
+standalone entry, so the demo evaluates against that tree and its lock pins
+nothing of `gen-scope` itself:
 
 ```nix
-genScope = gen-scope.lib;
+genScope = import ../.. { };
 ```
+
+A flake of your own consumes the single `.lib` value of
+`github:sini/gen-scope` instead: `genScope = gen-scope.lib;`.

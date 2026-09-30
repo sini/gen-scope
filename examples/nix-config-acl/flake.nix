@@ -1,14 +1,13 @@
 {
   description = "nix-config ACL: unified access control with three-level scope graph resolution";
   inputs = {
-    gen-scope.url = "github:sini/gen-scope";
     nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
   };
   outputs =
-    { gen-scope, nixpkgs, ... }:
+    { nixpkgs, ... }:
     let
       lib = nixpkgs.lib;
-      genScope = gen-scope.lib;
+      genScope = import ../.. { };
       groups = import ./data/groups.nix;
       environments = import ./data/environments.nix;
       hosts = import ./data/hosts.nix;

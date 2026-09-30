@@ -45,9 +45,6 @@ module Cycle2 { import Cycle1 }
 # --apply forces every cell: without it a failed test renders as «error: …» and the command still exits 0
 # it does not check the values — these cells state no expectations
 nix eval .#tests --apply 'x: builtins.deepSeq x x'
-
-# or, to test against the local gen-scope checkout:
-nix eval --override-input gen-scope ../.. .#tests --apply 'x: builtins.deepSeq x x'
 ```
 
 ## References
