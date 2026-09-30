@@ -1780,6 +1780,43 @@ in
         msg = exactly "gen-scope: kind 'host' spawns 'leafTwo' and its builder returned a child 'shared', which an earlier spawn on this same host already produced. Two spawns sharing a key on one host silently overwrite one another. Choose a key none of this host's own spawns already produced.";
       };
     };
+
+    # A child whose `id` disagrees with its key: the key is the identity, so the second copy is
+    # refused naming the kind, the key and the offending id (it used to recurse without bound).
+    test-a-spawned-child-whose-id-disagrees-with-its-key-is-refused-by-name = {
+      expr =
+        builtins.deepSeq
+          (genScope.eval { }
+            {
+              children = _self: _id: { };
+            }
+            (
+              genScope.buildRoots {
+                parentGraph = genScope.vertex "a";
+                types.a = "host";
+                decls.a = { };
+                kinds = genScope.mkKinds [
+                  (genScope.mkKind { } "leaf")
+                  (genScope.mkKind {
+                    below = [ "leaf" ];
+                    spawns.leaf = _self: id: {
+                      warp = {
+                        id = "weft";
+                        parent = id;
+                        decls = { };
+                      };
+                    };
+                  } "host")
+                ];
+              }
+            )
+          ).allNodes
+          null;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope: kind 'host' spawns 'leaf' and its builder returned a child 'warp' whose `id` is 'weft' rather than its key 'warp'. A spawned child's identity is the key its builder returned it under: the substrate settles collisions on that key and stamps `id` from it, so a builder asserting a different id is naming a node the key set never registered. Drop the field.";
+      };
+    };
   };
 
   # ── THE CIRCULAR CARRIER'S REFUSALS, EACH BY ITS OWN TEXT ──

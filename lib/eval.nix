@@ -576,8 +576,15 @@ let
                 throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `kindValue`. A spawn does not choose its child's kind value any more than its kind: the value is the one the produced kind declares (`mkKind { kindValue = …; }`), stamped by the substrate with its `type` — a value chosen while the spawn fires is one no kind declared. Drop the field."
               else if (record.parent or id) != id then
                 throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
+              # The key IS the identity: collisions are settled on `raw`'s keys, and the evaluator
+              # reads `id` off the record, so a second copy that disagrees is an identity nothing
+              # checked. Stamped from the key like `parent` from the host.
+              else if (record.id or childId) != childId then
+                throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `id` is ${
+                  if builtins.isString record.id then "'${record.id}'" else "a ${builtins.typeOf record.id}"
+                } rather than its key '${childId}'. A spawned child's identity is the key its builder returned it under: the substrate settles collisions on that key and stamps `id` from it, so a builder asserting a different id is naming a node the key set never registered. Drop the field."
               else
-                record // stamp
+                record // stamp // { id = childId; }
             ) raw
         );
     in

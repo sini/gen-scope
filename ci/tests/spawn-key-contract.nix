@@ -65,6 +65,33 @@ let
   control = mkFixture { };
   plantedRegistered = mkFixture { plantRegistered = true; };
   plantedSibling = mkFixture { plantSibling = true; };
+
+  # The child's `id` against its key: omitted, it is stamped from the key; disagreeing, refused.
+  mkIdFixture =
+    child:
+    genScope.eval { }
+      {
+        children = _self: _id: { };
+      }
+      (
+        genScope.buildRoots {
+          parentGraph = genScope.vertex "a";
+          types.a = "host";
+          decls.a = { };
+          kinds = genScope.mkKinds [
+            (genScope.mkKind { } "leaf")
+            (genScope.mkKind {
+              below = [ "leaf" ];
+              spawns.leaf = _self: _id: { warp = child; };
+            } "host")
+          ];
+        }
+      );
+  idless = mkIdFixture { decls.v = 1; };
+  mismatched = mkIdFixture {
+    id = "weft";
+    decls = { };
+  };
 in
 {
   flake.tests."spawn-key-contract" = {
@@ -88,6 +115,31 @@ in
     # ── O3's catchability: flavor (C)'s refusal is catchable, not an uncatchable abort ──
     test-a-sibling-spawn-collision-is-catchable = {
       expr = succeeds plantedSibling.allNodeIds;
+      expected = false;
+    };
+
+    # ── the key IS the identity: an id-less child is admitted under it ──
+    test-an-idless-spawned-child-is-stamped-with-its-key = {
+      expr = {
+        ids = builtins.sort builtins.lessThan idless.allNodeIds;
+        inherit (idless.node "warp") id parent type;
+        v = (idless.node "warp").decls.v;
+      };
+      expected = {
+        ids = [
+          "a"
+          "warp"
+        ];
+        id = "warp";
+        parent = "a";
+        type = "leaf";
+        v = 1;
+      };
+    };
+
+    # ── an id disagreeing with its key is refused catchably (message: tests-error.nix) ──
+    test-a-spawned-id-disagreeing-with-its-key-is-catchable = {
+      expr = succeeds mismatched.allNodeIds;
       expected = false;
     };
   };

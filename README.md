@@ -122,16 +122,16 @@ Nix attrset VALUES are lazy but KEYS are eager. Function application is never me
 
 ## Terminology
 
-| Term             | Definition                                                                                                        |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Nodes            | Minimal descriptors: `{ id, type, parent, decls }`                                                                |
-| Roots            | Entry-point nodes (from `buildNodes` or hand-written)                                                             |
-| Children         | The nodes the `children` attribute SELECTS from the scope's own node set — a selection, never a mint              |
-| Derived Children | Nodes GROWN by `derived-children`, declared as `spawns.<produced-kind>` on the host kind (can read sibling attrs) |
-| Attributes       | Computed values on nodes — demand-driven, memoized via `_eval`                                                    |
-| Combinators      | Attribute constructors: `inherit'`, `inheritAll`, `inheritSet`, `circular`, `collectionAttr`, `query`             |
-| Tier 1           | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth)                                             |
-| Tier 2           | Materialization: `self.allNodes` — O(n), forces full tree                                                         |
+| Term             | Definition                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Nodes            | Minimal descriptors: `{ id, type, parent, decls }`                                                                        |
+| Roots            | Entry-point nodes (from `buildNodes` or hand-written)                                                                     |
+| Children         | The nodes the `children` attribute SELECTS from the scope's own node set — a selection, never a mint                      |
+| Derived Children | Nodes GROWN by `derived-children`, declared as `spawns.<produced-kind>` on the host kind (builder reads `self.node` only) |
+| Attributes       | Computed values on nodes — demand-driven, memoized via `_eval`                                                            |
+| Combinators      | Attribute constructors: `inherit'`, `inheritAll`, `inheritSet`, `circular`, `collectionAttr`, `query`                     |
+| Tier 1           | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth)                                                     |
+| Tier 2           | Materialization: `self.allNodes` — O(n), forces full tree                                                                 |
 
 ## Example
 
@@ -193,22 +193,26 @@ not a growth channel …
 
 ### `derived-children` — Second-Stage Synthesis, DECLARED ON THE KIND IT EXPANDS FROM
 
-`derived-children` is the ONLY attribute that grows the node set, and it can read attributes of the nodes `children` selects (Vogt 1989 §2.4 NTA stratification). It is **not written as an attribute**: an expansion is declared on the kind it expands from, and writing the name directly is refused.
+`derived-children` is the ONLY attribute that grows the node set. Its builder is handed the **spawn handle**, which serves one name, `node` — a node's `{ id; parent; decls; type; }` — and never an evaluated attribute: a spawn declares what nodes exist, not what they are worth, so a growth decision reads declarations. A spawn predicated on an evaluated attribute belongs on the `nta` channel, whose builder reads through the ordinary accessor. It is **not written as an attribute**: an expansion is declared on the kind it expands from, and writing the name directly is refused.
 
 ```nix
 kinds = mkKinds [
-  (mkKind { name = "admin-user"; })
+  (mkKind { } "admin-user")
   (mkKind {
-    name = "host";
     below = [ "admin-user" ];                # the ORDER is what licenses the expansion
     spawns.admin-user = self: id:            # the KEY is the produced kind
-      let alice = self.get "user:alice@${id}" "resolved-aspects"; in
-      if hasAspect "sudo" alice
-      then { "user:alice-admin@${id}" = { parent = id; decls = { ... }; }; }
+      let host = (self.node id).decls; in    # the spawn handle serves `node`, never `get`
+      if builtins.elem "alice" (host.sudoers or [ ])
+      then { "user:alice-admin@${id}" = { decls.user = "alice"; }; }   # `id`, `type`, `parent` are stamped
       else { };
-  })
+  } "host")
 ];
-roots = buildRoots { inherit kinds; types."h" = "host"; ... };
+roots = buildRoots {
+  inherit kinds;
+  parentGraph = vertex "h";
+  types.h = "host";
+  decls.h.sudoers = [ "alice" ];
+};
 ```
 
 **Why the declaration is not where the builder used to be.** A bare `derived-children` returned records carrying whatever `type` string their author wrote, so a spawn minted a fresh kind per level as freely as it minted a fresh id — an expansion that descended nothing was indistinguishable from one that did, and neither growth was observable from anywhere. Söderberg & Hedin §7 (printed 320) states the conservative termination technique as *"ordering the nonterminals (the node types), so that each new NTA has a lower order than its host"*, and in Vogt's formalism an expansion produces a symbol the **grammar declares** — the produced symbol is never a runtime choice. Both put the expansion on the node type.
@@ -216,8 +220,8 @@ roots = buildRoots { inherit kinds; types."h" = "host"; ... };
 So:
 
 - **The produced kind must be `below` the host's**, refused at `mkKind` where the declaration is built. A non-descending expansion is **inexpressible**, not detected: `mkKinds` mints each kind against the kinds declared before it, so every resolved `below` edge strictly decreases `depth`, and nothing at evaluation time compares two ranks.
-- **The substrate stamps `type`** from the key the builder is declared under, and stamps the produced kind's **record** beside it: the record the host's kind resolved under that key when it was minted. The evaluator follows that record, never a lookup of `type` in the registry, so no registry value — a `//` merge of two registries included — can re-route a spawn chain.
-  A builder returning a record that carries its own `type` is refused by name — that field is the only way a firing-time kind choice could still be attempted.
+- **The substrate stamps `type`** from the key the builder is declared under, `parent` from the host, and `id` from the key the builder returned the child under, and stamps the produced kind's **record** beside them: the record the host's kind resolved under that key when it was minted. The evaluator follows that record, never a lookup of `type` in the registry, so no registry value — a `//` merge of two registries included — can re-route a spawn chain.
+  A builder returning a record that carries its own `type` is refused by name — that field is the only way a firing-time kind choice could still be attempted. A `parent` other than the host, or an `id` other than the child's key, is refused by name too: the key is the identity, and a second copy that disagrees names a node nothing registered.
 - **A node of no kind spawns nothing**, and that is the honest reading rather than a hole: an expansion descends a rank, and a node outside the kind vocabulary has none.
 
 **And there is no second channel to close.** `children` used to grow the node set through the same walk, so a body could mint a node whose kind it chose and the descent guarantee held on one channel of two. That half is closed: `children` selects among registered nodes and a record under an unregistered key is refused by name. The two things the attribute used to do are SEPARATED rather than ordered — requiring descent of `children` itself was the arm that could not be taken, because static containment is same-kind by nature (a `dir` contains a `dir`) and a self-loop in `below` is refused at registration, so nested directories would have become inexpressible. Selection introduces no node to rank; growth leaves through the channel where the produced kind is the declaration's. **⇒ The descent guarantee covers all growth, by construction, with no second check.**
@@ -228,13 +232,12 @@ So:
 
 ```nix
 eval {
-  roots;               # { id = { id, type, parent, decls }; }
-  attributes;          # { attrName = self: id: value; }
   parseParent ? null;  # id → parentId | null
   prior ? null;        # a prior EVALUATION's accessor — not a result map
   decision ? coldDecision;  # { isClean; reusable; } — see `evalWarm`
+  declaredDependencies ? null;  # `gen-graph.mkDeclaredEdges`'s value; null = none supplied
   provenance ? [ ];    # plain data carried back to the caller on the result
-}
+} attributes scope     # attributes: { attrName = self: id: value; }; scope: `buildRoots`' record
 ```
 
 Returns `{ node, get, getNta, getHostAt, allNodes, allNodeIds, allNodesWhere, subtreeOf, nodesOfType, facade, resolutional, served, structuralAttributes, structuralEdges, projectionFindings, decisionFindings, provenance }`:
@@ -308,12 +311,13 @@ The trace is a **returned value**, not text inside an error. Alongside `node` an
 
 ```nix
 evalWarm {
-  roots;               # { id = { id, type, parent, decls }; }
-  attributes;          # { attrName = self: id: value; }
   parseParent ? null;  # id → parentId | null
+  provenance ? [ ];
+} {
+  scope;               # `buildRoots`' record
+  attributes;          # { attrName = self: id: value; }
   prior;               # a prior EVALUATION's accessor
   decision;            # mkDecision { isClean; reusable; }
-  provenance ? [ ];
 }
 ```
 
@@ -459,7 +463,7 @@ Graph transformations (Mokhov, 2017 §5.2-5.5):
 #### `inherit'`
 
 ```nix
-inherit' { resolve; _visited ? {}; } self id
+inherit' { _visited ? {}; } resolve self id
 ```
 
 Walks parent chain until `resolve node` returns non-null. Cycle-safe via `_visited`.
@@ -467,7 +471,7 @@ Walks parent chain until `resolve node` returns non-null. Cycle-safe via `_visit
 #### `inheritAll`
 
 ```nix
-inheritAll { extract; combine ? null; } self id
+inheritAll { combine ? null; } extract self id
 ```
 
 Accumulates values along entire parent chain (ordered-list discipline — keeps duplicates, order-dependent).
@@ -479,7 +483,7 @@ The parent walk is one `builtins.genericClosure`, whose key dedup **is** the cyc
 #### `inheritSet`
 
 ```nix
-inheritSet { extract; eq ? a: b: a == b; } self id
+inheritSet { eq ? a: b: a == b; } extract self id
 ```
 
 Set-discipline sibling of `inheritAll`: a node's value = its own contribution ∪ every ancestor's, walking up the P-edge parent chain, **deduplicated** (`eq`, default `==`). Idempotent union — membership is the semantics, order/multiplicity carry none — so a value several ancestors contribute appears once and the set stays bounded along a deep chain. Use for an inherited control-fact set (e.g. suppressed-policy names) that a consumer tests by membership; use `inheritAll` when order and duplicates matter. Delegates the (cycle-safe, demand-driven) parent walk to `inheritAll`.
@@ -515,7 +519,7 @@ Both sit on `eval`'s and `evalDebug`'s records and on every step's own accessor,
 #### `collectionAttr`
 
 ```nix
-collectionAttr { traverse; extract; combine ? null; filter ? _: true; } self id
+collectionAttr { combine ? null; filter ? _: true; } traverse extract self id
 ```
 
 Traverse modes: `"imports"`, `"children"`, `"siblings"`, `"ancestors"`, `"neron"`, `"label:<name>"`, or custom function.
@@ -539,7 +543,7 @@ config-modules = engine.collectionAttr { } "neron" (self: id:
 #### `query`
 
 ```nix
-query { dataFilter; localShadowsImport ? true; importShadowsParent ? true; transitiveImports ? false; } self id
+query { localShadowsImport ? true; importShadowsParent ? true; transitiveImports ? false; } dataFilter self id
 ```
 
 Neron (2015) resolution: searches local, imports, parent with specificity D < I < P. Import edges come from `self.get id "imports"` (computed attribute). `_seen` tracks visited scopes to prevent import self-resolution (Neron 2015 §2.4, rule X).
@@ -555,7 +559,7 @@ Laziness is unaffected: `imported` is forced only once `resolve`'s earlier arms 
 #### `queryAll`
 
 ```nix
-queryAll { dataFilter; transitiveImports ? false; } self id
+queryAll { transitiveImports ? false; } dataFilter self id
 ```
 
 All reachable results without shadowing (Neron 2015 §2.3, rule R). For ambiguity detection.
@@ -563,7 +567,7 @@ All reachable results without shadowing (Neron 2015 §2.3, rule R). For ambiguit
 #### `queryReverse`
 
 ```nix
-queryReverse { dataFilter; transitive ? false; } self id   # → [value]
+queryReverse { transitive ? false; } dataFilter self id   # → [value]
 ```
 
 Reverse reference attribute — the dual of `queryAll`. Where `queryAll` walks import edges **forward** (the scopes `id` imports), `queryReverse` gathers `dataFilter` over every node that **imports** `id` (the reverse of the `imports` relation — a `neededBy`-style query). A node cannot see its importers locally, so this forces the full node set via `allNodes` (Tier 2, like `collect`). Gather-all, no shadowing; **direct** importers by default — set `transitive = true` to walk the reverse-import closure (cycle-safe via a seen-set).
@@ -782,10 +786,9 @@ A contribution whose gating atom is **UNDEFINED** is not admitted and is not dro
 A third concern, and the only one that **builds** a graph rather than reading one. `mintStrata` takes the emitters a program declared and returns the scope graph they describe: a node map keyed by identifier, one labelled edge per relatum, the number of strata the run walked, and the driver's leftover partition carried through.
 
 ```nix
-mintStrata {
-  emitters;   # [ { pass; identifier; kind; relata; content; site; } ] — the fixed item set
-  kinds;      # the schema stratum's already-evaluated output
-}
+mintStrata
+  kinds       # the schema stratum's already-evaluated output
+  emitters    # [ { pass; identifier; kind; relata; content; site; } ] — the fixed item set
 # → { nodes  = { <identifier> = { identity; kind; content; }; };
 #     edges  = [ { from; to; label; } ];   # one per relatum, carrying the identity's own label
 #     strata;                              # the number of distinct declared passes the run walked
@@ -845,10 +848,10 @@ The word "demand" here means demand-driven evaluation and it means only that. Th
 
 ```nix
 resolveClaims {
-  kinds;        # a registry from `mkKinds`, or the list of declarations to mint one from
-  claims;       # [ claim ] — a list, order significant
   ctx ? { };    # the caller's constant context, handed to every resolver unchanged
 }
+  kinds         # a registry from `mkKinds`, or the list of declarations to mint one from
+  claims        # [ claim ] — a list, order significant
 # → { resources = { <kindName> = { <resourceKey> = value; }; };
 #     wiring    = { <id_hash> = { subject; byKind; entries; }; };
 #     unrun     = [ instance ];   # what the loop created and did not settle
@@ -863,7 +866,6 @@ resolveClaims {
 
 ```nix
 mkKind {
-  name;              # a string; the registry's key, a claim's `kind`, and a node's `type`
   below ? [ ];       # kind NAMES ranked under this one: what its resolver may emit sub-claims of,
                      #   and what a node of this kind may expand into
   resolve ? null;    # OPTIONAL. Applied to the resolver view and then to `ctx`; returns a record
@@ -871,12 +873,14 @@ mkKind {
                      #   are each optional, and which is CLOSED to those three — any other key
                      #   is a named refusal, while `{ }` remains a legitimate empty answer
   spawns ? { };      # produced-kind → builder. Every key must be in `below`; the substrate stamps
-                     #   `type` from the key, so a builder cannot choose its child's kind
+                     #   `type` from the key, so a builder cannot choose its child's kind, and a
+                     #   child's `id` from the key it is returned under
+  nta ? { };         # name → builder: the recursive NTA channel, children of the host's own kind
   dedupKey ? null;   # groups claimants; required together with `fold`
   fold ? null;       # merges a group's resource fragments; required together with `dedupKey`
   kindValue ? null;  # the kind's gen-schema kind value (e.g. `schema.host`), carried by the kind
                      #   and stamped on every node of it; a name or an unminted record is refused
-}
+} name               # a string; the registry's key, a claim's `kind`, and a node's `type`
 ```
 
 **A kind carries its declaration as a value.** gen-scope takes no gen-schema input: a kind's `kindValue` is handed in, and the door reads the tagged sum gen-schema stamps (`kind`, `__mint.minted`) and mints nothing. A string is a reference and a hand-written `{ kind = ...; }` carries no mint, so each is refused by name at `mkKind` and again at the registry door. A node built by `buildRoots`, a spawned child and an `nta` child carry their kind's value as the record field `kindValue` — only in a scope where some kind declares one, chosen once per scope and once per produced kind, so a scope whose kinds declare none keeps its node record and pays nothing per node. The registry's coherence check compares values by their marks, never by `==`, since a value holds functions.
@@ -1059,9 +1063,9 @@ nix flake check ./ci                       # build + run the full suite; unguard
 and `nix flake check ./ci` are unguarded: they read a git-filtered copy of the tree, so an untracked
 cell is silently absent and the run stays green.
 
-Requires nix-unit. **1044 tests across 69 suites** (55 suite files under `ci/tests/`; twelve further entries sit in `ci/tests/_fixtures/` — eleven fixture files and one directory, `purity-walk` — which the tree importer does not import: they contribute no suite, so every suite comes from the files outside that directory). The evaluator's: `eval`, `eval-debug`, `eval-debug-trace`, `eval-warm`, `build-nodes`, `vertex-order`, `graph`, `hoag`, `circular`, `circular-nta`, `quotient-accessor` for the quotient carrier's two demand forms and the channels that carry its tag, `child-selection`, `scc-round`, `spawned-visibility`, `spawn-key-contract` for the spawn channel's produced-key contract — a spawned key colliding with an already-registered node or with a sibling spawn on the same host, both catchable, beside the live control that a non-colliding spawn still mints, `nta` for the recursive NTA channel beside it — same-kind growth, a key set read off an evaluated value, interleaved families, the seed as a list of addresses into the host's evaluated definitions, and the identifier minted from the host's coordinates, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `structural`, `structural-edges`, `codomain-seam-guard` for the `self.node` acquisition seam beside the read seam the coverage condition already governs, `identifier-doors` for the doors that take a node identifier still answering on one, `door-checks` for every door's checks over the door table `ci/doors.nix` (an unknown option, a missing field or a non-set argument refused catchably, an extra record field admitted, an option given on a guarded record refused, each contract published as data, and a non-default option reaching the partial application), and the six `plane-*` suites. The engine's: `engine-program`, `engine-least-model`, `engine-well-founded`, `engine-door`, and `interpretation` for the prior-verdicts parameter. Staged minting's: `minting`, plus `stratify`, `stratify-non-refusals` and `stratum-aggregation` for the driver it runs on, and `ascent` for the bounded-ascent driver's own contract — the three things it does that its caller cannot do for it, and the one thing it deliberately does not. `entry` covers the standalone root entry — the plain-import path no other suite reaches. `repl` covers the harness `repl` command's entry, `ci/repl.nix`, which likewise nothing else reaches: that it loads, and loads exactly the library surface plus `lib` and `genScope`. Nine further suites cover the fold vocabulary and the kind cascade. `folds` covers what each fold is defined over and what it refuses when handed something else; `dedup` (the suite `ci/tests/cascade-dedup.nix` declares, which is why its name carries no prefix) covers grouping as a pure function of a claim's own fields, fragments reaching a fold in pinned schedule order, and a singleton group still passing through. The seven `cascade-*`: `cascade-kinds` covers the registry — what the measure is, what registration refuses, and in what ORDER; `cascade-claims` covers the run — what a resolver is handed, what the constructor refuses and when, and what the result says about things that produced nothing; `cascade-termination` covers quiescence, a `below` relation of depth `d` resolving in exactly `d+1` strata, and the refusal chain guarding emission as well as intake; `cascade-determinism` covers purity — repeated evaluation byte-identical, claim order significant, and no value manufactured by the engine; `cascade-provenance` covers the trace — every parent chain reaching a root, every artifact mapping to a contributing path, and the global order being stratum-major rather than path-lexicographic; `cascade-helpers` covers the consumer side of the published wiring and the splice a caller assembles from it; and `cascade-instance-k8s` is the end-to-end golden, the only suite that reads the composite stratum's own artifacts. `registry-admission` covers the door in front of all of them — that the evaluator and the constructor admit only a registry `mkKinds` built, and that refusing one yields a VALUE the caller can act on where the state it replaced was an uncatchable abort `tryEval` does not contain; `kind-value` covers the gen-schema kind value a kind carries and every node of it carries — the node record unchanged in a scope whose kinds declare none, a spawned child stamped with its produced kind's value, and a merged registry admitted when its records under one name carry one value's mark. `fold-equations` covers the cold fold's seal, its entry-time forcing of the schedule and its collision guard; `dependency-union` covers the relation a reuse layer reads off that seal's accessor — the union, its normalization and its direction; `declared-relation-contract` covers the input type of the two entries that take a declared relation, including the third state `eval`'s formal carries and `foldEquations`' total one cannot express; `merge-surface` covers the assembly's refusal over module sets it builds itself, since the real module set has no duplicate to refuse. Three suites bind an artifact rather than the library: `examples` forces every example under `examples/` against THIS tree rather than against the example's own lock, which is how the corpus drifted 137 commits behind unseen; `bench-denotation` ties each bench header's denotation claim to the constructor that bench measures, since that sentence is copied when the next bench is written and arrives naming the previous one; and `readme-figures` binds this section's own counts and suite names to the planes, which is why the figures above are re-derived on every gate rather than re-typed. The `purity` suite asserts the library source never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant — and asserts the instrument that says so, since a scan reports "clean" just as loudly when it is dead: the detector is exercised over the real source list with a planted tether appended; the source list is pinned along both of its axes, membership as a written-down label list rather than as a count and content against a token the library really carries at the labels where it really occurs; a residual content floor covers the one label that pairing cannot reach — `lib/graph.nix`, the builtins-only algebraic graph core, which names no prelude and so sits outside the live-token list by construction, that exclusion being what makes the list a proper subset and so what gives it teeth — bounding that file's text away from empty, though not away from a non-empty constant; the comment strip's own premise is asserted over the raw text rather than assumed, since cutting each line at its first `#` removes live code wherever that `#` stands inside a string literal and the loss is otherwise silent, with a live control proving the predicate discriminates and a declared list of the files a line-local test cannot conclude about — the `''` blocks, none today, so the first to arrive reds that list rather than passing unread; and the recursive descent is run against a fixture tree nested on purpose, `lib/` being flat.
+Requires nix-unit. **1046 tests across 69 suites** (55 suite files under `ci/tests/`; twelve further entries sit in `ci/tests/_fixtures/` — eleven fixture files and one directory, `purity-walk` — which the tree importer does not import: they contribute no suite, so every suite comes from the files outside that directory). The evaluator's: `eval`, `eval-debug`, `eval-debug-trace`, `eval-warm`, `build-nodes`, `vertex-order`, `graph`, `hoag`, `circular`, `circular-nta`, `quotient-accessor` for the quotient carrier's two demand forms and the channels that carry its tag, `child-selection`, `scc-round`, `spawned-visibility`, `spawn-key-contract` for the spawn channel's produced-key contract — a spawned key colliding with an already-registered node or with a sibling spawn on the same host, both catchable, an id-less child stamped with its key and a child whose `id` disagrees with its key refused catchably, beside the live control that a non-colliding spawn still mints, `nta` for the recursive NTA channel beside it — same-kind growth, a key set read off an evaluated value, interleaved families, the seed as a list of addresses into the host's evaluated definitions, and the identifier minted from the host's coordinates, `collection-attr`, `neron-traverse`, `queries`, `query`, `resolve`, `relations`, `specificity`, `subtype`, `ambiguity`, `custom-edges`, `wf-policy`, `structural`, `structural-edges`, `codomain-seam-guard` for the `self.node` acquisition seam beside the read seam the coverage condition already governs, `identifier-doors` for the doors that take a node identifier still answering on one, `door-checks` for every door's checks over the door table `ci/doors.nix` (an unknown option, a missing field or a non-set argument refused catchably, an extra record field admitted, an option given on a guarded record refused, each contract published as data, and a non-default option reaching the partial application), and the six `plane-*` suites. The engine's: `engine-program`, `engine-least-model`, `engine-well-founded`, `engine-door`, and `interpretation` for the prior-verdicts parameter. Staged minting's: `minting`, plus `stratify`, `stratify-non-refusals` and `stratum-aggregation` for the driver it runs on, and `ascent` for the bounded-ascent driver's own contract — the three things it does that its caller cannot do for it, and the one thing it deliberately does not. `entry` covers the standalone root entry — the plain-import path no other suite reaches. `repl` covers the harness `repl` command's entry, `ci/repl.nix`, which likewise nothing else reaches: that it loads, and loads exactly the library surface plus `lib` and `genScope`. Nine further suites cover the fold vocabulary and the kind cascade. `folds` covers what each fold is defined over and what it refuses when handed something else; `dedup` (the suite `ci/tests/cascade-dedup.nix` declares, which is why its name carries no prefix) covers grouping as a pure function of a claim's own fields, fragments reaching a fold in pinned schedule order, and a singleton group still passing through. The seven `cascade-*`: `cascade-kinds` covers the registry — what the measure is, what registration refuses, and in what ORDER; `cascade-claims` covers the run — what a resolver is handed, what the constructor refuses and when, and what the result says about things that produced nothing; `cascade-termination` covers quiescence, a `below` relation of depth `d` resolving in exactly `d+1` strata, and the refusal chain guarding emission as well as intake; `cascade-determinism` covers purity — repeated evaluation byte-identical, claim order significant, and no value manufactured by the engine; `cascade-provenance` covers the trace — every parent chain reaching a root, every artifact mapping to a contributing path, and the global order being stratum-major rather than path-lexicographic; `cascade-helpers` covers the consumer side of the published wiring and the splice a caller assembles from it; and `cascade-instance-k8s` is the end-to-end golden, the only suite that reads the composite stratum's own artifacts. `registry-admission` covers the door in front of all of them — that the evaluator and the constructor admit only a registry `mkKinds` built, and that refusing one yields a VALUE the caller can act on where the state it replaced was an uncatchable abort `tryEval` does not contain; `kind-value` covers the gen-schema kind value a kind carries and every node of it carries — the node record unchanged in a scope whose kinds declare none, a spawned child stamped with its produced kind's value, and a merged registry admitted when its records under one name carry one value's mark. `fold-equations` covers the cold fold's seal, its entry-time forcing of the schedule and its collision guard; `dependency-union` covers the relation a reuse layer reads off that seal's accessor — the union, its normalization and its direction; `declared-relation-contract` covers the input type of the two entries that take a declared relation, including the third state `eval`'s formal carries and `foldEquations`' total one cannot express; `merge-surface` covers the assembly's refusal over module sets it builds itself, since the real module set has no duplicate to refuse. Three suites bind an artifact rather than the library: `examples` forces every example under `examples/` against THIS tree rather than against the example's own lock, which is how the corpus drifted 137 commits behind unseen; `bench-denotation` ties each bench header's denotation claim to the constructor that bench measures, since that sentence is copied when the next bench is written and arrives naming the previous one; and `readme-figures` binds this section's own counts and suite names to the planes, which is why the figures above are re-derived on every gate rather than re-typed. The `purity` suite asserts the library source never touches `nixpkgs.lib`, enforcing the Class B nixpkgs-lib-free invariant — and asserts the instrument that says so, since a scan reports "clean" just as loudly when it is dead: the detector is exercised over the real source list with a planted tether appended; the source list is pinned along both of its axes, membership as a written-down label list rather than as a count and content against a token the library really carries at the labels where it really occurs; a residual content floor covers the one label that pairing cannot reach — `lib/graph.nix`, the builtins-only algebraic graph core, which names no prelude and so sits outside the live-token list by construction, that exclusion being what makes the list a proper subset and so what gives it teeth — bounding that file's text away from empty, though not away from a non-empty constant; the comment strip's own premise is asserted over the raw text rather than assumed, since cutting each line at its first `#` removes live code wherever that `#` stands inside a string literal and the loss is otherwise silent, with a live control proving the predicate discriminates and a declared list of the files a line-local test cannot conclude about — the `''` blocks, none today, so the first to arrive reds that list rather than passing unread; and the recursive descent is run against a fixture tree nested on purpose, `lib/` being flat.
 
-A cell whose subject is a refusal **message** cannot live under `flake.tests`: the batch asserter behind `checks.default` quantifies over that option and forces every `expr` unconditionally, so a throwing one crashes the gate instead of failing a cell. Those cells have their own output — **321 tests across 30 suites** (the 26 `*-refusals` suites, `cascade-refusals` through `vertex-order-refusals`, plus `assembly-refusal`, `build-nodes-reserved-labels`, `door-checks` — each door's refusals pinned to the byte, naming the door — and `root-surface-retired`, the one cell gen-harness generates from `ci/flake.nix`'s tombstone declaration to pin `buildNodes`' exact message at the root seam), the figure being what `nix-unit --flake ./ci#testsError` reports, which is also how the output is run. Both minting refusals are asserted there — each of the unresolved-relatum causes and the merge conflict against its own message text, anchored end to end rather than checked for being non-empty, so neither cell can be satisfied by the other's refusal.
+A cell whose subject is a refusal **message** cannot live under `flake.tests`: the batch asserter behind `checks.default` quantifies over that option and forces every `expr` unconditionally, so a throwing one crashes the gate instead of failing a cell. Those cells have their own output — **322 tests across 30 suites** (the 26 `*-refusals` suites, `cascade-refusals` through `vertex-order-refusals`, plus `assembly-refusal`, `build-nodes-reserved-labels`, `door-checks` — each door's refusals pinned to the byte, naming the door — and `root-surface-retired`, the one cell gen-harness generates from `ci/flake.nix`'s tombstone declaration to pin `buildNodes`' exact message at the root seam), the figure being what `nix-unit --flake ./ci#testsError` reports, which is also how the output is run. Both minting refusals are asserted there — each of the unresolved-relatum causes and the merge conflict against its own message text, anchored end to end rather than checked for being non-empty, so neither cell can be satisfied by the other's refusal.
 
 **Two things the suite structurally cannot host**, and both are read off exit codes instead:
 
