@@ -8,6 +8,7 @@
   lib,
   genScope,
   genGraph,
+  genPrelude,
   genPreludeLib,
   ...
 }:
@@ -268,8 +269,8 @@ in
       in
       {
         expr = {
-          present = builtins.match ".*ANCHOR: R10\\.1-RIDER-WHY-ORGUARD.*" src != null;
-          absentControl = builtins.match ".*${absentToken}.*" src != null;
+          present = genPrelude.hasInfix "ANCHOR: R10.1-RIDER-WHY-ORGUARD" src;
+          absentControl = genPrelude.hasInfix absentToken src;
         };
         expected = {
           present = true;
