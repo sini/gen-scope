@@ -1047,6 +1047,13 @@ in
       test-moduleArgs-without-a-definer-is-refused =
         thrown (b { supplyRoute = "moduleArgs"; })
           "gen-scope.argumentBinding: supplyRoute 'moduleArgs' requires a definer, the module that defines the argument";
+      test-an-empty-definer-on-moduleArgs-is-refused =
+        thrown
+          (b {
+            supplyRoute = "moduleArgs";
+            definer = "";
+          })
+          "gen-scope.argumentBinding: supplyRoute 'moduleArgs' requires a non-empty definer; an empty one would make every module so keyed one binding";
       test-a-definer-on-another-route-is-refused =
         thrown
           (b {

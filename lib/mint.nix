@@ -260,12 +260,18 @@ let
   # formal (`pkgs`, `lib`) has no identity of its own — ADR-0034 excludes its content — so the binding
   # that supplied it is the identity an instance's preimage carries for it.
   #
-  # `scope` is an IDENTIFIER and never an identity, so a binding never relates a scope by identity and
-  # the root, which has no identity (ADR-0016 r7), supplies arguments like any other scope. It is the
-  # scope that INTRODUCED the binding, never the one reaching it (R10): an inherited binding is one id
-  # for every inheriting scope and an override is a new id. That is the CALLER's obligation — a
-  # constructor handed `scope` cannot tell an introducing scope from a reaching one — and the cell
-  # that discriminates it walks the applying party's own scopes (gen-demo), not this function.
+  # Scope is an identifier, never an identity, so a binding never relates a scope by identity and the
+  # root, which has no identity (ADR-0016 r7), supplies arguments like any other scope. It is the scope
+  # that INTRODUCED the binding, never the one reaching it (R10): an inherited binding is one id for
+  # every inheriting scope and an override is a new id.
+  #
+  # ★ THREE OBLIGATIONS ARE THE CALLER's, NOT ENFORCED HERE. (1) R10: a constructor handed `scope`
+  # cannot tell an introducing scope from a reaching one, and the cell that discriminates it walks the
+  # applying party's own scopes (gen-demo). (2) `scope` is an identifier: an identity-shaped string
+  # (`argument-binding:…`) is a string like any other and mints. (3) `scope`, `name` and `definer` are
+  # non-empty: an empty `scope` or `name` mints. The one empty input refused is a `moduleArgs`
+  # `definer`, because `""` would satisfy "requires a definer" and collapse every module so keyed into
+  # one binding; ADR-0034's key rule never yields `""`, so only a caller defect reaches that refusal.
   #
   # ★ THE ROUTE SET IS CLOSED, so a misspelt route is refused by name rather than minting a distinct
   # id that matches nothing. The four are the design's (identity design §3): the applying party's
@@ -274,9 +280,11 @@ let
   # `definer` is required on `moduleArgs` and refused on every other route: it is the one route on
   # which two modules can define one name, and a definer elsewhere would split one binding into many.
   #
-  # Two minters at different gen-scope pins (gen-merge for `specialArgs` and `moduleArgs`, the
-  # applying party for `context`) never need to agree, because `supplyRoute` is in the preimage and
-  # their ids are distinct by construction.
+  # Minters of DIFFERENT routes at different gen-scope pins (gen-merge for `specialArgs` and
+  # `moduleArgs`, the applying party for `context`) never need to agree, because `supplyRoute` is in
+  # the preimage and their ids are distinct by construction. That assumes one minting party per route;
+  # `wrap`'s minter is unnamed (the identity design names none), and two parties minting one route at
+  # different pins are not covered by this argument.
   #
   # The record is open (R5), as every record step here is: an unnamed field is admitted and unread.
   # A misspelt `definer` is still caught on `moduleArgs` by the definer rule, and changes no id on any
@@ -328,6 +336,8 @@ let
           })"
         else if route == "moduleArgs" && definer == null then
           throw "${argumentBindingDoor}: supplyRoute 'moduleArgs' requires a definer, the module that defines the argument"
+        else if route == "moduleArgs" && field "definer" "a definer" definer == "" then
+          throw "${argumentBindingDoor}: supplyRoute 'moduleArgs' requires a non-empty definer; an empty one would make every module so keyed one binding"
         else if route != "moduleArgs" && definer != null then
           throw "${argumentBindingDoor}: a definer is given on supplyRoute '${route}', and only 'moduleArgs' takes one"
         else
