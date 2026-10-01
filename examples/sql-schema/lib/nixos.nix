@@ -160,7 +160,6 @@ let
       server = fleet.server.${serverName};
     in
     genBind.wrap {
-      module = serverModuleFn;
       bindings = {
         inherit fleet serverName server;
       };
@@ -179,7 +178,7 @@ let
           scope = "server=${serverName}";
         };
       };
-    };
+    } serverModuleFn;
 
   # Evaluate a server module — calls the wrapped module to get the plain config attrset.
   # Backward-compatible replacement for code that expected buildServerModule to return a config.

@@ -47,7 +47,16 @@ let
     let
       nodeIds = map (n: n.__path) nodes;
       parentEdges = builtins.filter (e: e != null) (
-        map (n: if n.__parentPath != null then genScope.edge n.__path n.__parentPath else null) nodes
+        map (
+          n:
+          if n.__parentPath != null then
+            genScope.edge {
+              from = n.__path;
+              to = n.__parentPath;
+            }
+          else
+            null
+        ) nodes
       );
     in
     genScope.buildRoots {

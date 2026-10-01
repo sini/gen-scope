@@ -1621,16 +1621,20 @@ in
           let
             inherit (sql.genDispatch) mkRule dispatch;
             match = sql.genDispatch.adapters.select.mkMatch sel;
-            testRule = mkRule {
-              condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ]));
-              produce = _id: _ctx: [
+            testRule =
+              mkRule
                 {
-                  __action = "tagged";
-                  value = true;
+                  identity = "bridge-test";
                 }
-              ];
-              identity = "bridge-test";
-            };
+                (sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ])))
+                (
+                  _id: _ctx: [
+                    {
+                      __action = "tagged";
+                      value = true;
+                    }
+                  ]
+                );
             serverCtx = sql.mkServerContext {
               tags = [
                 "web"
@@ -1638,7 +1642,7 @@ in
               ];
               environment = "prod";
             };
-            result = dispatch {
+            result = dispatch { } {
               rules = [ testRule ];
               id = "test-server";
               context = serverCtx;

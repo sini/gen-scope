@@ -115,45 +115,53 @@ let
   demoRules = [
     # All servers get SSH (unconditional)
     (genDispatch.mkRule {
-      condition = sel.star;
-      produce = _id: _ctx: [ (rulesLib.fx.nixos { services.openssh.enable = true; }) ];
       identity = "ssh-everywhere";
       group = "config";
-    })
+    } (sel.star) (_id: _ctx: [ (rulesLib.fx.nixos { services.openssh.enable = true; }) ]))
 
     # Web-tagged servers get nginx
-    (genDispatch.mkRule {
-      condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ]));
-      produce = _id: _ctx: [ (rulesLib.fx.nixos { services.nginx.enable = true; }) ];
-      identity = "web-nginx";
-      group = "config";
-    })
+    (genDispatch.mkRule
+      {
+        identity = "web-nginx";
+        group = "config";
+      }
+      (sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ])))
+      (_id: _ctx: [ (rulesLib.fx.nixos { services.nginx.enable = true; }) ])
+    )
 
     # Database-tagged servers get postgresql
-    (genDispatch.mkRule {
-      condition = sel.when (_id: ctx: builtins.elem "database" ((ctx.data _id).tags or [ ]));
-      produce = _id: _ctx: [ (rulesLib.fx.nixos { services.postgresql.enable = true; }) ];
-      identity = "db-postgresql";
-      group = "config";
-    })
+    (genDispatch.mkRule
+      {
+        identity = "db-postgresql";
+        group = "config";
+      }
+      (sel.when (_id: ctx: builtins.elem "database" ((ctx.data _id).tags or [ ])))
+      (_id: _ctx: [ (rulesLib.fx.nixos { services.postgresql.enable = true; }) ])
+    )
 
     # ACME certs: servers with exposed port 443
-    (genDispatch.mkRule {
-      condition = sel.when (
+    (genDispatch.mkRule
+      {
+        identity = "acme-certs";
+        group = "config";
+      }
+      (sel.when (
         id: _ctx:
         let
           rows = sqlEngine.query rawFleet "SELECT s.name FROM servers s JOIN services svc ON svc.server = s.name JOIN ports p ON p.service = svc.name WHERE p.expose = true AND p.number = 443";
         in
         builtins.any (r: (r.name or r) == id) rows
-      );
-      produce = _id: _ctx: [ (rulesLib.fx.nixos { security.acme.acceptTerms = true; }) ];
-      identity = "acme-certs";
-      group = "config";
-    })
+      ))
+      (_id: _ctx: [ (rulesLib.fx.nixos { security.acme.acceptTerms = true; }) ])
+    )
 
     # Admin-role users on server get sudo
-    (genDispatch.mkRule {
-      condition = sel.when (
+    (genDispatch.mkRule
+      {
+        identity = "admin-sudo";
+        group = "config";
+      }
+      (sel.when (
         id: _ctx:
         let
           adminUsers = lib.filterAttrs (
@@ -161,45 +169,55 @@ let
           ) (rawFleet.user or { });
         in
         adminUsers != { }
-      );
-      produce = _id: _ctx: [ (rulesLib.fx.nixos { security.sudo.enable = true; }) ];
-      identity = "admin-sudo";
-      group = "config";
-    })
+      ))
+      (_id: _ctx: [ (rulesLib.fx.nixos { security.sudo.enable = true; }) ])
+    )
 
     # Prod servers get monitoring
-    (genDispatch.mkRule {
-      condition = sel.when (_id: ctx: (ctx.data _id).environment == "prod");
-      produce = _id: _ctx: [
-        (rulesLib.fx.nixos { services.prometheus.exporters.node.enable = true; })
-      ];
-      identity = "prod-monitoring";
-      group = "config";
-    })
+    (genDispatch.mkRule
+      {
+        identity = "prod-monitoring";
+        group = "config";
+      }
+      (sel.when (_id: ctx: (ctx.data _id).environment == "prod"))
+      (
+        _id: _ctx: [
+          (rulesLib.fx.nixos { services.prometheus.exporters.node.enable = true; })
+        ]
+      )
+    )
 
     # --- Fixpoint convergence demo ---
     # Pass 1: web servers get enrichment flag
-    (genDispatch.mkRule {
-      condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ]));
-      produce = _id: _ctx: [
-        (rulesLib.fx.enrich {
-          key = "has-nginx";
-          value = true;
-        })
-      ];
-      identity = "nginx-enrichment";
-      group = "structural";
-    })
+    (genDispatch.mkRule
+      {
+        identity = "nginx-enrichment";
+        group = "structural";
+      }
+      (sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [ ])))
+      (
+        _id: _ctx: [
+          (rulesLib.fx.enrich {
+            key = "has-nginx";
+            value = true;
+          })
+        ]
+      )
+    )
 
     # Pass 2: fires only after enrichment adds has-nginx to context
-    (genDispatch.mkRule {
-      condition = sel.when (_id: ctx: (ctx.data _id).has-nginx or false);
-      produce = _id: _ctx: [
-        (rulesLib.fx.nixos { services.prometheus.exporters.nginx.enable = true; })
-      ];
-      identity = "nginx-monitoring";
-      group = "config";
-    })
+    (genDispatch.mkRule
+      {
+        identity = "nginx-monitoring";
+        group = "config";
+      }
+      (sel.when (_id: ctx: (ctx.data _id).has-nginx or false))
+      (
+        _id: _ctx: [
+          (rulesLib.fx.nixos { services.prometheus.exporters.nginx.enable = true; })
+        ]
+      )
+    )
   ];
 
   # The keys the structural group can contribute to a server's data row, declared beside the rules

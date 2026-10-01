@@ -3,3 +3,5 @@ result
 .gcroots
 .worktrees/
 .pre-commit-config.yaml
+/examples/nest-traits/flake.lock
+/examples/sql-schema/flake.lock

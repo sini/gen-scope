@@ -125,12 +125,10 @@ Rules use gen-dispatch's `mkRule` with gen-select selectors as conditions. Group
 | `config`     | `nixos`  | Collect NixOS module fragments                   |
 
 ```nix
-# Web servers get nginx
-genDispatch.mkRule {
-  condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or []));
-  produce = _id: _ctx: [ (fx.nixos { services.nginx.enable = true; }) ];
-  identity = "web-nginx";
-}
+# Web servers get nginx: `mkRule options condition produce`
+genDispatch.mkRule { identity = "web-nginx"; group = "config"; }
+  (sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [])))
+  (_id: _ctx: [ (fx.nixos { services.nginx.enable = true; }) ])
 ```
 
 ### Convergence Loop
@@ -139,12 +137,14 @@ Pass 1 enriches web servers with `has-nginx = true`. Pass 2 fires only on enrich
 
 ```nix
 # Pass 1: enrichment
-{ condition = sel.when (...web tagged...);
-  produce = _: _: [ (fx.enrich { key = "has-nginx"; value = true; }) ]; }
+genDispatch.mkRule { identity = "nginx-enrichment"; group = "structural"; }
+  (sel.when (...web tagged...))
+  (_: _: [ (fx.enrich { key = "has-nginx"; value = true; }) ])
 
 # Pass 2: fires after enrichment
-{ condition = sel.when (_id: ctx: (ctx.data _id).has-nginx or false);
-  produce = _: _: [ (fx.nixos { services.prometheus.exporters.nginx.enable = true; }) ]; }
+genDispatch.mkRule { identity = "nginx-monitoring"; group = "config"; }
+  (sel.when (_id: ctx: (ctx.data _id).has-nginx or false))
+  (_: _: [ (fx.nixos { services.prometheus.exporters.nginx.enable = true; }) ])
 ```
 
 ## NixOS Config Generation
@@ -152,8 +152,8 @@ Pass 1 enriches web servers with `has-nginx = true`. Pass 2 fires only on enrich
 `nixos.nix` uses gen-bind to wrap server modules with contracts and provenance:
 
 ```nix
+# `wrap options module`: the options first, the module wrapped last
 genBind.wrap {
-  module = serverModuleFn;
   bindings = { inherit fleet serverName server; };
   contracts = {
     server = genBind.contract.hasFields [ "hostname" "os" "cores" "datacenter" "environment" ];
@@ -161,7 +161,7 @@ genBind.wrap {
   provenance = {
     server = { source = "fleet-registry"; scope = "server=${serverName}"; };
   };
-}
+} serverModuleFn
 ```
 
 The wrapped result exposes `{ module, wrapped, signature, advertisedArgs }`. `signature.bound` shows which args were injected. Contract violations throw at bind time, not at NixOS eval time.
@@ -230,11 +230,9 @@ matching = builtins.filter (id: sel.matches prodSelector id ctx) serverNodes;
 **gen-select --> gen-dispatch**: selector condition dispatches rule, produces actions
 
 ```nix
-testRule = genDispatch.mkRule {
-  condition = sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or []));
-  produce = _id: _ctx: [{ __action = "tagged"; value = true; }];
-  identity = "bridge-test";
-};
+testRule = genDispatch.mkRule { identity = "bridge-test"; }
+  (sel.when (_id: ctx: builtins.elem "web" ((ctx.data _id).tags or [])))
+  (_id: _ctx: [{ __action = "tagged"; value = true; }]);
 ```
 
 **gen-schema --> gen-graph**: schema introspection feeds kind-level graph for reachability

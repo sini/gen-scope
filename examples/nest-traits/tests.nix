@@ -1672,8 +1672,14 @@
             "web-1"
             "web-2"
           ])
-          (genScope.edge "lb" "web-1")
-          (genScope.edge "lb" "web-2")
+          (genScope.edge {
+            from = "lb";
+            to = "web-1";
+          })
+          (genScope.edge {
+            from = "lb";
+            to = "web-2";
+          })
         ];
       };
       importGraph = mkImportGraph importNodes.nodes;

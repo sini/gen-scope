@@ -109,12 +109,11 @@ let
           else
             server.environment or "unknown";
       };
+      dispatchOpts = { inherit extract combine; };
       cfg = {
         inherit
           rules
           match
-          extract
-          combine
           ;
         id = serverName;
         classify = fx.classify;
@@ -122,31 +121,34 @@ let
       };
       # The declaration is reached THROUGH THE EVALUATOR: `circular` returns a kind-tagged
       # record the demand path reads, so the loop runs where the carrier is readable rather than
-      # inside an applied closure.
+      # inside an applied closure. `eval { } attributes scope`: the grammar first, the scope last.
       converged =
-        (genScope.eval {
-          scope = genScope.buildRoots {
-            parentGraph = genScope.vertex serverName;
-            importGraph = genScope.empty;
-            decls.${serverName} = { };
-            types = { };
-          };
-          attributes = {
+        (genScope.eval { }
+          {
             children = _self: _id: { };
             imports = _self: _id: [ ];
             converged-context =
               genScope.circular { carrier = mkConvergenceCarrier serverName serverData enrichKeys; }
                 (
                   _self: _id: ctx:
-                  (dispatch (cfg // { context = ctx; })).context
+                  (dispatch dispatchOpts (cfg // { context = ctx; })).context
                 );
-          };
-        }).getRepresentative
+          }
+          (
+            genScope.buildRoots {
+              parentGraph = genScope.vertex serverName;
+              importGraph = genScope.empty;
+              decls.${serverName} = { };
+              types = { };
+            }
+          )
+        ).getRepresentative
           serverName
           "converged-context";
       # A quotient carrier converges on a CLASS REPRESENTATIVE, so the evaluator serves it through
       # the named demand, tagged; the raw `get` refuses it by name.
-      nixosActions = (dispatch (cfg // { context = converged.representative; })).actions.config or [ ];
+      nixosActions =
+        (dispatch dispatchOpts (cfg // { context = converged.representative; })).actions.config or [ ];
     in
     lib.foldl' lib.recursiveUpdate { } (map (a: builtins.removeAttrs a [ "__action" ]) nixosActions);
 
