@@ -252,6 +252,87 @@ let
       second = if siteA < siteB then siteB else siteA;
     in
     "gen-scope.mintStrata: conflicting contributions to identity '${identity}' at key '${key}' (${first}, ${second})";
+
+  # ── THE ARGUMENT-BINDING CONSTRUCTOR (K1; den-hoag-0cmbt) ──
+  # `argumentBinding { scope; name; supplyRoute; definer ? null; }` mints the identity of the binding
+  # that supplied an argument: an entity kind whose identity keys are the supplying scope, the
+  # argument name and the supply route, plus the definer on the one route that has one. A non-entity
+  # formal (`pkgs`, `lib`) has no identity of its own — ADR-0034 excludes its content — so the binding
+  # that supplied it is the identity an instance's preimage carries for it.
+  #
+  # `scope` is an IDENTIFIER and never an identity, so a binding never relates a scope by identity and
+  # the root, which has no identity (ADR-0016 r7), supplies arguments like any other scope. It is the
+  # scope that INTRODUCED the binding, never the one reaching it (R10): an inherited binding is one id
+  # for every inheriting scope and an override is a new id. That is the CALLER's obligation — a
+  # constructor handed `scope` cannot tell an introducing scope from a reaching one — and the cell
+  # that discriminates it walks the applying party's own scopes (gen-demo), not this function.
+  #
+  # ★ THE ROUTE SET IS CLOSED, so a misspelt route is refused by name rather than minting a distinct
+  # id that matches nothing. The four are the design's (identity design §3): the applying party's
+  # `context`, an evaluation's `specialArgs`, a `_module.args` definition (`moduleArgs`) and a gen-bind
+  # `wrap` binding. It grows by ruling, never by accretion — ADR-0027 Ruling 2's closed-set shape.
+  # `definer` is required on `moduleArgs` and refused on every other route: it is the one route on
+  # which two modules can define one name, and a definer elsewhere would split one binding into many.
+  #
+  # Two minters at different gen-scope pins (gen-merge for `specialArgs` and `moduleArgs`, the
+  # applying party for `context`) never need to agree, because `supplyRoute` is in the preimage and
+  # their ids are distinct by construction.
+  #
+  # The record is open (R5), as every record step here is: an unnamed field is admitted and unread.
+  # A misspelt `definer` is still caught on `moduleArgs` by the definer rule, and changes no id on any
+  # other route.
+  argumentBindingDoor = "gen-scope.argumentBinding";
+  supplyRoutes = [
+    "context"
+    "specialArgs"
+    "moduleArgs"
+    "wrap"
+  ];
+  argumentBinding =
+    prelude.door
+      {
+        name = argumentBindingDoor;
+        required = [
+          "scope"
+          "name"
+          "supplyRoute"
+        ];
+        optional = [ "definer" ];
+        open = true;
+      }
+      (
+        b:
+        let
+          field = who: noun: import ./string-argument.nix "argumentBinding: ${who}" noun;
+          route = field "supplyRoute" "a supply route" b.supplyRoute;
+          definer = b.definer or null;
+          labels = [
+            "scope"
+            "name"
+            "supplyRoute"
+          ]
+          ++ (if definer == null then [ ] else [ "definer" ]);
+          valueOf =
+            label:
+            {
+              scope = field "scope" "a scope identifier" b.scope;
+              name = field "name" "an argument name" b.name;
+              supplyRoute = route;
+              definer = field "definer" "a definer" definer;
+            }
+            .${label};
+        in
+        if !builtins.elem route supplyRoutes then
+          throw "${argumentBindingDoor}: '${route}' is not a supply route; the routes are closed (accepted: ${
+            builtins.concatStringsSep ", " (map (r: "'${r}'") supplyRoutes)
+          })"
+        else if route == "moduleArgs" && definer == null then
+          throw "${argumentBindingDoor}: supplyRoute 'moduleArgs' requires a definer, the module that defines the argument"
+        else if route != "moduleArgs" && definer != null then
+          throw "${argumentBindingDoor}: a definer is given on supplyRoute '${route}', and only 'moduleArgs' takes one"
+        else
+          hashIdentity "argument-binding" labels valueOf
+      );
 in
 # `mintStrata kinds emitters` (den-hoag-7gp66 P2, R7 rule 4): the emitters are what is minted, so they
 # are the subject and go last; the kind registry is the configuration they are minted under. Both
@@ -520,3 +601,6 @@ builtins.mapAttrs
       # schedule's own ordering compares identifiers and would abort on a record first.
       builtins.seq kinds (builtins.seq (identifiersOf emitters) (builtins.deepSeq result result));
   }
+// {
+  inherit argumentBinding;
+}

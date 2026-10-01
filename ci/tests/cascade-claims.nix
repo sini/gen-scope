@@ -1961,10 +1961,11 @@ in
     # `buildRoots`' own partial-function refusal recommends but did not, until now, ship. 93 rather
     # than 89: the `nta` channel publishes `mintNtaId`/`decodeNta` from `eval.nix` and
     # `childDepth`/`flattenChildren` from `structural.nix`. 92 rather than 93: `paramAttr` is
-    # retired (`den-hoag-4kh.53.54`, R§10.1 carry note in `README.md`).
+    # retired (`den-hoag-4kh.53.54`, R§10.1 carry note in `README.md`). 93 rather than 92: the
+    # minting module publishes `argumentBinding` beside `mintStrata` (`den-hoag-0cmbt`).
     test-the-comparand-is-the-library-without-this-module = {
       expr = builtins.length incumbentNames;
-      expected = 92;
+      expected = 93;
     };
     # Four doors. The doors are the registration and run entries and nothing else — the consumer
     # accessors that used to sit beside them reconstructed a list the run already computed, and the

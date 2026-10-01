@@ -5,7 +5,8 @@
 #
 # After P2 a door is one of two steps (R7). An OPTIONS step is a closed set, first in the call: a
 # row is the door and its `optional` names. A RECORD step is an open data record (R5): a row is the
-# step as applied (every earlier operand already supplied), its `required` fields, a `good` record,
+# step as applied (every earlier operand already supplied), its `required` fields, its `optional`
+# ones where it publishes any (`argumentBinding`'s `definer`), a `good` record,
 # the field `drop` removes for the missing-field cell, and — for a record behind an options step —
 # `guardedBy`, the options row whose names the record refuses (`optionsStep`, G10). `step good` must
 # answer: that is each row's live control, so a refusal below is the check firing and not a broken
@@ -204,6 +205,21 @@ in
         reading = null;
       };
       drop = "reading";
+    };
+    argumentBinding = {
+      step = S.argumentBinding;
+      required = [
+        "scope"
+        "name"
+        "supplyRoute"
+      ];
+      optional = [ "definer" ];
+      good = {
+        scope = "root";
+        name = "pkgs";
+        supplyRoute = "specialArgs";
+      };
+      drop = "supplyRoute";
     };
     ascend = {
       step = S.ascend;

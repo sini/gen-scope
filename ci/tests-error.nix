@@ -1017,6 +1017,51 @@ in
     };
   };
 
+  # ── THE ARGUMENT-BINDING CONSTRUCTOR'S REFUSALS (den-hoag-0cmbt U5, K1) ──
+  # The admitting half is `flake.tests.argument-binding`. The route set is closed, so a misspelt route
+  # is refused rather than minting an id nothing else mints; `definer` is required exactly on
+  # `moduleArgs`. The missing-field and non-set refusals are the door table's (`door-checks`).
+  config.flake.testsError.argument-binding-refusals =
+    let
+      thrown = expr: msg: {
+        expr = builtins.deepSeq expr expr;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly msg;
+        };
+      };
+      b =
+        r:
+        genScope.argumentBinding (
+          {
+            scope = "root";
+            name = "pkgs";
+          }
+          // r
+        );
+    in
+    {
+      test-an-unknown-route-is-refused-by-name =
+        thrown (b { supplyRoute = "specialArg"; })
+          "gen-scope.argumentBinding: 'specialArg' is not a supply route; the routes are closed (accepted: 'context', 'specialArgs', 'moduleArgs', 'wrap')";
+      test-moduleArgs-without-a-definer-is-refused =
+        thrown (b { supplyRoute = "moduleArgs"; })
+          "gen-scope.argumentBinding: supplyRoute 'moduleArgs' requires a definer, the module that defines the argument";
+      test-a-definer-on-another-route-is-refused =
+        thrown
+          (b {
+            supplyRoute = "wrap";
+            definer = "/m.nix";
+          })
+          "gen-scope.argumentBinding: a definer is given on supplyRoute 'wrap', and only 'moduleArgs' takes one";
+      test-a-scope-that-is-not-a-string-is-refused = thrown (b {
+        scope = {
+          name = "root";
+        };
+        supplyRoute = "context";
+      }) "gen-scope.argumentBinding: scope: got set, expected a scope identifier (a string)";
+    };
+
   # ── THE MINTING ENTRY'S REFUSALS ──
   # The same staged run whose non-refusal cells are `flake.tests.minting` in `tests/mint.nix`. They
   # are split by the shape of the assertion and not by subject: these name a MESSAGE, and a cell

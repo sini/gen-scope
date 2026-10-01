@@ -386,7 +386,7 @@ in
       expected = each (d: {
         inherit (d) required;
         open = true;
-        functionArgs = flag false d.required;
+        functionArgs = flag false d.required // flag true (d.optional or [ ]);
       }) F.records;
     };
 
