@@ -122,16 +122,16 @@ Nix attrset VALUES are lazy but KEYS are eager. Function application is never me
 
 ## Terminology
 
-| Term             | Definition                                                                                                          |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Nodes            | Minimal descriptors: `{ id, type, parent, decls }`                                                                  |
-| Roots            | Entry-point nodes (from `buildNodes` or hand-written)                                                               |
-| Children         | The nodes the `children` attribute SELECTS from the scope's own node set — a selection, never a mint                |
+| Term             | Definition                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Nodes            | Minimal descriptors: `{ id, type, parent, decls }`                                                                        |
+| Roots            | Entry-point nodes (from `buildNodes` or hand-written)                                                                     |
+| Children         | The nodes the `children` attribute SELECTS from the scope's own node set — a selection, never a mint                      |
 | Derived Children | Nodes GROWN by `derived-children`, declared as `spawns.<produced-kind>` on the host kind (builder reads `self.node` only) |
-| Attributes       | Computed values on nodes — demand-driven, memoized via `_eval`                                                      |
-| Combinators      | Attribute constructors: `inherit'`, `inheritAll`, `inheritSet`, `circular`, `collectionAttr`; resolution: `resolve` |
-| Tier 1           | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth)                                               |
-| Tier 2           | Materialization: `self.allNodes` — O(n), forces full tree                                                           |
+| Attributes       | Computed values on nodes — demand-driven, memoized via `_eval`                                                            |
+| Combinators      | Attribute constructors: `inherit'`, `inheritAll`, `inheritSet`, `circular`, `collectionAttr`; resolution: `resolve`       |
+| Tier 1           | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth)                                                     |
+| Tier 2           | Materialization: `self.allNodes` — O(n), forces full tree                                                                 |
 
 ## Example
 
