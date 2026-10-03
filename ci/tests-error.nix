@@ -3930,8 +3930,20 @@ in
           "gen-scope.resolve: required field 'dataFilter' is missing (required: 'wf', 'dataFilter') (in prelude.checkRequired)";
         "row8-wf-missing" =
           "gen-scope.resolve: required field 'wf' is missing (required: 'wf', 'dataFilter') (in prelude.checkRequired)";
-        "row9-visible-without-groupBy" =
-          "gen-scope.resolve: groupBy is required and is never defaulted (den-hoag-l7af / ADR-0024 ruling 3); a caller wanting the per-node reading states `groupBy = ans: ans.node;` explicitly";
+        "row9-visible-without-a-key" =
+          ''gen-scope.resolve: mode "visible" requires a competition key, and it is never defaulted (den-hoag-l7af / ADR-0024 ruling 3): state `group = "k";` (a declared constant, lazy in shadowed data) or `groupBy = ans: …;` (a function of the answer, strict); a caller wanting the per-node reading states `groupBy = ans: ans.node;` explicitly'';
+        "rowG1-group-and-groupBy" =
+          "gen-scope.resolve: `group` and `groupBy` are both given; state exactly one competition key: `group`, a declared constant read before any datum (lazy in shadowed data), or `groupBy`, a function of the answer (strict: it forces every candidate it groups)";
+        "rowG1-group-beside-a-null-groupBy" =
+          "gen-scope.resolve: `group` and `groupBy` are both given; state exactly one competition key: `group`, a declared constant read before any datum (lazy in shadowed data), or `groupBy`, a function of the answer (strict: it forces every candidate it groups)";
+        "rowG2-group-not-a-string" =
+          "gen-scope.resolve: group is a int, not a string; `group` is the competition key as a declared constant (a key computed from the answer is `groupBy`)";
+        "rowG3-group-outside-visible" =
+          ''gen-scope.resolve: `group` is read only by mode "visible", and the mode is "witnesses"'';
+        "rowG4-single-asks-another-group" =
+          ''gen-scope.resolve: `single` is asked for group "y", but this resolution declares `group = "x"`: every candidate is in that one group, so any other name would answer null as if nothing were declared'';
+        "rowG5-order-omits-a-wf-letter" =
+          ''gen-scope.resolve: `order` does not rank 'imports', a letter of `wf`'s alphabet (["e","imports"]); mode "visible" ranks every letter the walk can step, so the label order must be total over the walk's alphabet'';
         "row10-groupBy-outside-visible" =
           ''gen-scope.resolve: `groupBy` is read only by mode "visible", and the mode is "witnesses"'';
         "row10-order-outside-visible" =
@@ -3939,7 +3951,7 @@ in
         "row10-unknown-mode" =
           ''gen-scope.resolve: unknown mode "all" (one of ["reachable","witnesses","visible"])'';
         "row10-unknown-option" =
-          "gen-scope.resolve: 'follow' is not an option of this door; the options are closed (accepted: 'wf', 'dataFilter', 'mode', 'order', 'groupBy', 'bound', 'direction') (in prelude.checkOptions)";
+          "gen-scope.resolve: 'follow' is not an option of this door; the options are closed (accepted: 'wf', 'dataFilter', 'mode', 'order', 'groupBy', 'group', 'bound', 'direction') (in prelude.checkOptions)";
         "row10-unknown-direction" =
           ''gen-scope.resolve: unknown direction "sideways" (one of ["outbound","inbound"])'';
         "row10-parent-in-an-inbound-alphabet" =
@@ -3981,4 +3993,34 @@ in
         "row21-reserved-lifted-label" =
           ''gen-scope.buildRoots: `edgeGraphs` carries reserved label(s) ["imports"]: 'imports' is the calculus's import letter, whose edges arrive as the `importGraph` argument. A reserved label is this library's own name for a relation it privileges, and `edgeGraphs` does not extend to it — supply those edges as the argument named, or relabel them.'';
       };
+
+  # ── RESOLUTION STAYS LAZY IN DATA IT SHADOWS (den-hoag-gayc C1): what must STILL throw ──
+  # Laziness is not skipping: an ancestor that IS the answer is forced (L4), and a key that reads the
+  # datum is the strict form, forcing every candidate it groups (L5). The answers are
+  # `tests/lazy-shadowing.nix`'s; the fixtures `tests/_fixtures/lazy-shadowing.nix`'s.
+  #
+  # ★ THE KNOWN U1 REGRESSION, pinned so that the U1 rework FLIPS it: the walk's spine is forced. `b`'s
+  # computed `imports` throws, and nothing past `a`'s own declaration needs reading — gen-scope main
+  # answered "va" — but the NR-Cons walk (U1's D9 verdict over every visit, and the selection's
+  # walk-order restoration over the flattened tree) reads every reachable scope's edges. ADR-0008
+  # item 1 ("Nix laziness schedules") rules it a regression; the edge-lazy rework is U1's
+  # (den-hoag-gayc, orchestrator ruling 2026-10-03, arm (b)). When it lands this cell goes RED, and
+  # the rework moves it to `tests/lazy-shadowing.nix` answering "va".
+  config.flake.testsError.lazy-shadowing =
+    let
+      F = import ./tests/_fixtures/lazy-shadowing.nix { inherit lib genScope; };
+      forced = expr: msg: {
+        inherit expr;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly msg;
+        };
+      };
+    in
+    {
+      test-L4-an-unset-nearer-scope-forces-the-ancestor-inherit = forced (F.inherit' F.unset) "ANCESTOR-DATUM-FORCED";
+      test-L4-an-unset-nearer-scope-forces-the-ancestor-group = forced (F.group F.unset) "ANCESTOR-DATUM-FORCED";
+      test-L5-a-data-reading-key-is-strict = forced (F.dataKey F.shadowing) "ANCESTOR-DATUM-FORCED";
+      test-KNOWN-U1-REGRESSION-the-walk-spine-is-forced = forced (F.group F.edgeForcing) "ANCESTOR-EDGE-FORCED";
+    };
 }

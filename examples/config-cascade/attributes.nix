@@ -18,7 +18,7 @@
       // {
         mode = "visible";
         dataFilter = node: node.decls.${key} or null;
-        groupBy = _: key;
+        group = key;
       }
     ) self id).single
       key;

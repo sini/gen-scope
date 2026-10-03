@@ -22,7 +22,7 @@
       // {
         mode = "visible";
         dataFilter = node: node.decls.${name} or null;
-        groupBy = _: name;
+        group = name;
       }
     ) self id).single
       name;

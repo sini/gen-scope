@@ -23,7 +23,7 @@
         (genScope.resolve {
           inherit wf order dataFilter;
           mode = "visible";
-          groupBy = _: "k";
+          group = "k";
         } self id).single
           "k";
       # Every resolution, one per acyclic path (mode "witnesses", Neron Fig. 3 rule R).
@@ -427,7 +427,7 @@
               // {
                 mode = "visible";
                 dataFilter = n: n.decls.color or null;
-                groupBy = _: "color";
+                group = "color";
               }
             ) result "inner").single
               "color"; # -> "green"

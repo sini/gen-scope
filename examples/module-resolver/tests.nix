@@ -23,7 +23,7 @@ let
       inherit (genScope.neron) order;
       inherit dataFilter;
       mode = "visible";
-      groupBy = _: "x";
+      group = "x";
     } result id).single
       "x";
   # Every resolution, one per acyclic path.
