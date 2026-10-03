@@ -14,14 +14,14 @@ let
       nodes,
       order,
       imports ? (_: _: [ ]),
+      marks ? (_: _: [ ]),
       extra ? { },
     }:
     S.eval { parseParent = id: nodes.${id}.parent; }
       (
         {
           children = _: _: { };
-          inherit imports;
-          marks = _: _: [ ];
+          inherit imports marks;
         }
         // extra
       )
@@ -72,6 +72,7 @@ rec {
   };
   # THE THIRD FORCING SITE, AN EDGE (C1 spec gate §5): `b` declares a plain datum, but its computed
   # `imports` throws. Nothing past `a`'s own declaration needs reading; gen-scope main answered "va".
+  # The siblings throw from `b`'s marks and from `b`'s own `parent` field instead.
   edgeForcing = scope {
     nodes = {
       a = node "a" "b" { v = "va"; };
@@ -82,6 +83,51 @@ rec {
       "b"
     ];
     imports = _: id: if id == "b" then throw "ANCESTOR-EDGE-FORCED" else [ ];
+  };
+  marksForcing = scope {
+    nodes = {
+      a = node "a" "b" { v = "va"; };
+      b = node "b" null { v = "vb"; };
+    };
+    order = [
+      "a"
+      "b"
+    ];
+    marks = _: id: if id == "b" then throw "ANCESTOR-MARKS-FORCED" else [ ];
+  };
+  parentForcing = scope {
+    nodes = {
+      a = node "a" "b" { v = "va"; };
+      b = node "b" (throw "ANCESTOR-PARENT-FORCED") { v = "vb"; };
+    };
+    order = [
+      "a"
+      "b"
+    ];
+  };
+  # D9 read where the walk reads it: a parent cycle ABOVE the shadowing declaration is never met, so
+  # it is not refused (gen-scope main's `inherit'` answered "va"); a cycle the selection walks is.
+  cycleAbove = scope {
+    nodes = {
+      a = node "a" "b" { v = "va"; };
+      b = node "b" "c" { };
+      c = node "c" "b" { };
+    };
+    order = [
+      "a"
+      "b"
+      "c"
+    ];
+  };
+  cycleMet = scope {
+    nodes = {
+      a = node "a" "b" { };
+      b = node "b" "a" { };
+    };
+    order = [
+      "a"
+      "b"
+    ];
   };
   # F1: `s —e→ t`; `wf` steps `e`, an `order` over `imports` alone cannot rank it.
   alphabetMismatch = scope {

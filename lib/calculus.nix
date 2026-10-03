@@ -539,11 +539,20 @@ let
       # expansions the walk stepped. The walk is a TREE: each visit holds `kids`, its admitted child
       # visits, and `via`, the letter it was reached by, which is what `visible`'s staged selection
       # descends; `visits` is its pre-order flattening. `d` is the visit's datum, a thunk applied at
-      # most once however many readers (presence, `value`, `shadowed`) reach it.
+      # most once however many readers (presence, `value`, `shadowed`) reach it. `ix` is the visit's
+      # kid-index word, so pre-order is the lexicographic order of `ix` and a reader that needs walk
+      # order sorts the visits it holds instead of flattening the tree (which reads every edge).
+      #
+      # `visited` maps each scope on the path to its depth, and `run` is the depth where the path's
+      # trailing `parent`-only segment begins: an admitted `parent` edge back into that segment is a
+      # parent cycle THIS VISIT MET (D9, read where the walk reads it). `parentCycle` names the scope
+      # re-entered, or is null.
       go =
-        visited: path: via: id: st: k:
+        visited: run: depth: path: ix: via: id: st: k:
         let
           x = expand id st;
+          onRun = e: e.label == parentLetter && (visited.${attrKey "resolve" e.target} or (-1)) >= run;
+          closing = filter onRun x.admitted;
         in
         {
           node = id;
@@ -552,19 +561,24 @@ let
             st
             k
             path
+            ix
             x
             via
             ;
-          kids = concatMap (
-            e:
+          parentCycle = if closing == [ ] then null else (head closing).target;
+          kids =
             let
-              tk = attrKey "resolve" e.target;
+              fresh = filter (e: !(visited ? ${attrKey "resolve" e.target})) x.admitted;
             in
-            if visited ? ${tk} then
-              [ ]
-            else
-              [
-                (go (visited // { ${tk} = true; }) (
+            builtins.genList (
+              i:
+              let
+                e = builtins.elemAt fresh i;
+              in
+              go (visited // { ${attrKey "resolve" e.target} = depth + 1; })
+                (if e.label == parentLetter then run else depth + 1)
+                (depth + 1)
+                (
                   path
                   ++ [
                     {
@@ -573,12 +587,16 @@ let
                       to = e.target;
                     }
                   ]
-                ) e.label e.target e.st e.k)
-              ]
-          ) x.admitted;
+                )
+                (ix ++ [ i ])
+                e.label
+                e.target
+                e.st
+                e.k
+            ) (length fresh);
         };
       flatten = t: [ t ] ++ concatMap flatten t.kids;
-      tree = go { ${attrKey "resolve" from} = true; } [ ] null from st0 k0;
+      tree = go { ${attrKey "resolve" from} = 0; } 0 0 [ ] [ ] null from st0 k0;
 
       visits = if mode == "reachable" then closure else flatten tree;
 
@@ -589,7 +607,8 @@ let
       # `parent` read made a `parent*` resolution O(depth²) (`ci/bench/resolve-parent-chain.sh`).
       # The walk itself terminates on a cycle either way (the closure's key, NR-Cons's seen set), so
       # the refusal is applied where a read would have met it: an admitted `parent` edge for every
-      # answer, a withheld one too for `withheld`, which reads it.
+      # answer, a withheld one too for `withheld`, which reads it. Under `group` the selection reads
+      # only the classes it examines, and applies D9 there by `go`'s `parentCycle` instead.
       up = builtins.genericClosure {
         startSet = map (v: {
           key = v.node;
@@ -730,41 +749,141 @@ let
         let
           inherit (o.order) rankOf;
           present = c: c.d != null;
-          pick =
-            cls:
+          # D9 under `group`: a class is examined only by reading its members' edges, so a parent cycle
+          # is refused where the selection met it, and a cycle above a shadowed scope is never read.
+          examine =
+            t:
+            if t.parentCycle == null then
+              t
+            else
+              refuse "resolve" "node ${renderId t.parentCycle} is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk";
+          # The staged selection as a loop, not a recursion: `genericClosure` steps an explicit stack of
+          # word classes, so its stack depth is constant in the walk's depth (`pick`'s recursion
+          # aborted at a parent chain of 1,700). A frame is one class: `ranks` still to try, `cur` the
+          # symbols of the rank being tried, `acc` that rank's selection so far. A class is examined
+          # (its members' edges read) when its frame is pushed, and a frame returns `acc` to its parent
+          # at the first non-empty rank or `[ ]` when its ranks run out (Néron §5's staged shadowing,
+          # one trie node per frame). Every state field is forced per step (ADR-0022).
+          frameOf =
+            cls':
             let
+              cls = map examine cls';
               stops = filter (t: regex.nullable t.st) cls;
               labels = prelude.unique (concatMap (t: map (c: c.via) t.kids) cls);
               syms = (if stops != [ ] then [ "$" ] else [ ]) ++ labels;
-              ranks = builtins.sort builtins.lessThan (prelude.unique (map rankOf syms));
-              sel =
-                r:
-                concatMap (
-                  s:
-                  if s == "$" then filter present stops else pick (concatMap (t: filter (c: c.via == s) t.kids) cls)
-                ) (filter (s: rankOf s == r) syms);
-              first =
-                rs:
-                if rs == [ ] then
-                  [ ]
-                else
-                  let
-                    x = sel (head rs);
-                  in
-                  if x != [ ] then x else first (builtins.tail rs);
             in
-            first ranks;
-          # The selection re-read in walk order, as `answers` is everywhere else. A path names its
-          # visit uniquely (NR-Cons: one visit per acyclic path).
+            {
+              inherit cls stops syms;
+              ranks = builtins.sort builtins.lessThan (prelude.unique (map rankOf syms));
+              cur = [ ];
+              acc = [ ];
+            };
+          step =
+            stack:
+            let
+              f = stack.f;
+              ret =
+                xs:
+                if stack.up == null then
+                  { done = xs; }
+                else
+                  {
+                    stack = {
+                      f = stack.up.f // {
+                        acc = stack.up.f.acc ++ xs;
+                      };
+                      inherit (stack.up) up;
+                    };
+                  };
+            in
+            if f.cur != [ ] then
+              let
+                s = head f.cur;
+                f' = f // {
+                  cur = builtins.tail f.cur;
+                };
+              in
+              if s == "$" then
+                {
+                  stack = {
+                    f = f' // {
+                      acc = f.acc ++ filter present f.stops;
+                    };
+                    inherit (stack) up;
+                  };
+                }
+              else
+                {
+                  stack = {
+                    f = frameOf (concatMap (t: filter (c: c.via == s) t.kids) f.cls);
+                    up = {
+                      f = f';
+                      inherit (stack) up;
+                    };
+                  };
+                }
+            else if f.acc != [ ] || f.ranks == [ ] then
+              ret f.acc
+            else
+              {
+                stack = {
+                  f = f // {
+                    cur = filter (s: rankOf s == head f.ranks) f.syms;
+                    ranks = builtins.tail f.ranks;
+                  };
+                  inherit (stack) up;
+                };
+              };
+          forced =
+            st:
+            if st ? done then
+              builtins.seq st.done st
+            else
+              builtins.seq st.stack.f.acc (builtins.seq st.stack.f.cur (builtins.seq st.stack.f.ranks st));
+          pick =
+            cls:
+            let
+              steps = builtins.genericClosure {
+                startSet = [
+                  {
+                    key = 0;
+                    st = forced {
+                      stack = {
+                        f = frameOf cls;
+                        up = null;
+                      };
+                    };
+                  }
+                ];
+                operator =
+                  item:
+                  if item.st ? done then
+                    [ ]
+                  else
+                    let
+                      st = forced (step item.st.stack);
+                    in
+                    [
+                      {
+                        key = builtins.seq st (item.key + 1);
+                        inherit st;
+                      }
+                    ];
+              };
+            in
+            (builtins.elemAt steps (length steps - 1)).st.done;
+          # The selection in walk order, as `answers` is everywhere else: sorted by `ix`, so no visit
+          # the selection did not examine is read (ADR-0008 item 1; den-hoag-gayc U1 rework).
+          picked = pick [ tree ];
+          chosen = if length picked < 2 then picked else builtins.sort (a: b: a.ix < b.ix) picked;
           chosenKeys = builtins.listToAttrs (
             map (c: {
-              name = toJSON c.path;
+              name = toJSON c.ix;
               value = true;
-            }) (pick [ tree ])
+            }) chosen
           );
-          isChosen = v: chosenKeys ? ${toJSON v.path};
+          isChosen = v: chosenKeys ? ${toJSON v.ix};
           nullableVisits = filter (v: regex.nullable v.st) visits;
-          chosen = filter isChosen nullableVisits;
           answer = c: {
             inherit (c) node path;
             value = c.d;
@@ -809,30 +928,82 @@ let
                 g
           ) witnessAnswers;
           groups = builtins.groupBy (a: attrKey "resolve" a.group) tagged;
+          # A trie node is named by an id interned one level at a time, `<level>:<first member index>`,
+          # never by its word: a word key cost every member |word|² (178 of 211 MB at a 1,600-deep
+          # `parent` chain), an interned one |word|.
           split =
             members:
             let
-              branchesOf =
-                c:
+              words = map (c: map (step: step.label) c.path ++ [ "$" ]) members;
+              deepest = builtins.foldl' (m: w: if length w > m then length w else m) 0 words;
+              # One `genericClosure` item per level (a loop, so no level list is re-copied), each
+              # level's `alive` forced before the next is keyed (ADR-0022).
+              levelAt =
+                i: alive:
                 let
-                  s = map (step: step.label) c.path ++ [ "$" ];
+                  here = map (
+                    a:
+                    let
+                      sym = builtins.elemAt (builtins.elemAt words a.m) i;
+                    in
+                    {
+                      inherit (a) m;
+                      node = a.key;
+                      rank = rankOf sym;
+                      combo = "${a.key} ${sym}";
+                    }
+                  ) (filter (a: length (builtins.elemAt words a.m) > i) alive);
+                  ids = builtins.listToAttrs (
+                    builtins.genList (j: {
+                      name = (builtins.elemAt here j).combo;
+                      value = "${toString i}:${toString j}";
+                    }) (length here)
+                  );
+                  next = map (b: {
+                    inherit (b) m;
+                    key = ids.${b.combo};
+                  }) here;
                 in
-                builtins.genList (i: {
-                  node = toJSON (builtins.genList (j: builtins.elemAt s j) i);
-                  rank = rankOf (builtins.elemAt s i);
-                }) (length s);
+                {
+                  key = builtins.deepSeq next i;
+                  inherit here next;
+                };
+              levels = builtins.genericClosure {
+                startSet = [
+                  (levelAt 0 (
+                    builtins.genList (m: {
+                      inherit m;
+                      key = "r";
+                    }) (length members)
+                  ))
+                ];
+                operator = x: if x.key + 1 >= deepest then [ ] else [ (levelAt (x.key + 1) x.next) ];
+              };
+              branches = concatMap (x: x.here) levels;
               minRank = builtins.mapAttrs (
                 _: bs: builtins.foldl' (m: b: if b.rank < m then b.rank else m) (head bs).rank bs
-              ) (builtins.groupBy (b: b.node) (concatMap branchesOf members));
-              survives = c: builtins.all (b: b.rank == minRank.${b.node}) (branchesOf c);
+              ) (builtins.groupBy (b: b.node) branches);
+              beaten = builtins.listToAttrs (
+                map (b: {
+                  name = toString b.m;
+                  value = true;
+                }) (filter (b: b.rank != minRank.${b.node}) branches)
+              );
+              tagged = builtins.genList (m: {
+                c = builtins.elemAt members m;
+                survives = !(beaten ? ${toString m});
+              }) (length members);
             in
             {
-              visible = filter survives members;
-              shadowed = filter (c: !(survives c)) members;
+              visible = map (x: x.c) (filter (x: x.survives) tagged);
+              shadowed = map (x: x.c) (filter (x: !x.survives) tagged);
             };
         in
         builtins.mapAttrs (_: split) groups;
       visibleParts = if o ? group then lazyParts else strictParts;
+      # Under `group` the selection applies D9 itself, to the classes it examines; a whole-walk
+      # verdict would read the edges of every scope it shadows.
+      selectionChecked = if o ? group then (x: x) else admittedChecked;
       groupNames = builtins.attrNames visibleParts;
 
       single =
@@ -860,18 +1031,18 @@ let
           {
             inherit mode;
             withheld = id: withheldChecked (withheld id);
-            answers = admittedChecked (
+            answers =
               if mode == "reachable" then
-                reachableAnswers
+                admittedChecked reachableAnswers
               else if mode == "witnesses" then
-                witnessAnswers
+                admittedChecked witnessAnswers
               else
-                concatMap (g: visibleParts.${g}.visible) groupNames
-            );
+                selectionChecked (concatMap (g: visibleParts.${g}.visible) groupNames);
           }
           // prelude.optionalAttrs (mode == "visible") {
+            # `shadowed` reads every candidate whatever the key, so it takes the whole-walk verdict.
             shadowed = admittedChecked (concatMap (g: visibleParts.${g}.shadowed) groupNames);
-            single = group: admittedChecked (single group);
+            single = group: selectionChecked (single group);
           }
         )
       )
