@@ -1,12 +1,15 @@
 # THE ONE RESOLUTION CALCULUS — van Antwerpen, Poulsen, Rouvoet & Visser 2018 ("Scopes as Types"),
 # Fig. 1, run over an EVALUATED scope (den-hoag-gayc; ADR-0008, ADR-0024 carrier (L, E, <, r) + k).
 #
-#   resolve { wf; dataFilter; mode ? "reachable"; order ?; groupBy ?; bound ?; direction ? "outbound"; } self from
+#   resolve { wf; dataFilter; mode ? "reachable"; order ?; group ? | groupBy ?; bound ?; direction ? "outbound"; } self from
 #
 # `wf` is WFL (label well-formedness, a regular expression over the alphabet L, stepped by
 # Brzozowski derivatives — `regex.nix`); `dataFilter` is the relation's lookup composed with WFD,
 # `node → datum | null`, required and never defaulted (ADR-0024 ruling 3); `order` is `<l` over
-# L̂ = L ∪ {$}; `groupBy` is the competition key k, the `d′ ≤d d` conjunct of (NR-Vis).
+# L̂ = L ∪ {$}, total over `wf`'s alphabet. The competition key k, the `d′ ≤d d` conjunct of (NR-Vis),
+# is stated as exactly one of `group`, a declared constant read before any datum, under which
+# resolution stays LAZY in data it shadows, and `groupBy`, a function of the answer, which reads data
+# and so forces every candidate it groups (den-hoag-gayc C1).
 #
 # TWO CYCLE LAWS, ONE PER MODE (den-hoag-gayc Q4 = S):
 #   · `reachable` is THE WALK LAW — a `genericClosure` over ⟨node, derivative-state⟩, so a revisit in
@@ -533,45 +536,51 @@ let
 
       # THE ACYCLIC-PATH LAW: DFS with per-path seen scopes, the start included (gen-graph
       # `queryPaths`, carried). Every visit is kept, answer or not, so `withheld` reads the same
-      # expansions the walk stepped.
+      # expansions the walk stepped. The walk is a TREE: each visit holds `kids`, its admitted child
+      # visits, and `via`, the letter it was reached by, which is what `visible`'s staged selection
+      # descends; `visits` is its pre-order flattening. `d` is the visit's datum, a thunk applied at
+      # most once however many readers (presence, `value`, `shadowed`) reach it.
       go =
-        visited: path: id: st: k:
+        visited: path: via: id: st: k:
         let
           x = expand id st;
         in
-        [
-          {
-            node = id;
-            inherit
-              st
-              k
-              path
-              x
-              ;
-          }
-        ]
-        ++ concatMap (
-          e:
-          let
-            tk = attrKey "resolve" e.target;
-          in
-          if visited ? ${tk} then
-            [ ]
-          else
-            go (visited // { ${tk} = true; }) (
-              path
-              ++ [
-                {
-                  inherit (e) label;
-                  from = id;
-                  to = e.target;
-                }
+        {
+          node = id;
+          d = dataAt id;
+          inherit
+            st
+            k
+            path
+            x
+            via
+            ;
+          kids = concatMap (
+            e:
+            let
+              tk = attrKey "resolve" e.target;
+            in
+            if visited ? ${tk} then
+              [ ]
+            else
+              [
+                (go (visited // { ${tk} = true; }) (
+                  path
+                  ++ [
+                    {
+                      inherit (e) label;
+                      from = id;
+                      to = e.target;
+                    }
+                  ]
+                ) e.label e.target e.st e.k)
               ]
-            ) e.target e.st e.k
-        ) x.admitted;
+          ) x.admitted;
+        };
+      flatten = t: [ t ] ++ concatMap flatten t.kids;
+      tree = go { ${attrKey "resolve" from} = true; } [ ] null from st0 k0;
 
-      visits =
-        if mode == "reachable" then closure else go { ${attrKey "resolve" from} = true; } [ ] from st0 k0;
+      visits = if mode == "reachable" then closure else flatten tree;
 
       # D9: a parent cycle is refused only when it is made of parent edges alone. The verdict is
       # decided ONCE per resolution, over the union of the parent chains of every node the walk read
@@ -682,16 +691,13 @@ let
       witnessAnswers = concatMap (
         v:
         if regex.nullable v.st then
-          let
-            d = dataAt v.node;
-          in
-          if d == null then
+          if v.d == null then
             [ ]
           else
             [
               {
                 inherit (v) node path;
-                value = d;
+                value = v.d;
                 state = v.k;
               }
             ]
@@ -699,11 +705,91 @@ let
           [ ]
       ) visits;
 
-      # (NR-Vis): the witnesses grouped by k, each group's minimal set under `<p`, computed as a
-      # prefix minimum over label words (gen-view `relation.nix` step 6, carried): a member survives
-      # iff at every node of its word ŵ = w·$ its symbol takes the minimum rank among the symbols
-      # the group's members take there.
-      visibleParts =
+      # (NR-Vis) UNDER A DECLARED KEY, `group` (den-hoag-gayc C1, owner-ruled 2026-09-30): resolution
+      # stays lazy in data it shadows. Every candidate (a nullable visit) is in group `group` before
+      # any datum is read, and presence is tested in shadowing order, rank class by rank class down
+      # the trie of label words: at a word class the symbols (`$` for its nullable visits, then its
+      # kids' letters) are taken one rank at a time, lowest first, and the first rank class with a
+      # present stop or a non-empty child selection is the answer. A higher class is never visited,
+      # so a candidate under a lower-ranked present one is never forced.
+      #
+      # EXACT, by the trie argument (not by citation): `labelOrder` declares integer ranks, so `<l`
+      # is a strict weak order and `<p` its lexicographic extension with `$` at `endOfPath`. A
+      # member survives the strict prefix minimum (`strictParts`) iff at every trie node of its
+      # word its symbol has the minimum rank among the symbols PRESENT members take there; a child
+      # class with no present member selects `[ ]` and so cannot win a rank, which makes the first
+      # non-empty rank class exactly that minimum. Néron 2015 §5's staged shadowing operator is
+      # this, applied once per trie node; Néron's own algorithm does not cover a general WF and
+      # `<` (its §2.5 variants), so the citation names the operator, not the proof.
+      #
+      # A word class is the visits sharing one label word: the root class is `[ tree ]`, and the
+      # class reached by `l` is every kid with `via == l`, so each visit is examined once and no
+      # candidate list is re-grouped (the re-grouping trie is quadratic in a chain and refused by
+      # `ci/bench/resolve-parent-chain.sh`).
+      lazyParts =
+        let
+          inherit (o.order) rankOf;
+          present = c: c.d != null;
+          pick =
+            cls:
+            let
+              stops = filter (t: regex.nullable t.st) cls;
+              labels = prelude.unique (concatMap (t: map (c: c.via) t.kids) cls);
+              syms = (if stops != [ ] then [ "$" ] else [ ]) ++ labels;
+              ranks = builtins.sort builtins.lessThan (prelude.unique (map rankOf syms));
+              sel =
+                r:
+                concatMap (
+                  s:
+                  if s == "$" then filter present stops else pick (concatMap (t: filter (c: c.via == s) t.kids) cls)
+                ) (filter (s: rankOf s == r) syms);
+              first =
+                rs:
+                if rs == [ ] then
+                  [ ]
+                else
+                  let
+                    x = sel (head rs);
+                  in
+                  if x != [ ] then x else first (builtins.tail rs);
+            in
+            first ranks;
+          # The selection re-read in walk order, as `answers` is everywhere else. A path names its
+          # visit uniquely (NR-Cons: one visit per acyclic path).
+          chosenKeys = builtins.listToAttrs (
+            map (c: {
+              name = toJSON c.path;
+              value = true;
+            }) (pick [ tree ])
+          );
+          isChosen = v: chosenKeys ? ${toJSON v.path};
+          nullableVisits = filter (v: regex.nullable v.st) visits;
+          chosen = filter isChosen nullableVisits;
+          answer = c: {
+            inherit (c) node path;
+            value = c.d;
+            inherit (o) group;
+          };
+        in
+        # A group with no present candidate is no group, as under `groupBy` (`single` answers null).
+        if chosen == [ ] then
+          { }
+        else
+          {
+            ${attrKey "resolve" o.group} = {
+              visible = map answer chosen;
+              # Strict by definition: it lists shadowed DECLARATIONS, so presence is its content.
+              shadowed = map answer (filter (v: !(isChosen v) && present v) nullableVisits);
+            };
+          };
+
+      # (NR-Vis) UNDER A DATA-READING KEY, `groupBy`: the witnesses grouped by k, each group's
+      # minimal set under `<p`, computed as a prefix minimum over label words (gen-view
+      # `relation.nix` step 6, carried): a member survives iff at every node of its word ŵ = w·$ its
+      # symbol takes the minimum rank among the symbols the group's members take there. The key is
+      # a function of the datum (vA2018 Fig. 1, `≤d ⊆ D × D`), so membership is unknowable without
+      # it, and every witness's presence and key are forced: the strict form.
+      strictParts =
         let
           groupBy = callableAt "resolve" "groupBy" "a string, the answer's competition key" o.groupBy;
           inherit (o.order) rankOf;
@@ -746,6 +832,7 @@ let
             };
         in
         builtins.mapAttrs (_: split) groups;
+      visibleParts = if o ? group then lazyParts else strictParts;
       groupNames = builtins.attrNames visibleParts;
 
       single =
@@ -754,7 +841,11 @@ let
           part = visibleParts.${attrKey "resolve" group} or null;
           origins = prelude.unique (map (a: a.node) part.visible);
         in
-        if part == null then
+        # G4: under a declared key every candidate is in `group`, so another name could only read as
+        # "no declaration" — a typo answering null.
+        if o ? group && group != o.group then
+          refuse "resolve" "`single` is asked for group ${toJSON group}, but this resolution declares `group = ${toJSON o.group}`: every candidate is in that one group, so any other name would answer null as if nothing were declared"
+        else if part == null then
           null
         else if length origins > 1 then
           refuse "resolve" "group ${toJSON group} has more than one visible declaration, from ${toJSON origins}. That is an AMBIGUITY in the sense of Neron et al. 2015 (Fig. 3 rule (V); §2.2 Duplicate Declarations) — two declaration occurrences for one read. `single` answers with one declaration or REFUSES; read the group's `answers` to see every one"
@@ -798,6 +889,7 @@ let
           "mode"
           "order"
           "groupBy"
+          "group"
           "bound"
           "direction"
         ];
@@ -810,18 +902,32 @@ let
         in
         if !(elem mode modes) then
           refuse "resolve" "unknown mode ${toJSON mode} (one of ${quote modes})"
-        else if mode == "visible" && (o.groupBy or null) == null then
-          refuse "resolve" "groupBy is required and is never defaulted (den-hoag-l7af / ADR-0024 ruling 3); a caller wanting the per-node reading states `groupBy = ans: ans.node;` explicitly"
+        # G1 reads presence (`?`): `group` beside `groupBy = null` is still two keys stated.
+        else if o ? group && o ? groupBy then
+          refuse "resolve" "`group` and `groupBy` are both given; state exactly one competition key: `group`, a declared constant read before any datum (lazy in shadowed data), or `groupBy`, a function of the answer (strict: it forces every candidate it groups)"
+        else if mode == "visible" && (o.groupBy or null) == null && !(o ? group) then
+          refuse "resolve" "mode \"visible\" requires a competition key, and it is never defaulted (den-hoag-l7af / ADR-0024 ruling 3): state `group = \"k\";` (a declared constant, lazy in shadowed data) or `groupBy = ans: …;` (a function of the answer, strict); a caller wanting the per-node reading states `groupBy = ans: ans.node;` explicitly"
+        else if o ? group && !(isString o.group) then
+          refuse "resolve" "group is a ${typeOf o.group}, not a string; `group` is the competition key as a declared constant (a key computed from the answer is `groupBy`)"
         else if mode == "visible" && !(o ? order) then
           refuse "resolve" "mode \"visible\" requires `order`, a `labelOrder` value (<l over the alphabet, with `$`'s rank)"
         else if mode != "visible" && o ? order then
           refuse "resolve" "`order` is read only by mode \"visible\", and the mode is ${toJSON mode}"
         else if mode != "visible" && o ? groupBy then
           refuse "resolve" "`groupBy` is read only by mode \"visible\", and the mode is ${toJSON mode}"
+        else if mode != "visible" && o ? group then
+          refuse "resolve" "`group` is read only by mode \"visible\", and the mode is ${toJSON mode}"
         else if (o.wf.__element or null) != "wellFormed" then
           refuse "resolve" "wf is not a `wellFormed` value (build it with `wellFormed { alphabet; expression; }`)"
         else if mode == "visible" && (o.order.__element or null) != "labelOrder" then
           refuse "resolve" "order is not a `labelOrder` value (build it with `labelOrder { alphabet; layers; endOfPath; }`)"
+        # G5: `labelOrder`'s own law (total over L̂) applied at the door that pairs the two values. A
+        # letter the walk can step and `order` cannot rank would otherwise be refused only when some
+        # datum happened to sit behind it, and the two keys would disagree on when.
+        else if mode == "visible" && builtins.any (l: !(elem l o.order.alphabet)) o.wf.alphabet then
+          refuse "resolve" "`order` does not rank '${
+            head (filter (l: !(elem l o.order.alphabet)) o.wf.alphabet)
+          }', a letter of `wf`'s alphabet (${quote o.wf.alphabet}); mode \"visible\" ranks every letter the walk can step, so the label order must be total over the walk's alphabet"
         else if !(elem direction directions) then
           refuse "resolve" "unknown direction ${toJSON direction} (one of ${quote directions})"
         else if direction == "inbound" && elem parentLetter o.wf.alphabet then

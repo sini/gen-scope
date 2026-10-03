@@ -72,6 +72,18 @@ let
     };
     groupBy = _: "x";
   };
+  # The same read under the declared key.
+  gvis = builtins.removeAttrs vis [ "groupBy" ] // {
+    group = "x";
+  };
+  # `e` and `imports`: a walk alphabet `vis`'s order (over `e` alone) cannot rank.
+  eImports = S.wellFormed {
+    alphabet = [
+      "e"
+      "imports"
+    ];
+    expression = "e? imports?";
+  };
   mark = m: scope { marks = _: id: if id == "a" then m else [ ]; };
   # `a` reaches `b` by `e` and `c` by `imports`, both declaring `x`, at one rank.
   twoDecls = scope { imports = _: id: if id == "a" then [ "c" ] else [ ]; };
@@ -175,9 +187,72 @@ in
     plant = S.resolve { wf = e; } ok "a";
     twin = go { } ok;
   };
-  row9-visible-without-groupBy = {
+  row9-visible-without-a-key = {
     plant = go (builtins.removeAttrs vis [ "groupBy" ]) ok;
     twin = go vis ok;
+  };
+  # ── the declared key `group` (den-hoag-gayc C1): G1–G5 ──
+  rowG1-group-and-groupBy = {
+    plant = go (vis // { group = "x"; }) ok;
+    twin = go gvis ok;
+  };
+  # G1 reads presence: a null `groupBy` beside `group` is two keys stated, not one.
+  rowG1-group-beside-a-null-groupBy = {
+    plant = go (gvis // { groupBy = null; }) ok;
+    twin = go gvis ok;
+  };
+  rowG2-group-not-a-string = {
+    plant = go (gvis // { group = 1; }) ok;
+    twin = go gvis ok;
+  };
+  rowG3-group-outside-visible = {
+    plant = go {
+      mode = "witnesses";
+      group = "x";
+    } ok;
+    twin = go { mode = "witnesses"; } ok;
+  };
+  rowG4-single-asks-another-group = {
+    plant =
+      (S.resolve (
+        gvis
+        // {
+          wf = e;
+          dataFilter = x;
+        }
+      ) ok "a").single
+        "y";
+    twin =
+      (S.resolve (
+        gvis
+        // {
+          wf = e;
+          dataFilter = x;
+        }
+      ) ok "a").single
+        "x";
+  };
+  rowG5-order-omits-a-wf-letter = {
+    plant = go (gvis // { wf = eImports; }) ok;
+    twin = go (
+      gvis
+      // {
+        wf = eImports;
+        order = S.labelOrder {
+          alphabet = [
+            "e"
+            "imports"
+          ];
+          layers = [
+            [
+              "e"
+              "imports"
+            ]
+          ];
+          endOfPath = -1;
+        };
+      }
+    ) ok;
   };
   row10-order-outside-visible = {
     plant = go { inherit (vis) order; } ok;

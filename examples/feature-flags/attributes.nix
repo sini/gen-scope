@@ -9,7 +9,7 @@
       // {
         mode = "visible";
         dataFilter = node: node.decls.${flagName} or null;
-        groupBy = _: flagName;
+        group = flagName;
       }
     ) self id).single
       flagName;

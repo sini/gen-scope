@@ -41,7 +41,9 @@ let
 
   # Inherited attribute: the first non-null up the parent chain, as the one calculus reads it —
   # `parent*` under mode "visible", one rank (`$ < parent`, so the nearest declaration shadows every
-  # farther one), one competition group, and `single`. A parent chain that returns to itself is
+  # farther one), one DECLARED competition group, and `single`. The declared `group` is what keeps a
+  # shadowed ancestor's datum unforced: `default = throw "set X"` on an ancestor, overridden below,
+  # answers the override (den-hoag-gayc C1). A parent chain that returns to itself is
   # refused by name at the calculus's `parent` read (den-hoag-gayc D9), which is the refusal this
   # attribute always carried. Like every resolution it reads `marks` at each node it steps from.
   inheritWf = calculus.wellFormed {
@@ -61,7 +63,7 @@ let
       order = inheritOrder;
       mode = "visible";
       dataFilter = resolve;
-      groupBy = _: "inherited";
+      group = "inherited";
     } self id).single
       "inherited";
 
@@ -395,10 +397,10 @@ in
   inherit' = door.options "inherit'" [ "resolve" ] inherit';
   # RETIRED BY THE ONE CALCULUS (den-hoag-gayc D16): each name is a tombstone naming its
   # replacement, so an un-migrated call is refused where it is written rather than answering.
-  query = throw "gen-scope: `query` is retired. Use the one resolution calculus: `(resolve (neron // { mode = \"visible\"; dataFilter = f; groupBy = _: \"k\"; }) self id).single \"k\"`. `transitiveImports = true` is `wf = wellFormed { alphabet = [ \"parent\" \"imports\" ]; expression = \"parent* imports*\"; }`, and the retired shadowing flags are a stated `order` (`labelOrder`). Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+  query = throw "gen-scope: `query` is retired. Use the one resolution calculus: `(resolve (neron // { mode = \"visible\"; dataFilter = f; group = \"k\"; }) self id).single \"k\"`. `transitiveImports = true` is `wf = wellFormed { alphabet = [ \"parent\" \"imports\" ]; expression = \"parent* imports*\"; }`, and the retired shadowing flags are a stated `order` (`labelOrder`). Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
   queryAll = throw "gen-scope: `queryAll` is retired. Use the one resolution calculus: `(resolve { inherit (neron) wf; mode = \"witnesses\"; dataFilter = f; } self id).answers`, one `{ node; value; path; state; }` per acyclic resolution path (a diamond answers twice). Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
   ambiguous = throw "gen-scope: `ambiguous` is retired. Use `length (unique (map (a: a.node) (resolve { inherit (neron) wf; mode = \"witnesses\"; dataFilter = f; } self id).answers)) > 1`: an ambiguity is more than one distinct declaring node, never one declaration reached along several paths. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
-  visibleFrom = throw "gen-scope: `visibleFrom` is retired. Use `(resolve (neron // { mode = \"visible\"; dataFilter = f; groupBy = _: \"k\"; }) self id).single \"k\"`. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
+  visibleFrom = throw "gen-scope: `visibleFrom` is retired. Use `(resolve (neron // { mode = \"visible\"; dataFilter = f; group = \"k\"; }) self id).single \"k\"`. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
   queryReverse = throw "gen-scope: `queryReverse` is retired. Use the one resolution calculus over the converse: `map (a: a.value) (resolve { wf = wellFormed { alphabet = [ \"imports\" ]; expression = \"imports\"; }; mode = \"witnesses\"; direction = \"inbound\"; dataFilter = f; } self id).answers`; `transitive = true` is `expression = \"imports imports*\"`. One answer per acyclic reverse path, importers in `allNodeIds` order, so a node on two reverse paths answers twice. Every evaluation `resolve` reads declares `marks` (`_: _: [ ]` states none).";
   inheritAll = door.options "inheritAll" [ "extract" ] inheritAll;
   inheritSet = door.options "inheritSet" [ "extract" ] inheritSet;
