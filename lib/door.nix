@@ -19,7 +19,9 @@
 #             the required formals — a mismatch is refused here, at the export, never at a call.
 #   chained   options first, then the required formals as ONE open record (R7 (a)/(b)), guarded
 #             against the options step: an option given on the record instead is refused by name
-#             (`optionsStep`) rather than silently dropped.
+#             (`optionsStep`) rather than silently dropped. The record's spec is bound once and is
+#             also the options step's `next`, so the record step is published as data
+#             (`__contract.next`, den-hoag-ak8va).
 { prelude }:
 let
   inherit (builtins)
@@ -101,13 +103,15 @@ in
       opts = prelude.door {
         name = doorName name;
         optional = optionalOf f;
+        next = operandsSpec;
       };
-      operands = prelude.door {
+      operandsSpec = {
         name = doorName name;
         inherit required;
         open = true;
         optionsStep = self;
       };
+      operands = prelude.door operandsSpec;
       self = opts (o: operands (r: impl (o // intersectAttrs requiredSet r)));
     in
     self;
