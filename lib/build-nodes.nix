@@ -195,9 +195,11 @@ let
       nodeOrder =
         let
           n = builtins.length declaredSequence;
+          # Each id's key is formed once, here, and read back by position below.
+          keys = map toKey declaredSequence;
           firstAt = prelude.listToAttrs (
             prelude.genList (i: {
-              name = toKey (builtins.elemAt declaredSequence i);
+              name = builtins.elemAt keys i;
               value = i;
             }) n
           );
@@ -207,7 +209,7 @@ let
           let
             v = builtins.elemAt declaredSequence i;
           in
-          prelude.optional (firstAt.${toKey v} == i) v
+          prelude.optional (firstAt.${builtins.elemAt keys i} == i) v
         ) (prelude.genList (i: i) n);
 
       # The `P` contribution's edges, found by label in the list. There is no label-keyed attrset to
@@ -281,10 +283,16 @@ let
       # which is exactly right for a scope whose nodes have no kinds to descend from.
       inherit kinds;
       nodes = builtins.listToAttrs (
-        map (id: {
-          name = toKey id;
-          value = nodeOf id (toKey id);
-        }) nodeOrder
+        map (
+          id:
+          let
+            k = toKey id;
+          in
+          {
+            name = k;
+            value = nodeOf id k;
+          }
+        ) nodeOrder
       );
     };
 

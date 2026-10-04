@@ -19,6 +19,9 @@
   requireScope,
   requireDeclaredDependencies,
   graph,
+  # The key former under this library's name; defaulted so a caller wiring the module by hand keeps
+  # its four formals, and passed once by `lib/default.nix` so the library applies it once.
+  key ? graph.key "gen-scope",
 }:
 let
   door = import ./door.nix { inherit prelude; };
@@ -35,7 +38,7 @@ let
   # every table the evaluator keys by id is read through this key, while the records it answers
   # keep the id as the caller wrote it (den-hoag-di165). The refusal text is the one
   # `string-argument.nix` words, since gen-graph's key former says it in the same words.
-  identifier = (graph.key "gen-scope").attrKey;
+  identifier = key.attrKey;
 
   # A read of an attribute the evaluation does not declare. Two names the calculus reads by
   # construction are refused with what the caller has to declare (`calculus.nix`): the boundary-mark

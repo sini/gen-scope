@@ -13,6 +13,10 @@
   identity,
 }:
 let
+  # The key former under THIS library's name, applied once: every module that keys by a node id takes
+  # it rather than applying gen-graph's former again (den-hoag-di165).
+  scopeKey = graph.key "gen-scope";
+
   # The library's OWN algebraic-graph constructors, which are a different thing from the graph
   # library bound as `graph`: these build a scope graph out of vertices and overlays, that one
   # answers reachability and partition questions about a graph already built.
@@ -48,23 +52,23 @@ let
   buildRoots = import ./build-nodes.nix {
     inherit prelude;
     inherit (cascadeModule) kindSetDefect;
-    key = graph.key "gen-scope";
+    key = scopeKey;
   };
   queries = import ./queries.nix {
     inherit prelude;
-    key = graph.key "gen-scope";
+    key = scopeKey;
   };
   # The one resolution calculus. It takes gen-graph's published key former applied under THIS
   # library's name, so a refusal it raises reads `gen-scope.<door>` and the key discipline is the
   # one gen-graph states, bound once rather than copied (den-hoag-gayc C7).
   calculus = import ./calculus.nix {
     inherit prelude;
-    key = graph.key "gen-scope";
+    key = scopeKey;
   };
   # `inherit'` is read by the calculus, so the resolver module takes it rather than a second walker.
   resolve = import ./resolve.nix {
     inherit prelude calculus;
-    key = graph.key "gen-scope";
+    key = scopeKey;
   };
   # The mark attribute's name and the endpoint projection's predicate are the calculus's and the
   # evaluator's own reads, which import `structural.nix` themselves; they leave before the merge.
@@ -98,6 +102,7 @@ let
       requireDeclaredDependencies
       graph
       ;
+    key = scopeKey;
   };
   # The unchecked cores leave before the merge: they are the library's own calls, not its surface.
   eval = builtins.removeAttrs evalModule [ "cores" ];
@@ -143,7 +148,7 @@ let
     inherit prelude;
     inherit (evalModule.cores) eval;
     inherit requireScope requireDeclaredDependencies;
-    key = graph.key "gen-scope";
+    key = scopeKey;
   };
   # The surface is folded rather than chained with `//`, so a name contributed by two modules is a
   # throw naming both instead of a silent last-wins shadowing.
