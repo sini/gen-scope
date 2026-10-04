@@ -4294,8 +4294,8 @@ in
   # datum is the strict form, forcing every candidate it groups (L5). The answers are
   # `tests/lazy-shadowing.nix`'s; the fixtures `tests/_fixtures/lazy-shadowing.nix`'s.
   # The walk's spine is lazy too (den-hoag-gayc U1 rework): the shadowed scope's edges answer in
-  # `tests/lazy-shadowing.nix`; here, under the strict key they are forced, and a parent cycle the
-  # selection walks is refused under `group` as D9 refuses it everywhere.
+  # `tests/lazy-shadowing.nix`; here, under the strict key they are forced, and a parent cycle whose
+  # every field the selection reads is refused under `group`, under either rank order.
   config.flake.testsError.lazy-shadowing =
     let
       F = import ./tests/_fixtures/lazy-shadowing.nix { inherit lib genScope; };
@@ -4313,5 +4313,19 @@ in
       test-L5-a-data-reading-key-is-strict = forced (F.dataKey F.shadowing) "ANCESTOR-DATUM-FORCED";
       test-L5-a-data-reading-key-forces-the-shadowed-spine = forced (F.dataKey F.edgeForcing) "ANCESTOR-EDGE-FORCED";
       test-D9-a-parent-cycle-the-selection-walks-is-refused-under-group = forced (F.group F.cycleMet) ''gen-scope.resolve: node "a" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
+      test-D9-a-parent-cycle-the-selection-reads-is-refused-imports-first =
+        forced
+          (F.cycleReadUnder [
+            [ "imports" ]
+            [ "parent" ]
+          ])
+          ''gen-scope.resolve: node "p" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
+      test-D9-a-parent-cycle-the-selection-reads-is-refused-parent-first =
+        forced
+          (F.cycleReadUnder [
+            [ "parent" ]
+            [ "imports" ]
+          ])
+          ''gen-scope.resolve: node "p" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
     };
 }

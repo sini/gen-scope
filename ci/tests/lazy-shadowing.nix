@@ -15,8 +15,18 @@ let
   # under `tryEval`, so an ambiguity refusal must agree as a refusal. The label order is random, ties
   # included, over the WF's own alphabet; walks without `parent` are sometimes inbound. A pure LCG
   # makes the population a fixed one, so the liveness figures below are exact.
+  #
+  # `cyclic = true` is the CYCLIC-PARENT ARM: `parent` may point anywhere, the node itself included,
+  # so the two keys legitimately differ (the strict key decides D9 over whole chains, `group` over
+  # what its selection read) and each `group` read is compared with a REFERENCE instead. The
+  # reference walks a TWIN in which `parent` is an ordinary letter `up` (so no D9 applies) carrying
+  # one more edge to a fresh sink per scope; a sink visit marks a visit whose `parent` edge is
+  # admitted. A visit's class is examined iff no present candidate beats its word (the staged
+  # selection never tries a lower-ranked symbol after a present one), so the read relation is
+  # `from → parent` over the sink visits whose word minus the last letter is examined. The `group`
+  # read must refuse iff that relation has a cycle, and otherwise answer as the twin does.
   differential =
-    n: seed:
+    cyclic: n: seed:
     let
       inherit (builtins)
         genList
@@ -118,7 +128,7 @@ let
           r = j: elemAt xs j;
           nn = 3 + modn (r 0) 3;
           ids = genList (k: "s${toString k}") nn;
-          wfl = pickL (r 1) wfls;
+          wfl = pickL (r 1) (if cyclic then filter (w: builtins.elem "parent" w.alphabet) wfls else wfls);
           L = wfl.alphabet;
           nL = length L;
           rankOfL = k: modn (r (3 + k)) nL;
@@ -130,7 +140,9 @@ let
             id = "s${toString k}";
             type = "n";
             parent =
-              if k == 0 || modn (r (base + 6 * k)) 3 == 0 then
+              if cyclic then
+                (if modn (r (base + 6 * k)) 3 == 0 then null else "s${toString (modn (r (50 + k)) nn)}")
+              else if k == 0 || modn (r (base + 6 * k)) 3 == 0 then
                 null
               else
                 "s${toString (modn (r (base + 6 * k)) k)}";
@@ -256,40 +268,187 @@ let
               # The live control: the strict key reads every visit, so it meets a visited plant.
               strictForced = !(t ((S.resolve (opts // { groupBy = _: "k"; }) (evOf plant) s).single "k")).success;
             };
+          # THE CYCLIC-PARENT ARM's reference (see the header).
+          ren = l: if l == "parent" then "up" else l;
+          renExpr = builtins.replaceStrings [ "parent" ] [ "up" ];
+          Lt = map ren L;
+          isSink = id: lib.hasPrefix "sink-" id;
+          twin =
+            S.eval { parseParent = _: null; }
+              {
+                children = _: _: { };
+                imports = _: id: if isSink id then [ ] else tgts (idOf id) 2;
+                edges-e = _: id: if isSink id then [ ] else tgts (idOf id) 3;
+                edges-up =
+                  _: id:
+                  if isSink id then
+                    [ ]
+                  else
+                    lib.optional (nodes.${id}.parent != null) nodes.${id}.parent ++ [ "sink-${id}" ];
+                marks = _: _: [ ];
+              }
+              {
+                nodes =
+                  builtins.mapAttrs (_: nd: nd // { parent = null; }) nodes
+                  // listToAttrs (
+                    map (id: {
+                      name = "sink-${id}";
+                      value = {
+                        id = "sink-${id}";
+                        type = "n";
+                        parent = null;
+                        decls = { };
+                      };
+                    }) ids
+                  );
+                nodeOrder = ids ++ map (id: "sink-${id}") ids;
+              };
+          twinOrder = S.labelOrder {
+            alphabet = Lt;
+            layers = map (map ren) layers;
+            endOfPath = modn (r 7) (nL + 2) - 1;
+          };
+          twinWf =
+            expression:
+            S.wellFormed {
+              alphabet = Lt;
+              inherit expression;
+            };
+          norm = res: {
+            answers = t (
+              map (a: {
+                inherit (a) node value;
+                word = map ren (wordOf a.path);
+              }) res.answers
+            );
+            single = t (res.single "k");
+          };
+          cycRow =
+            s:
+            let
+              witnesses =
+                expression: dataFilter:
+                (S.resolve {
+                  wf = twinWf expression;
+                  mode = "witnesses";
+                  inherit dataFilter;
+                } twin s).answers;
+              presentWords = map (a: wordOf a.path) (
+                witnesses (renExpr (elemAt wfl.expressions wfIx)) opts.dataFilter
+              );
+              beatsT =
+                u: w:
+                let
+                  u' = u ++ [ "$" ];
+                  go =
+                    i:
+                    if i >= length w || i >= length u' then
+                      false
+                    else if elemAt u' i == elemAt w i then
+                      go (i + 1)
+                    else
+                      twinOrder.rankOf (elemAt u' i) < twinOrder.rankOf (elemAt w i);
+                in
+                go 0;
+              examined = w: !(builtins.any (u: beatsT u w) presentWords);
+              readFrom = map (z: (lib.last z.path).from) (
+                filter (z: isSink z.node && examined (lib.init (wordOf z.path))) (
+                  witnesses (renExpr (elemAt wfl.closures wfIx)) (nd: nd.id)
+                )
+              );
+              readSet = listToAttrs (
+                map (id: {
+                  name = id;
+                  value = true;
+                }) (filter (id: nodes.${id}.parent != null) readFrom)
+              );
+              follow =
+                id: k:
+                if k == 0 then
+                  true
+                else if readSet ? ${nodes.${id}.parent} then
+                  follow nodes.${id}.parent (k - 1)
+                else
+                  false;
+              refCycle = builtins.any (id: follow id nn) (builtins.attrNames readSet);
+              lazy = norm (S.resolve (opts // { group = "k"; }) ev s);
+              ref = norm (
+                S.resolve {
+                  wf = twinWf (renExpr (elemAt wfl.expressions wfIx));
+                  order = twinOrder;
+                  mode = "visible";
+                  inherit (opts) dataFilter;
+                  group = "k";
+                } twin s
+              );
+            in
+            {
+              inherit refCycle parentCyclic;
+              agree = if refCycle then !lazy.answers.success && !lazy.single.success else lazy == ref;
+              answered = lazy.answers.success && lazy.answers.value != [ ];
+            };
+          # Does the parent map itself carry a cycle (whether or not a selection reads it)?
+          parentCyclic =
+            let
+              up =
+                id: k:
+                if k == 0 then
+                  true
+                else if nodes.${id}.parent == null then
+                  false
+                else
+                  up nodes.${id}.parent (k - 1);
+            in
+            builtins.any (id: up id nn) ids;
         in
-        {
-          inherit inbound layers;
-          rows = map (s: {
-            strict = read (opts // { groupBy = _: "k"; }) s;
-            lazy = read (opts // { group = "k"; }) s;
-          }) ids;
-          # The converse reads every scope's edges by construction (a node does not know its
-          # importers), so only outbound walks are planted.
-          spine = if inbound then [ ] else map spineRow ids;
-        };
+        if cyclic then
+          { rows = map cycRow ids; }
+        else
+          {
+            inherit inbound layers;
+            rows = map (s: {
+              strict = read (opts // { groupBy = _: "k"; }) s;
+              lazy = read (opts // { group = "k"; }) s;
+            }) ids;
+            # The converse reads every scope's edges by construction (a node does not know its
+            # importers), so only outbound walks are planted.
+            spine = if inbound then [ ] else map spineRow ids;
+          };
       cases = genList case n;
       rows = concatMap (c: c.rows) cases;
       count = p: length (filter p rows);
       spine = concatMap (c: c.spine) cases;
       spineCount = p: length (filter p spine);
     in
-    {
-      reads = length rows;
-      mismatches = count (x: x.strict != x.lazy);
-      # Liveness: the population exercises what the selection decides.
-      answered = count (x: x.strict.answers.success && x.strict.answers.value != [ ]);
-      shadowedSome = count (x: x.strict.shadowed.success && x.strict.shadowed.value != [ ]);
-      multiAnswer = count (x: x.strict.answers.success && length x.strict.answers.value > 1);
-      ambiguityRefused = count (x: !x.strict.single.success);
-      tiedLayers = length (filter (c: builtins.any (l: length l > 1) c.layers) cases);
-      inbound = length (filter (c: c.inbound) cases);
-      spineReads = length spine;
-      spineMismatches = spineCount (x: !x.agree);
-      # Liveness of the spine half: reads whose walk reaches a planted scope, and of those the reads
-      # where the strict key, which forces every visit, throws (a live control must fire).
-      spinePlantVisited = spineCount (x: x.visitedPlant);
-      spineStrictForced = spineCount (x: x.visitedPlant && x.strictForced);
-    };
+    if cyclic then
+      {
+        reads = length rows;
+        mismatches = count (x: !x.agree);
+        # Liveness: reads whose selection read a parent cycle (refused), reads over a graph whose
+        # parent map has a cycle, and of those the reads that answer (a cycle the selection never
+        # read, which must not refuse).
+        refused = count (x: x.refCycle);
+        onCyclicGraph = count (x: x.parentCyclic);
+        answeredOnCyclicGraph = count (x: x.parentCyclic && !x.refCycle && x.answered);
+      }
+    else
+      {
+        reads = length rows;
+        mismatches = count (x: x.strict != x.lazy);
+        # Liveness: the population exercises what the selection decides.
+        answered = count (x: x.strict.answers.success && x.strict.answers.value != [ ]);
+        shadowedSome = count (x: x.strict.shadowed.success && x.strict.shadowed.value != [ ]);
+        multiAnswer = count (x: x.strict.answers.success && length x.strict.answers.value > 1);
+        ambiguityRefused = count (x: !x.strict.single.success);
+        tiedLayers = length (filter (c: builtins.any (l: length l > 1) c.layers) cases);
+        inbound = length (filter (c: c.inbound) cases);
+        spineReads = length spine;
+        spineMismatches = spineCount (x: !x.agree);
+        # Liveness of the spine half: reads whose walk reaches a planted scope, and of those the reads
+        # where the strict key, which forces every visit, throws (a live control must fire).
+        spinePlantVisited = spineCount (x: x.visitedPlant);
+        spineStrictForced = spineCount (x: x.visitedPlant && x.strictForced);
+      };
 in
 {
   flake.tests.lazy-shadowing = {
@@ -376,7 +535,7 @@ in
     # Its spine half (U1 rework) plants throwing edges, marks and `parent` on every scope the
     # selection shadows, and the lazy read must not move; the strict key, the live control, throws.
     test-C1-group-agrees-with-groupBy-and-reads-no-shadowed-spine-on-generated-graphs = {
-      expr = differential 200 1;
+      expr = differential false 200 1;
       expected = {
         reads = 794;
         mismatches = 0;
@@ -390,6 +549,20 @@ in
         spineMismatches = 0;
         spinePlantVisited = 136;
         spineStrictForced = 129;
+      };
+    };
+
+    # K1: the CYCLIC-PARENT ARM of the differential (see its header). `group` decides D9 over the
+    # `parent` fields its selection read, so it refuses exactly where the reference's read relation
+    # has a cycle, whatever the rank order, and elsewhere answers as the D9-free twin does.
+    test-D9-under-group-refuses-iff-the-parent-fields-read-cycle-on-generated-graphs = {
+      expr = differential true 200 2;
+      expected = {
+        reads = 803;
+        mismatches = 0;
+        refused = 333;
+        onCyclicGraph = 568;
+        answeredOnCyclicGraph = 184;
       };
     };
   };

@@ -129,6 +129,54 @@ rec {
       "b"
     ];
   };
+  # D9 is decided over the `parent` fields the selection READ, whatever the rank order: `s —imports→
+  # p —imports→ q` with `p.parent = q` and `q.parent = p`, only `q` declaring. Both fields are read
+  # under either order, so both orders refuse (`$ < imports < parent` once answered "vq" after
+  # reading both, because the walk reaches `q` by `imports` and so never re-enters it by `parent`).
+  cycleRead = scope {
+    nodes = {
+      s = node "s" null { };
+      p = node "p" "q" { };
+      q = node "q" "p" { v = "vq"; };
+    };
+    order = [
+      "s"
+      "p"
+      "q"
+    ];
+    imports =
+      _: id:
+      {
+        s = [ "p" ];
+        p = [ "q" ];
+        q = [ ];
+      }
+      .${id};
+  };
+  cycleReadUnder =
+    layers:
+    (S.resolve {
+      wf = S.wellFormed {
+        alphabet = [
+          "imports"
+          "parent"
+        ];
+        expression = "(imports|parent)*";
+      };
+      order = S.labelOrder {
+        alphabet = [
+          "imports"
+          "parent"
+        ];
+        inherit layers;
+        endOfPath = -1;
+      };
+      mode = "visible";
+      dataFilter = v;
+      group = "k";
+    } cycleRead "s").single
+      "k";
+
   # F1: `s —e→ t`; `wf` steps `e`, an `order` over `imports` alone cannot rank it.
   alphabetMismatch = scope {
     nodes = {

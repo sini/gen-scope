@@ -543,16 +543,11 @@ let
       # kid-index word, so pre-order is the lexicographic order of `ix` and a reader that needs walk
       # order sorts the visits it holds instead of flattening the tree (which reads every edge).
       #
-      # `visited` maps each scope on the path to its depth, and `run` is the depth where the path's
-      # trailing `parent`-only segment begins: an admitted `parent` edge back into that segment is a
-      # parent cycle THIS VISIT MET (D9, read where the walk reads it). `parentCycle` names the scope
-      # re-entered, or is null.
+      # `visited` maps each scope on the path to its depth.
       go =
-        visited: run: depth: path: ix: via: id: st: k:
+        visited: depth: path: ix: via: id: st: k:
         let
           x = expand id st;
-          onRun = e: e.label == parentLetter && (visited.${attrKey "resolve" e.target} or (-1)) >= run;
-          closing = filter onRun x.admitted;
         in
         {
           node = id;
@@ -565,7 +560,6 @@ let
             x
             via
             ;
-          parentCycle = if closing == [ ] then null else (head closing).target;
           kids =
             let
               fresh = filter (e: !(visited ? ${attrKey "resolve" e.target})) x.admitted;
@@ -575,28 +569,20 @@ let
               let
                 e = builtins.elemAt fresh i;
               in
-              go (visited // { ${attrKey "resolve" e.target} = depth + 1; })
-                (if e.label == parentLetter then run else depth + 1)
-                (depth + 1)
-                (
-                  path
-                  ++ [
-                    {
-                      inherit (e) label;
-                      from = id;
-                      to = e.target;
-                    }
-                  ]
-                )
-                (ix ++ [ i ])
-                e.label
-                e.target
-                e.st
-                e.k
+              go (visited // { ${attrKey "resolve" e.target} = depth + 1; }) (depth + 1) (
+                path
+                ++ [
+                  {
+                    inherit (e) label;
+                    from = id;
+                    to = e.target;
+                  }
+                ]
+              ) (ix ++ [ i ]) e.label e.target e.st e.k
             ) (length fresh);
         };
       flatten = t: [ t ] ++ concatMap flatten t.kids;
-      tree = go { ${attrKey "resolve" from} = 0; } 0 0 [ ] [ ] null from st0 k0;
+      tree = go { ${attrKey "resolve" from} = 0; } 0 [ ] [ ] null from st0 k0;
 
       visits = if mode == "reachable" then closure else flatten tree;
 
@@ -608,7 +594,8 @@ let
       # The walk itself terminates on a cycle either way (the closure's key, NR-Cons's seen set), so
       # the refusal is applied where a read would have met it: an admitted `parent` edge for every
       # answer, a withheld one too for `withheld`, which reads it. Under `group` the selection reads
-      # only the classes it examines, and applies D9 there by `go`'s `parentCycle` instead.
+      # only the classes it examines, and decides D9 over the `parent` fields those classes read
+      # instead (`lazyParts`' `parentReadChecked`).
       up = builtins.genericClosure {
         startSet = map (v: {
           key = v.node;
@@ -749,14 +736,53 @@ let
         let
           inherit (o.order) rankOf;
           present = c: c.d != null;
-          # D9 under `group`: a class is examined only by reading its members' edges, so a parent cycle
-          # is refused where the selection met it, and a cycle above a shadowed scope is never read.
-          examine =
-            t:
-            if t.parentCycle == null then
-              t
+          # D9 under `group`, decided over what the selection READ: a class is examined by reading its
+          # members' edges, so the relation node → `parent` over every examined member whose `parent`
+          # edge is admitted is exactly the `parent` fields read, and nothing new is forced. The verdict
+          # is refuse iff that relation has a cycle — a property of what was read, not of the path shape
+          # or the rank order it was read in. The relation is a function, so a node is acyclic iff its
+          # chain leaves the relation: one closure down from those exits, as `parentCheck` does over
+          # whole chains. A cycle above a shadowing declaration is never read, so never refused.
+          parentReadChecked =
+            examined:
+            let
+              entries = filter (e: e.parent != null) (
+                map (t: {
+                  key = t.node;
+                  parent = (self.node t.node).parent;
+                }) (filter (t: t.x.admitsParent) examined)
+              );
+              read = builtins.listToAttrs (
+                map (e: {
+                  name = attrKey "resolve" e.key;
+                  value = e;
+                }) entries
+              );
+              below = builtins.groupBy (e: attrKey "resolve" e.parent) entries;
+              exits = builtins.genericClosure {
+                startSet = filter (e: !(read ? ${attrKey "resolve" e.parent})) entries;
+                operator = e: below.${attrKey "resolve" e.key} or [ ];
+              };
+              acyclic = builtins.listToAttrs (
+                map (e: {
+                  name = attrKey "resolve" e.key;
+                  value = true;
+                }) exits
+              );
+              cyclic = filter (e: !(acyclic ? ${attrKey "resolve" e.key})) entries;
+              # Up from a cyclic node, the chain stays in the relation; the last scope before a repeat
+              # has the repeated one, which is on the cycle, as its parent.
+              chain = builtins.genericClosure {
+                startSet = [ (head cyclic) ];
+                operator = e: [ read.${attrKey "resolve" e.parent} ];
+              };
+            in
+            if cyclic == [ ] then
+              true
             else
-              refuse "resolve" "node ${renderId t.parentCycle} is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk";
+              refuse "resolve" "node ${
+                renderId (builtins.elemAt chain (length chain - 1)).parent
+              } is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk";
           # The staged selection as a loop, not a recursion: `genericClosure` steps an explicit stack of
           # word classes, so its stack depth is constant in the walk's depth (`pick`'s recursion
           # aborted at a parent chain of 1,700). A frame is one class: `ranks` still to try, `cur` the
@@ -765,9 +791,8 @@ let
           # at the first non-empty rank or `[ ]` when its ranks run out (Néron §5's staged shadowing,
           # one trie node per frame). Every state field is forced per step (ADR-0022).
           frameOf =
-            cls':
+            cls:
             let
-              cls = map examine cls';
               stops = filter (t: regex.nullable t.st) cls;
               labels = prelude.unique (concatMap (t: map (c: c.via) t.kids) cls);
               syms = (if stops != [ ] then [ "$" ] else [ ]) ++ labels;
@@ -813,14 +838,18 @@ let
                   };
                 }
               else
+                let
+                  g = frameOf (concatMap (t: filter (c: c.via == s) t.kids) f.cls);
+                in
                 {
                   stack = {
-                    f = frameOf (concatMap (t: filter (c: c.via == s) t.kids) f.cls);
+                    f = g;
                     up = {
                       f = f';
                       inherit (stack) up;
                     };
                   };
+                  examined = g.cls;
                 }
             else if f.acc != [ ] || f.ranks == [ ] then
               ret f.acc
@@ -852,6 +881,7 @@ let
                         f = frameOf cls;
                         up = null;
                       };
+                      examined = cls;
                     };
                   }
                 ];
@@ -871,7 +901,8 @@ let
                     ];
               };
             in
-            (builtins.elemAt steps (length steps - 1)).st.done;
+            builtins.seq (parentReadChecked (concatMap (s: s.st.examined or [ ]) steps))
+              (builtins.elemAt steps (length steps - 1)).st.done;
           # The selection in walk order, as `answers` is everywhere else: sorted by `ix`, so no visit
           # the selection did not examine is read (ADR-0008 item 1; den-hoag-gayc U1 rework).
           picked = pick [ tree ];
@@ -1001,7 +1032,7 @@ let
         in
         builtins.mapAttrs (_: split) groups;
       visibleParts = if o ? group then lazyParts else strictParts;
-      # Under `group` the selection applies D9 itself, to the classes it examines; a whole-walk
+      # Under `group` the selection decides D9 itself, over the classes it examines; a whole-walk
       # verdict would read the edges of every scope it shadows.
       selectionChecked = if o ? group then (x: x) else admittedChecked;
       groupNames = builtins.attrNames visibleParts;
