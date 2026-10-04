@@ -94,6 +94,10 @@ let
       order = flat letters;
       groupBy = _: "x";
     } ev from;
+  # A letter carrying string context (a store path in its context set; a real one, so nothing is built); `==` reads it as "include".
+  ctxLetter = builtins.appendContext "include" {
+    ${builtins.unsafeDiscardStringContext (builtins.toFile "ctx-letter" "x")}.path = true;
+  };
   wordsOf = map (a: map (s: s.label) a.path);
 
   # ── the cycle-law fixtures ──
@@ -1536,6 +1540,110 @@ in
           "plus"
           "seq"
           "star"
+        ];
+      };
+    };
+    # ── a context-carrying letter (den-hoag-we7kr) ──
+    # A letter built from a store path carries string context, and a context-carrying string as an
+    # attribute name aborts the evaluator uncatchably. Every rank, converse, edge-attribute,
+    # competition-id and withheld-index table is keyed through `attrKey`, so the letter is ranked,
+    # looked up and walked as its context-free twin; `==` ignores context, so the plain spelling
+    # reads the same table. Each cell holds the context-free twin beside it.
+    test-a-context-carrying-letter-is-ranked = {
+      expr =
+        let
+          o = S.labelOrder {
+            alphabet = [ ctxLetter ];
+            layers = [ [ ctxLetter ] ];
+            endOfPath = -1;
+          };
+        in
+        builtins.tryEval (builtins.deepSeq (o.rankOf "include") (o.rankOf "include"));
+      expected = {
+        success = true;
+        value = 0;
+      };
+    };
+    test-a-context-carrying-letter-is-looked-up = {
+      expr =
+        let
+          o = S.labelOrder {
+            alphabet = [ "include" ];
+            layers = [ [ "include" ] ];
+            endOfPath = -1;
+          };
+        in
+        builtins.tryEval (o.rankOf ctxLetter);
+      expected = {
+        success = true;
+        value = 0;
+      };
+    };
+    test-a-context-carrying-letter-is-walked-inbound-and-withheld = {
+      expr =
+        let
+          g = lift {
+            nodes = [
+              "a"
+              "b"
+            ];
+            edges.include.a = [ "b" ];
+            marks = _: _: [
+              {
+                name = "shut";
+                admits = _: false;
+              }
+            ];
+          };
+          wfc = S.wellFormed {
+            alphabet = [ ctxLetter ];
+            expression = "include";
+          };
+          r =
+            dir:
+            S.resolve {
+              wf = wfc;
+              dataFilter = ids;
+              direction = dir;
+            } g;
+        in
+        builtins.tryEval (builtins.deepSeq [ (r "inbound" "b") ((r "outbound" "a").withheld "a") ] true);
+      expected = {
+        success = true;
+        value = true;
+      };
+    };
+    test-a-context-carrying-letter-is-ranked-by-visible = {
+      expr =
+        let
+          g = lift {
+            nodes = [
+              "a"
+              "b"
+            ];
+            edges.include.a = [ "b" ];
+          };
+          r = S.resolve {
+            wf = S.wellFormed {
+              alphabet = [ ctxLetter ];
+              expression = "include*";
+            };
+            dataFilter = ids;
+            mode = "visible";
+            order = S.labelOrder {
+              alphabet = [ ctxLetter ];
+              layers = [ [ ctxLetter ] ];
+              endOfPath = -1;
+            };
+            groupBy = a: a.node;
+          };
+        in
+        builtins.tryEval (builtins.deepSeq (nodesOf (r g "a")) (nodesOf (r g "a")));
+      expected = {
+        success = true;
+        value = [
+          "a"
+          "b"
         ];
       };
     };

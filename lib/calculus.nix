@@ -189,7 +189,7 @@ let
         acc
         // builtins.listToAttrs (
           map (l: {
-            name = l;
+            name = attrKey "labelOrder" l;
             value = i;
           }) (builtins.elemAt layers i)
         )
@@ -198,8 +198,8 @@ let
         l:
         if l == "$" then
           endOfPath
-        else if isString l && ranks ? ${l} then
-          ranks.${l}
+        else if isString l && ranks ? ${attrKey "labelOrder" l} then
+          ranks.${attrKey "labelOrder" l}
         else
           refuse "labelOrder" "${
             if isString l then "'${l}'" else "a ${typeOf l}"
@@ -377,7 +377,7 @@ let
         else if l == relations.imports then
           edgeList id l (self.get id relations.imports)
         else
-          edgeList id l (self.get id (structural.edgePrefix + l));
+          edgeList id l (self.get id (structural.edgePrefix + attrKey "resolve" l));
 
       inbound = direction == "inbound";
       # The converse, per letter, built once per resolution and only for a letter the walk reads:
@@ -402,7 +402,7 @@ let
       # acyclic reverse paths answers twice, as a diamond does outbound.
       converse = builtins.listToAttrs (
         map (l: {
-          name = l;
+          name = attrKey "resolve" l;
           value = builtins.groupBy (e: attrKey "resolve" e.to) (
             concatMap (
               s:
@@ -414,7 +414,7 @@ let
           );
         }) alphabet
       );
-      sourcesOf = id: l: map (e: e.src) (converse.${l}.${attrKey "resolve" id} or [ ]);
+      sourcesOf = id: l: map (e: e.src) (converse.${attrKey "resolve" l}.${attrKey "resolve" id} or [ ]);
 
       # One ⟨node, state⟩ expansion: the live letters in the alphabet's order, the edges within a
       # letter in the attribute's (outbound) or `allNodeIds`' (inbound) order, each admitted or
@@ -649,10 +649,10 @@ let
           at = builtins.elemAt ws;
           firstIdx = builtins.listToAttrs (
             builtins.genList (i: {
-              name = toJSON [
+              name = attrKey "resolve" (toJSON [
                 (at i).label
                 (at i).target
-              ];
+              ]);
               value = i;
             }) (length ws)
           );
@@ -981,7 +981,7 @@ let
                       inherit (a) m;
                       node = a.key;
                       rank = rankOf sym;
-                      combo = "${a.key} ${sym}";
+                      combo = attrKey "resolve" "${a.key} ${sym}";
                     }
                   ) (filter (a: length (builtins.elemAt words a.m) > i) alive);
                   ids = builtins.listToAttrs (
