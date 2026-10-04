@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "bdwgc": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790015987,
+        "narHash": "sha256-bPVosUgucJR0hGSap3tJW84AR6eGYegVROV+O8VYX5A=",
+        "owner": "DeterminateSystems",
+        "repo": "bdwgc",
+        "rev": "373957929b9ca3b2ae69a3e16b830c44c15b42ca",
+        "type": "github"
+      },
+      "original": {
+        "owner": "DeterminateSystems",
+        "ref": "user-defined-stacks",
+        "repo": "bdwgc",
+        "type": "github"
+      }
+    },
     "devshell": {
       "inputs": {
         "nixpkgs": [
@@ -164,11 +181,11 @@
         "gen-prelude": "gen-prelude"
       },
       "locked": {
-        "lastModified": 1791077621,
-        "narHash": "sha256-GCrIL1h8s3/I1jovP1IBUNoDrwVYl8z8NnT1+2Vde/g=",
+        "lastModified": 1791084787,
+        "narHash": "sha256-6gI4dnk3WWTRhDL5uLMkEAh0x2uEPi6i+nT9nsPKvLs=",
         "owner": "sini",
         "repo": "gen-graph",
-        "rev": "59e7d2a72e8385eaebd93d93d680e9dc465399ea",
+        "rev": "f32788716ab41fd760d858f56cdefb7f178ba0fe",
         "type": "github"
       },
       "original": {
@@ -192,11 +209,11 @@
         "treefmt-nix": "treefmt-nix_2"
       },
       "locked": {
-        "lastModified": 1791057866,
-        "narHash": "sha256-ASj/CFd6FMpSDDxngFFJHTw1ENY+8XS9CZm04BK1VmU=",
+        "lastModified": 1791076310,
+        "narHash": "sha256-Xu5AQojfiCB8a/3FjID0sCinWkxG0EP3UeYH34nMJG4=",
         "owner": "sini",
         "repo": "gen-harness",
-        "rev": "9c2bce2dd710ce01b010655c117198af81741600",
+        "rev": "8d98fe4704dce9aab3e9940215f029ba473fa77a",
         "type": "github"
       },
       "original": {
@@ -207,11 +224,11 @@
     },
     "gen-identity": {
       "locked": {
-        "lastModified": 1791070343,
-        "narHash": "sha256-nUhbGtYT3HXtY7E7xppcFN0d2qOH9WvaYEkytBn6E04=",
+        "lastModified": 1791084713,
+        "narHash": "sha256-f3xTsqlcxjVDci18Fm2TGeTT1VzVzeJb8pdm2UsCApc=",
         "owner": "sini",
         "repo": "gen-identity",
-        "rev": "b94563b8c4cdf900952b3828f668fd4759d095ff",
+        "rev": "e13b6905975483b3de2faa6b076ef6986e645d8a",
         "type": "github"
       },
       "original": {
@@ -222,11 +239,11 @@
     },
     "gen-prelude": {
       "locked": {
-        "lastModified": 1791070343,
-        "narHash": "sha256-6SwoktjHG0kFXqVFYjdsP6h9m0Pj9PRcU+A5JieAFtY=",
+        "lastModified": 1791084711,
+        "narHash": "sha256-8zMLG8h9s5NSjZi9kmi4zjINZtD4Y+/ecrGnzY8W1Ag=",
         "owner": "sini",
         "repo": "gen-prelude",
-        "rev": "40e305c3e2281327a8d28325854982658040ba36",
+        "rev": "1c813d5505f318b9a0940071545cab88b26131cb",
         "type": "github"
       },
       "original": {
@@ -237,11 +254,11 @@
     },
     "gen-prelude_2": {
       "locked": {
-        "lastModified": 1791070343,
-        "narHash": "sha256-6SwoktjHG0kFXqVFYjdsP6h9m0Pj9PRcU+A5JieAFtY=",
+        "lastModified": 1791084711,
+        "narHash": "sha256-8zMLG8h9s5NSjZi9kmi4zjINZtD4Y+/ecrGnzY8W1Ag=",
         "owner": "sini",
         "repo": "gen-prelude",
-        "rev": "40e305c3e2281327a8d28325854982658040ba36",
+        "rev": "1c813d5505f318b9a0940071545cab88b26131cb",
         "type": "github"
       },
       "original": {
@@ -358,6 +375,7 @@
     },
     "nix-determinate": {
       "inputs": {
+        "bdwgc": "bdwgc",
         "flake-parts": "flake-parts_2",
         "git-hooks-nix": "git-hooks-nix_2",
         "nixpkgs": "nixpkgs",
@@ -365,16 +383,16 @@
         "nixpkgs-regression": "nixpkgs-regression"
       },
       "locked": {
-        "lastModified": 1789679063,
-        "narHash": "sha256-5rX9rK1y8NpOaYyL+cn1P2O5re+ON2Wpo39J8/LLCXI=",
+        "lastModified": 1790875667,
+        "narHash": "sha256-ldqXsv3UaPHCvvH0nlDvjNF7zM4wJmMjuyRy91/pVFM=",
         "owner": "DeterminateSystems",
         "repo": "nix-src",
-        "rev": "6468ca430b298865100b753ec21687aba457a05c",
+        "rev": "8bb6b35147841a45b6dead93fc98339798d586f5",
         "type": "github"
       },
       "original": {
         "owner": "DeterminateSystems",
-        "ref": "v3.22.5",
+        "ref": "v3.23.0",
         "repo": "nix-src",
         "type": "github"
       }
