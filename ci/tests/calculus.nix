@@ -214,6 +214,22 @@ let
       b = [ "a" ];
     };
   };
+  # s —e→ z, b and z —e→ a: first-reach s z b a, pre-order s z a b, codepoint a b s z.
+  firstReach = lift {
+    nodes = [
+      "s"
+      "z"
+      "b"
+      "a"
+    ];
+    edges.e = {
+      s = [
+        "z"
+        "b"
+      ];
+      z = [ "a" ];
+    };
+  };
   ic = lift {
     nodes = [
       "a"
@@ -980,8 +996,8 @@ in
       expr = both [ "members" "contains" ] "members contains*" t2 "s";
       expected = {
         reachable = [
-          "s"
           "t"
+          "s"
           "u"
         ];
         witnesses = [
@@ -994,10 +1010,41 @@ in
       expr = both [ "tacks" ] "tacks+" t3 "a";
       expected = {
         reachable = [
+          "b"
+          "a"
+        ];
+        witnesses = [ "b" ];
+      };
+    };
+    # `reachable` answers in FIRST-REACH order (the calculus header's ORDER): breadth-first over
+    # ⟨node, state⟩, each node at its first nullable visit. On this fixture that order, the
+    # depth-first pre-order `witnesses` enumerates, and the codepoint order of the answer set are
+    # pairwise distinct, so a walk answering in either of the other two reds here.
+    test-ORDER-reachable-is-first-reach = {
+      expr =
+        let
+          r = both [ "e" ] "e*" firstReach "s";
+        in
+        r // { codepoint = sorted r.reachable; };
+      expected = {
+        reachable = [
+          "s"
+          "z"
+          "b"
+          "a"
+        ];
+        witnesses = [
+          "s"
+          "z"
           "a"
           "b"
         ];
-        witnesses = [ "b" ];
+        codepoint = [
+          "a"
+          "b"
+          "s"
+          "z"
+        ];
       };
     };
     test-E2-visible-is-the-acyclic-reading = {
@@ -1031,9 +1078,9 @@ in
         r // { witnesses = sorted r.witnesses; };
       expected = {
         reachable = [
-          "xm"
-          "xr"
           "xs"
+          "xr"
+          "xm"
         ];
         witnesses = [
           "xm"
@@ -1067,7 +1114,7 @@ in
     test-C22-floor-bodkin-answers-all-three = {
       expr = peerOf { } "bodkin";
       expected = {
-        answers = sorted c22nodes;
+        answers = c22nodes;
         withheld = [ ];
       };
     };
@@ -1474,10 +1521,10 @@ in
           "c"
         ];
         reachable = [
+          "t"
           "a"
           "b"
           "c"
-          "t"
         ];
       };
     };
@@ -1559,9 +1606,9 @@ in
           "leaf"
         ];
         reachable = [
-          "leaf"
-          "mid"
           "root"
+          "mid"
+          "leaf"
         ];
         outbound = {
           reachable = [
@@ -1577,8 +1624,8 @@ in
         };
         children = [ ];
         mixed = [
-          "child"
           "parent"
+          "child"
         ];
       };
     };

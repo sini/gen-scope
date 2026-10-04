@@ -19,6 +19,16 @@
 #     it has already visited, the start included, so each answer carries its path and a diamond
 #     answers twice. Enumeration is priced by the number of such paths.
 #
+# ORDER. `reachable` answers in FIRST-REACH order: breadth-first over ⟨node, state⟩, each node once,
+# at its first nullable visit. At each ⟨node, state⟩ the letters are taken in `wf`'s alphabet order
+# and a letter's edges in the attribute's declared order (outbound) or `allNodeIds` order (inbound),
+# so the order derives from declared inputs. It is not the codepoint order of the answer set, which
+# would discard the walk that built it (the undeclared-order defect, `resolve.nix` `collect`). It
+# rests on `builtins.genericClosure` processing its worklist first-in first-out and keeping the first
+# item of each key, which Nix implements and does not document. `witnesses` answers in depth-first
+# pre-order, one answer per path. `calculus.test-ORDER-reachable-is-first-reach` pins the three
+# apart on a fixture where first-reach, pre-order and codepoint order all differ.
+#
 # THE LETTERS READ THE SCOPE, NEVER A DECLARED EDGE LIST. At each reached ⟨node, state⟩ the walk reads
 # the edge attribute of every letter whose derivative from `state` is not ∅: `imports` reads the
 # import relation (`traversal-names.nix`), `parent` reads the node record's `.parent`, and every
@@ -669,15 +679,20 @@ let
           }
         ) (builtins.sort builtins.lessThan (builtins.attrValues firstIdx));
 
+      # FIRST-REACH ORDER: each node once, at its first nullable visit in `closure` order (the
+      # header's ORDER paragraph). Not `attrValues` of the keyed set, whose codepoint order discards
+      # the walk that built it (the undeclared-order defect, `resolve.nix` `collect`). The dedup is a
+      # second `genericClosure` with no operator: its worklist is the nullable visits in order, and it
+      # keeps the first item of each key, so it rests on the same FIFO worklist as `closure`. The key
+      # is the id itself: every id here is a string (`identifier` and `edgeList` refuse the rest), the
+      # closure compares strings by their text, and the first occurrence keeps its context.
       reachableAnswers =
         let
-          nodes = builtins.attrValues (
-            builtins.listToAttrs (
-              map (i: {
-                name = attrKey "resolve" i.node;
-                value = i.node;
-              }) (filter (i: regex.nullable i.st) closure)
-            )
+          nodes = map (i: i.key) (
+            builtins.genericClosure {
+              startSet = map (i: { key = i.node; }) (filter (i: regex.nullable i.st) closure);
+              operator = _: [ ];
+            }
           );
         in
         concatMap (
