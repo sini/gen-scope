@@ -795,6 +795,107 @@ let
       ]
     else
       [ ];
+  # ── U2e: the converse of `parent` ──
+  upIn' =
+    mode: alphabet: expression: ev: from:
+    S.resolve {
+      wf = wf alphabet expression;
+      dataFilter = ids;
+      inherit mode;
+      direction = "inbound";
+    } ev from;
+  upIn = mode: upIn' mode [ "parent" ] "parent*";
+  lineage = lift {
+    nodes = [
+      "leaf"
+      "mid"
+      "root"
+    ];
+    parents = {
+      leaf = "mid";
+      mid = "root";
+    };
+  };
+  # `d` and `e` contain each other, apart from the chain.
+  disjointCycle = lift {
+    nodes = [
+      "root"
+      "mid"
+      "leaf"
+      "d"
+      "e"
+    ];
+    parents = {
+      leaf = "mid";
+      mid = "root";
+      d = "e";
+      e = "d";
+    };
+  };
+  # The marked-cycle row's unmarked twin, in the same declared order.
+  unmarkedCycle =
+    S.eval { parseParent = _: null; }
+      {
+        children = _: _: { };
+        marks = _: _: [ ];
+      }
+      (
+        S.buildRoots {
+          parentGraph =
+            S.overlay
+              (S.vertices [
+                "x"
+                "y"
+                "r"
+                "m"
+              ])
+              (
+                S.edges [
+                  {
+                    from = "r";
+                    to = "m";
+                  }
+                  {
+                    from = "m";
+                    to = "r";
+                  }
+                  {
+                    from = "x";
+                    to = "r";
+                  }
+                  {
+                    from = "y";
+                    to = "m";
+                  }
+                ]
+              );
+        }
+      );
+  # rho: `s` sits in `a`, `c` in `s`, and `a` and `b` contain each other.
+  rhoAbove = lift {
+    nodes = [
+      "s"
+      "a"
+      "b"
+      "c"
+    ];
+    parents = {
+      s = "a";
+      c = "s";
+      a = "b";
+      b = "a";
+    };
+  };
+  upGroup =
+    at:
+    S.resolve {
+      wf = wf [ "parent" ] "parent*";
+      dataFilter = n: if n.id == at then n.id else null;
+      mode = "visible";
+      order = flat [ "parent" ];
+      group = "g";
+      direction = "inbound";
+    } rhoAbove "s";
   converseRead =
     ev: at:
     let
@@ -1439,20 +1540,86 @@ in
         undeclared = true;
       };
     };
-    # Containment's converse is `children`, a different relation: `parent` is refused in an inbound
-    # alphabet, catchably, and the same alphabet walked outbound answers.
-    test-U1d-parent-is-refused-in-an-inbound-alphabet = {
+    # ── U2e (den-hoag-gayc; ADR-0024 `direction`): `parent` has a converse ──
+    # Inbound, `parent` steps to every node whose `.parent` is the node read (the scopes it
+    # contains), read from `.parent` and never from `children`, which a lift leaves empty. The same
+    # alphabet walked outbound climbs.
+    test-U2e-parent-has-a-converse = {
       expr = {
-        inbound = throws (inbound "reachable" [ "parent" "imports" ] "parent* imports?" flags "child");
-        outbound = nodesOf (run "reachable" [ "parent" "imports" ] "parent* imports?" flags "child");
+        witnesses = nodesOf (upIn "witnesses" lineage "root");
+        reachable = nodesOf (upIn "reachable" lineage "root");
+        outbound = both [ "parent" ] "parent*" lineage "leaf";
+        children = S.childrenIds lineage "root";
+        mixed = nodesOf (upIn' "reachable" [ "parent" "imports" ] "parent* imports?" flags "parent");
       };
       expected = {
-        inbound = true;
-        outbound = [
+        witnesses = [
+          "root"
+          "mid"
+          "leaf"
+        ];
+        reachable = [
+          "leaf"
+          "mid"
+          "root"
+        ];
+        outbound = {
+          reachable = [
+            "leaf"
+            "mid"
+            "root"
+          ];
+          witnesses = [
+            "leaf"
+            "mid"
+            "root"
+          ];
+        };
+        children = [ ];
+        mixed = [
           "child"
           "parent"
-          "provider"
         ];
+      };
+    };
+    # D9 under the converse walks the parent chain from every node at which the walk read `parent`
+    # (the refusals, at the start and above it, are rows 16 in the refusal table). A cycle the walk
+    # never reads answers; the marked cycle's unmarked twin is refused as the marked one is, so the
+    # marks on the first converse sources (`x`, `y`, first in `allNodeIds`) hide nothing.
+    test-U2e-D9-reads-the-chain-of-every-node-the-converse-reads = {
+      expr = {
+        disjoint = nodesOf (upIn "witnesses" disjointCycle "root");
+        order = unmarkedCycle.allNodeIds;
+        unmarked = throws (upIn "witnesses" unmarkedCycle "r");
+      };
+      expected = {
+        disjoint = [
+          "root"
+          "mid"
+          "leaf"
+        ];
+        order = [
+          "x"
+          "y"
+          "r"
+          "m"
+        ];
+        unmarked = true;
+      };
+    };
+    # The strict modes refuse a cycle ABOVE the start (row 16 at `s`); under `group` D9 is decided
+    # over the `parent` fields the examined classes read, and the inbound walk from `s` never reads
+    # `a`'s or `b`'s, so it answers.
+    test-U2e-D9-under-group-reads-what-the-selection-examines = {
+      expr = {
+        atS = nodesOf (upGroup "s");
+        atC = nodesOf (upGroup "c");
+        witnesses = throws (upIn "witnesses" rhoAbove "s");
+      };
+      expected = {
+        atS = [ "s" ];
+        atC = [ "c" ];
+        witnesses = true;
       };
     };
 

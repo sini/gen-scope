@@ -36,8 +36,9 @@
 # converse of each letter's edges: from `id` the letter `imports` steps to every node that imports
 # `id`, enumerated in `self.allNodeIds` order, and `edges-l` likewise. The marks are applied to the
 # AUTHORED graph before the converse is taken, so the edge s —l→ id is admitted or withheld by the
-# marks of `s`, its authored source, and `withheld s` reports it as it was authored. `parent` has
-# no place in an inbound alphabet: containment's converse is `children`, a different relation.
+# marks of `s`, its authored source, and `withheld s` reports it as it was authored. Inbound,
+# `parent` steps to every node whose `.parent` is `id` (the scopes it contains): the converse of a
+# partial function is a relation, not a containment, and D9 still walks each read node's parent chain.
 #
 # The parameter constructors (`wellFormed`, `labelOrder`) and the WFL syntax (`wfl`) are published;
 # the derivative engine (`deriv`, `nullable`, `stateKey`, `parse`) is not.
@@ -488,7 +489,8 @@ let
                 ))
               ]
           ) live;
-          # The `parent` classification at this node, if the walk read one (outbound only).
+          # The `parent` classifications at this node: at most one outbound, one per converse source
+          # inbound. The node's parent edge is admitted when any of them is (D9 then walks its chain).
           parentRead = filter (p: p.label == parentLetter) perLetter;
         in
         if live == [ ] then
@@ -503,7 +505,7 @@ let
             admitted = concatMap (p: p.admitted) perLetter;
             withheld = concatMap (p: p.withheld) perLetter;
             readsParent = parentRead != [ ];
-            admitsParent = parentRead != [ ] && !(head parentRead).blocked;
+            admitsParent = builtins.any (p: !p.blocked) parentRead;
           };
 
       k0 = regex.stateKey st0;
@@ -1132,8 +1134,6 @@ let
           }', a letter of `wf`'s alphabet (${quote o.wf.alphabet}); mode \"visible\" ranks every letter the walk can step, so the label order must be total over the walk's alphabet"
         else if !(elem direction directions) then
           refuse "resolve" "unknown direction ${toJSON direction} (one of ${quote directions})"
-        else if direction == "inbound" && elem parentLetter o.wf.alphabet then
-          refuse "resolve" "direction \"inbound\" walks the converse of each letter's edges, and the alphabet carries '${parentLetter}': the converse of containment is `children`, a different relation, so an inbound alphabet cannot name it"
         else
           run o mode direction
       );

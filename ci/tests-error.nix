@@ -4249,8 +4249,6 @@ in
           "gen-scope.resolve: 'follow' is not an option of this door; the options are closed (accepted: 'wf', 'dataFilter', 'mode', 'order', 'groupBy', 'group', 'bound', 'direction') (in prelude.checkOptions)";
         "row10-unknown-direction" =
           ''gen-scope.resolve: unknown direction "sideways" (one of ["outbound","inbound"])'';
-        "row10-parent-in-an-inbound-alphabet" =
-          ''gen-scope.resolve: direction "inbound" walks the converse of each letter's edges, and the alphabet carries 'parent': the converse of containment is `children`, a different relation, so an inbound alphabet cannot name it'';
         "row10-visible-without-order" =
           ''gen-scope.resolve: mode "visible" requires `order`, a `labelOrder` value (<l over the alphabet, with `$`'s rank)'';
         "row11-admits-not-a-bool" =
@@ -4278,6 +4276,12 @@ in
           ''gen-scope.resolve: group "x" has more than one visible declaration, from ["b","c"]. That is an AMBIGUITY in the sense of Neron et al. 2015 (Fig. 3 rule (V); §2.2 Duplicate Declarations) — two declaration occurrences for one read. `single` answers with one declaration or REFUSES; read the group's `answers` to see every one'';
         "row16-parent-cycle" =
           ''gen-scope.resolve: node "a" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
+        "row16-parent-cycle-inbound" =
+          ''gen-scope.resolve: node "root" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
+        "row16-parent-cycle-inbound-above" =
+          ''gen-scope.resolve: node "s" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
+        "row16-parent-cycle-inbound-marked" =
+          ''gen-scope.resolve: node "r" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
         "row18-edge-read-refusal-propagates" = "planted: the edge read's own refusal";
         "row19-no-marks" =
           "gen-scope: node 'a' is read for its boundary marks, but this evaluation declares no `marks` attribute — a scope that declares no boundary mark; `_: _: [ ]` states none. An absent mark is never read as an open floor (ADR-0026).";

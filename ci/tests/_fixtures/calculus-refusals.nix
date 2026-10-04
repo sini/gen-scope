@@ -87,6 +87,93 @@ let
   mark = m: scope { marks = _: id: if id == "a" then m else [ ]; };
   # `a` reaches `b` by `e` and `c` by `imports`, both declaring `x`, at one rank.
   twoDecls = scope { imports = _: id: if id == "a" then [ "c" ] else [ ]; };
+  # Inbound `parent*` from `from` over a containment declared in `nodes` order, `parents.<child>`
+  # naming the parent; `marked` nodes refuse `parent`.
+  upward =
+    {
+      nodes,
+      parents,
+      marked ? [ ],
+    }:
+    from:
+    (S.resolve
+      {
+        wf = S.wellFormed {
+          alphabet = [ "parent" ];
+          expression = "parent*";
+        };
+        dataFilter = n: n.id;
+        direction = "inbound";
+      }
+      (S.eval { parseParent = _: null; }
+        {
+          children = _: _: { };
+          marks =
+            _: id:
+            if builtins.elem id marked then
+              [
+                {
+                  name = "no-parent";
+                  admits = l: l != "parent";
+                }
+              ]
+            else
+              [ ];
+        }
+        (
+          S.buildRoots {
+            parentGraph = S.overlay (S.vertices nodes) (
+              S.edges (
+                map (c: {
+                  from = c;
+                  to = parents.${c};
+                }) (builtins.attrNames parents)
+              )
+            );
+          }
+        )
+      )
+      from
+    ).answers;
+  # rho: `s` sits in `a`, `c` in `s`; `a` and `b` contain each other unless `rooted`.
+  rhoUp =
+    rooted:
+    upward {
+      nodes = [
+        "s"
+        "a"
+        "b"
+        "c"
+      ];
+      parents = {
+        s = "a";
+        c = "s";
+        b = "a";
+      }
+      // (if rooted then { } else { a = "b"; });
+    } "s";
+  # r and m contain each other unless `rooted`; x sits in r, y in m, and both refuse `parent`. They
+  # come first in `allNodeIds`, so each is the FIRST converse source of its parent.
+  markedCycle =
+    rooted:
+    upward {
+      nodes = [
+        "x"
+        "y"
+        "r"
+        "m"
+      ];
+      parents = {
+        r = "m";
+        x = "r";
+        y = "m";
+      }
+      // (if rooted then { } else { m = "r"; });
+      marked = [
+        "x"
+        "y"
+      ];
+    } "r";
 in
 {
   # ── row: { plant; twin; } ──
@@ -281,14 +368,6 @@ in
     plant = go { direction = "sideways"; } ok;
     twin = go { direction = "inbound"; } ok;
   };
-  # The twin is the same alphabet walked outbound: what is refused is `parent` under the converse.
-  row10-parent-in-an-inbound-alphabet = {
-    plant = go {
-      inherit (S.neron) wf;
-      direction = "inbound";
-    } ok;
-    twin = go { inherit (S.neron) wf; } ok;
-  };
   row11-dataFilter-not-callable = {
     plant = go { dataFilter = 1; } ok;
     twin = go { } ok;
@@ -450,6 +529,36 @@ in
         inherit (S.neron) wf;
         dataFilter = x;
       } ok "a").answers;
+  };
+  # D9 under the converse (den-hoag-gayc U2e): the walk reads `parent` at the start, so a cycle at
+  # it, or above it, is refused there; the twin is the same scope with the cycle broken.
+  row16-parent-cycle-inbound = {
+    plant = upward {
+      nodes = [
+        "root"
+        "mid"
+      ];
+      parents = {
+        mid = "root";
+        root = "mid";
+      };
+    } "root";
+    twin = upward {
+      nodes = [
+        "root"
+        "mid"
+      ];
+      parents.mid = "root";
+    } "root";
+  };
+  row16-parent-cycle-inbound-above = {
+    plant = rhoUp false;
+    twin = rhoUp true;
+  };
+  # A converse source whose own mark refuses `parent` does not hide the edges the others admit.
+  row16-parent-cycle-inbound-marked = {
+    plant = markedCycle false;
+    twin = markedCycle true;
   };
   row18-edge-read-refusal-propagates = {
     plant = go { } (scope {
