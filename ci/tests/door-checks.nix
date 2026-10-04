@@ -299,8 +299,11 @@ in
     # prelude door it builds only when read, so a wrapper that renamed or widened it would otherwise
     # pass here.
     test-every-options-step-publishes-the-row-as-its-contract = {
+      # `next` is the chained rows' record step, pinned by the parity cell; here only WHICH rows
+      # publish one (den-hoag-ak8va).
       expr = builtins.mapAttrs (n: _: {
-        contract = S.${n}.__contract;
+        contract = builtins.removeAttrs S.${n}.__contract [ "next" ];
+        hasNext = S.${n}.__contract ? next;
         functionArgs = genPreludeLib.functionArgs S.${n};
       }) F.options;
       expected = builtins.mapAttrs (n: d: {
@@ -310,6 +313,7 @@ in
           required = [ ];
           open = false;
         };
+        hasNext = builtins.elem n (map (r: r.guardedBy) (builtins.attrValues guarded));
         functionArgs = flag true d.optional;
       }) F.options;
     };
@@ -342,6 +346,19 @@ in
         )
       ) guarded;
       expected = each (_: [ ]) guarded;
+    };
+    # PARITY (den-hoag-ak8va, gate C1; gating): every guarded record step is published AS DATA by
+    # its options step, `__contract.next` (past a positional node), and the nest, read without
+    # application, equals the contract the record step answers with.
+    test-every-guarded-record-step-is-its-options-step-next = {
+      expr = each (
+        d:
+        let
+          recordNext = c: if c != null && c ? positional then recordNext c.next else c;
+        in
+        recordNext (S.${d.guardedBy}.__contract.next or null) == d.step.__contract
+      ) guarded;
+      expected = each (_: true) guarded;
     };
     # Every options door on the surface is classified: a chained one has a guarded record row, and
     # the rest are named as not chained. `surfaceOptionDoors` is the enumerator; the table cell above
