@@ -27,7 +27,11 @@
 # `kindSetDefect` is `cascade.nix`'s registry type check, taken as a formal for `require-scope.nix`'s
 # reason: the test belongs with the fold and the refusal belongs at the door. This constructor owns
 # the door the malformed record would otherwise be BUILT at.
-{ prelude, kindSetDefect }:
+{
+  prelude,
+  kindSetDefect,
+  key,
+}:
 let
   door = import ./door.nix { inherit prelude; };
   graph = import ./graph.nix;
@@ -101,6 +105,12 @@ let
       strict ? true,
     }:
     let
+      # A node id is a string that MAY carry store-path context, and an attribute name cannot: Nix
+      # aborts uncatchably on `{ ${ctxId} = …; }`. Every id-keyed table below is keyed by the id's
+      # context-free TEXT (`toKey`), while `node.id`, `parent` and the edge targets keep the id as
+      # the caller wrote it, so the answer carries its context (den-hoag-di165).
+      toKey = key.attrKey "buildRoots";
+
       reservedOffenders = prelude.filter (
         r: prelude.any (c: c.label == r.label) edgeGraphs
       ) reservedLabels;
@@ -187,7 +197,7 @@ let
           n = builtins.length declaredSequence;
           firstAt = prelude.listToAttrs (
             prelude.genList (i: {
-              name = builtins.elemAt declaredSequence i;
+              name = toKey (builtins.elemAt declaredSequence i);
               value = i;
             }) n
           );
@@ -197,7 +207,7 @@ let
           let
             v = builtins.elemAt declaredSequence i;
           in
-          prelude.optional (firstAt.${v} == i) v
+          prelude.optional (firstAt.${toKey v} == i) v
         ) (prelude.genList (i: i) n);
 
       # The `P` contribution's edges, found by label in the list. There is no label-keyed attrset to
@@ -213,7 +223,7 @@ let
       # strict=false: validation is lazy (errors surface only when a conflicting node's parent is read).
       parentIndex =
         let
-          grouped = builtins.groupBy (e: e.from) parentEdges;
+          grouped = builtins.groupBy (e: toKey e.from) parentEdges;
           validated = prelude.mapAttrs (
             from: edges:
             if builtins.length edges > 1 then
@@ -229,9 +239,39 @@ let
       edgeIndex = prelude.listToAttrs (
         map (c: {
           name = c.label;
-          value = builtins.mapAttrs (_: es: map (e: e.to) es) (builtins.groupBy (e: e.from) c.graph.edges);
+          value = builtins.mapAttrs (_: es: map (e: e.to) es) (
+            builtins.groupBy (e: toKey e.from) c.graph.edges
+          );
         }) (prelude.filter (c: c.label != "P") contributions)
       );
+
+      # A node carries its kind's VALUE (`kindValue`, den-hoag-l0y) only in a scope where some
+      # registered kind declares one, and that is decided ONCE per scope, by choosing the node
+      # constructor here rather than testing per node: a scope with no kinds, or kinds carrying no
+      # value, keeps the record it always had and pays nothing per node. It takes the id as written,
+      # which the record keeps, and that id's key, which every table above is indexed by.
+      nodeOf =
+        if kinds == null || !(prelude.any (kd: kd.kindValue != null) (prelude.attrValues kinds.kinds)) then
+          id: k: {
+            inherit id;
+            # Checked above against the registry, so this is a lookup rather than an admission.
+            type = types.${k} or null;
+            parent = parentIndex.${k} or null;
+            decls = (decls.${k} or { }) // {
+              # Store edge declarations for consumers to build computed attributes from
+              __edges = prelude.mapAttrs (_label: idx: idx.${k} or [ ]) edgeIndex;
+            };
+          }
+        else
+          id: k: {
+            inherit id;
+            type = types.${k} or null;
+            kindValue = if (types.${k} or null) == null then null else kinds.kinds.${types.${k}}.kindValue;
+            parent = parentIndex.${k} or null;
+            decls = (decls.${k} or { }) // {
+              __edges = prelude.mapAttrs (_label: idx: idx.${k} or [ ]) edgeIndex;
+            };
+          };
     in
     builtins.seq parentIndex {
       inherit nodeOrder;
@@ -240,32 +280,11 @@ let
       # `null` is the no-kinds case and reads as one: an evaluator handed it runs no spawn channel,
       # which is exactly right for a scope whose nodes have no kinds to descend from.
       inherit kinds;
-      # A node carries its kind's VALUE (`kindValue`, den-hoag-l0y) only in a scope where some
-      # registered kind declares one, and that is decided ONCE per scope, by choosing the node
-      # constructor here rather than testing per node: a scope with no kinds, or kinds carrying no
-      # value, keeps the record it always had and pays nothing per node.
-      nodes = prelude.genAttrs nodeOrder (
-        if kinds == null || !(prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds)) then
-          id: {
-            inherit id;
-            # Checked above against the registry, so this is a lookup rather than an admission.
-            type = types.${id} or null;
-            parent = parentIndex.${id} or null;
-            decls = (decls.${id} or { }) // {
-              # Store edge declarations for consumers to build computed attributes from
-              __edges = prelude.mapAttrs (_label: idx: idx.${id} or [ ]) edgeIndex;
-            };
-          }
-        else
-          id: {
-            inherit id;
-            type = types.${id} or null;
-            kindValue = if (types.${id} or null) == null then null else kinds.kinds.${types.${id}}.kindValue;
-            parent = parentIndex.${id} or null;
-            decls = (decls.${id} or { }) // {
-              __edges = prelude.mapAttrs (_label: idx: idx.${id} or [ ]) edgeIndex;
-            };
-          }
+      nodes = builtins.listToAttrs (
+        map (id: {
+          name = toKey id;
+          value = nodeOf id (toKey id);
+        }) nodeOrder
       );
     };
 

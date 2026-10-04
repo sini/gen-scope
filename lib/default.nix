@@ -48,8 +48,12 @@ let
   buildRoots = import ./build-nodes.nix {
     inherit prelude;
     inherit (cascadeModule) kindSetDefect;
+    key = graph.key "gen-scope";
   };
-  queries = import ./queries.nix { inherit prelude; };
+  queries = import ./queries.nix {
+    inherit prelude;
+    key = graph.key "gen-scope";
+  };
   # The one resolution calculus. It takes gen-graph's published key former applied under THIS
   # library's name, so a refusal it raises reads `gen-scope.<door>` and the key discipline is the
   # one gen-graph states, bound once rather than copied (den-hoag-gayc C7).
@@ -58,7 +62,10 @@ let
     key = graph.key "gen-scope";
   };
   # `inherit'` is read by the calculus, so the resolver module takes it rather than a second walker.
-  resolve = import ./resolve.nix { inherit prelude calculus; };
+  resolve = import ./resolve.nix {
+    inherit prelude calculus;
+    key = graph.key "gen-scope";
+  };
   # The mark attribute's name and the endpoint projection's predicate are the calculus's and the
   # evaluator's own reads, which import `structural.nix` themselves; they leave before the merge.
   structural = builtins.removeAttrs (import ./structural.nix { inherit prelude; }) [
@@ -136,6 +143,7 @@ let
     inherit prelude;
     inherit (evalModule.cores) eval;
     inherit requireScope requireDeclaredDependencies;
+    key = graph.key "gen-scope";
   };
   # The surface is folded rather than chained with `//`, so a name contributed by two modules is a
   # throw naming both instead of a silent last-wins shadowing.

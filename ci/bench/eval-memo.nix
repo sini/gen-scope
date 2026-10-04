@@ -53,7 +53,13 @@ let
       graph
       ;
   };
-  inherit (import ../../lib/build-nodes.nix { inherit prelude kindSetDefect; }) buildRoots;
+  inherit
+    (import ../../lib/build-nodes.nix {
+      inherit prelude kindSetDefect;
+      key = graph.key "gen-scope";
+    })
+    buildRoots
+    ;
   ag = import ../../lib/graph.nix;
 
   # A two-node acyclic grammar: the traced attribute lives on the child, and the three places it

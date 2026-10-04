@@ -190,7 +190,13 @@ let
   # An emitter's identifier and each of its relata name a node, and both are used as attribute
   # names — the identifier in the grouping, a relatum in the frozen-set lookup — so a record in
   # either place used to abort past `tryEval` there, or earlier in the schedule's ordering.
-  identifier = who: import ./string-argument.nix who "a node identifier";
+  #
+  # It answers the identifier's TEXT, because an identifier may carry store-path string context
+  # (`baseNameOf pkgs.hello`) and an attribute name cannot: every table below is keyed by it
+  # (`toKey`), while each record and edge keeps the identifier as the emitter wrote it
+  # (den-hoag-di165). The refusal text is the one `string-argument.nix` words.
+  identifier = (graph.key "gen-scope").attrKey;
+  toKey = identifier "mintStrata";
   #
   # Each emitter is checked as a record first, by the shared checks: a missing field is refused by
   # name, and so is an unknown one. The second is a closure held on purpose beyond R5's open record
@@ -418,7 +424,7 @@ builtins.mapAttrs
                 let
                   relatum = relata.${label};
                 in
-                frozen.${relatum} or (throw (unresolvedRelatum relatum label kind pass));
+                frozen.${toKey relatum} or (throw (unresolvedRelatum relatum label kind pass));
           in
           {
             inherit
@@ -443,7 +449,7 @@ builtins.mapAttrs
           in
           {
             pending = tail acc.pending;
-            frozen = acc.frozen // listToAttrs (map (r: nameValuePair r.identifier r.identity) settled);
+            frozen = acc.frozen // listToAttrs (map (r: nameValuePair (toKey r.identifier) r.identity) settled);
             byStratum = acc.byStratum // {
               ${toString stratum} = settled;
             };
@@ -544,6 +550,7 @@ builtins.mapAttrs
           else
             {
               inherit (first)
+                identifier
                 identity
                 kind
                 relata
@@ -558,7 +565,7 @@ builtins.mapAttrs
               sites = map (r: r.site) records;
             };
 
-        merged = mapAttrs (_: mergeGroup) (groupBy (r: r.identifier) run.settled);
+        merged = mapAttrs (_: mergeGroup) (groupBy (r: toKey r.identifier) run.settled);
 
         # One node plus one edge per relatum, each edge carrying the label that keyed the identity.
         # Emitted in the node map's own key order with each node's labels in theirs, so the sequence is
@@ -575,7 +582,7 @@ builtins.mapAttrs
           edges = concatMap (
             identifier:
             map (label: {
-              from = identifier;
+              from = merged.${identifier}.identifier;
               to = merged.${identifier}.relata.${label};
               inherit label;
             }) (attrNames merged.${identifier}.relata)

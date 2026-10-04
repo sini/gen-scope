@@ -80,7 +80,13 @@ let
       graph
       ;
   };
-  inherit (import ../../lib/build-nodes.nix { inherit prelude kindSetDefect; }) buildRoots;
+  inherit
+    (import ../../lib/build-nodes.nix {
+      inherit prelude kindSetDefect;
+      key = graph.key "gen-scope";
+    })
+    buildRoots
+    ;
   resolveLib = import ../../lib/resolve.nix { inherit prelude; };
   ag = import ../../lib/graph.nix;
 

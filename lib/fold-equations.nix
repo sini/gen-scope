@@ -25,6 +25,7 @@
   eval,
   requireScope,
   requireDeclaredDependencies,
+  key,
 }:
 # `foldEquations { settings?; } { scope; parseParent; schedule; declaredDependencies; }`
 # (den-hoag-7gp66 P2, R7): the one option leaves to a closed set first, and the four operands stay ONE
@@ -181,7 +182,11 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
         #
         # ANCHOR: R10.1-RIDER-WHY-ORGUARD
         trace =
-          id: trace.${id} or (throw "gen-scope: no trace for node '${id}' — node not reachable from roots");
+          id:
+          # `trace` is keyed by the id's text: an id carrying store-path string context names no
+          # attribute (den-hoag-di165).
+          trace.${key.attrKey "trace" id}
+          or (throw "gen-scope: no trace for node '${id}' — node not reachable from roots");
       };
       # The trace's deps are DERIVED — read off the accessor's dependency relation, which is the
       # normalized union above and NOT the declared relation the gate runs over. Those were one

@@ -6,8 +6,12 @@
 # channel's half — a spawned node is a node (one graph, one node notion), so a
 # query surface reading the declared half alone answers about a different node
 # set than the evaluator materializes.
-{ prelude }:
+{ prelude, key }:
 let
+  # A node id may carry store-path string context, which an attribute name cannot: the visited sets
+  # below are keyed by the id's text (den-hoag-di165), and the answers keep the id as written.
+  toKey = key.attrKey "queries";
+
   # Every query reaches `self.node` or `self.get`, which refuse a non-string id by name. The three
   # below also hold a name they only COMPARE, and a comparison answers `false` about a record rather
   # than refusing it, so each refuses that argument itself, ahead of the walk.
@@ -29,12 +33,12 @@ let
         in
         if p == null then
           [ ]
-        else if visited ? ${p} then
+        else if visited ? ${toKey p} then
           [ ]
         else
-          [ p ] ++ go (visited // { ${p} = true; }) p;
+          [ p ] ++ go (visited // { ${toKey p} = true; }) p;
     in
-    go { ${id} = true; } id;
+    go { ${toKey id} = true; } id;
 
   siblings =
     self: id:
@@ -58,7 +62,7 @@ let
           cid: if visited ? ${cid} then [ ] else [ cid ] ++ go (visited // { ${cid} = true; }) cid
         ) cids;
     in
-    go { ${id} = true; } id;
+    go { ${toKey id} = true; } id;
 
   # Early-return walk: O(depth) best case instead of always building full list.
   isAncestor =
@@ -74,12 +78,12 @@ let
             false
           else if p == ancestorId then
             true
-          else if visited ? ${p} then
+          else if visited ? ${toKey p} then
             false
           else
-            go (visited // { ${p} = true; }) p;
+            go (visited // { ${toKey p} = true; }) p;
       in
-      go { ${id} = true; } id
+      go { ${toKey id} = true; } id
     );
 
   # DFS with early termination: avoids building full descendant list.
@@ -102,7 +106,7 @@ let
               go (visited // { ${cid} = true; }) cid
           ) cids;
       in
-      go { ${id} = true; } id
+      go { ${toKey id} = true; } id
     );
 
   # Delegates to eval's nodesOfType (selective walk) instead of forcing allNodes.

@@ -44,7 +44,13 @@ let
       graph
       ;
   };
-  inherit (import "${libSrc}/build-nodes.nix" { inherit prelude kindSetDefect; }) buildRoots;
+  inherit
+    (import "${libSrc}/build-nodes.nix" {
+      inherit prelude kindSetDefect;
+      key = graph.key "gen-scope";
+    })
+    buildRoots
+    ;
   ag = import "${libSrc}/graph.nix";
   # The declaration constructor, inlined rather than imported: `resolve.nix` is not needed for
   # anything else here, and the record shape is the (K1)-capped one the evaluator checks.

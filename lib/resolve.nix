@@ -27,7 +27,11 @@
 # itself still escapes, since a predicate over attribute names has no access to a caller's
 # literals. That residual belongs to `structural`'s stated domain and is named at `interface.nix`'s
 # facade note; it is not closed here.
-{ prelude, calculus }:
+{
+  prelude,
+  calculus,
+  key,
+}:
 let
   door = import ./door.nix { inherit prelude; };
   relations = import ./traversal-names.nix;
@@ -35,6 +39,10 @@ let
   # The reserved structural namespace, read from the classifier that owns and publishes it rather
   # than re-spelled — the prefix below and the prefix the partition tests are one value.
   structural = import ./structural.nix { inherit prelude; };
+
+  # A node id may carry store-path string context, which an attribute name cannot, so `inheritAll`'s
+  # caller-supplied `_visited` set is read by the id's text; the ids it answers keep their context.
+  toKey = key.attrKey "inheritAll";
 
   # Shadow: merge two declaration sets, inner shadows outer (Neron §5 Def. 1).
   shadow = inner: outer: inner // prelude.filterAttrs (k: _: !(inner ? ${k})) outer;
@@ -105,7 +113,7 @@ let
           let
             p = (self.node it.key).parent;
           in
-          if p == null || _visited ? ${it.key} then [ ] else [ { key = p; } ];
+          if p == null || _visited ? ${toKey it.key} then [ ] else [ { key = p; } ];
       };
       lastKey = (builtins.elemAt chain (builtins.length chain - 1)).key;
       lastParent = (self.node lastKey).parent;
@@ -117,7 +125,7 @@ let
       # parent and a parent already in the CALLER's `_visited` both end without a repeat.
       keys =
         map (it: it.key) chain
-        ++ prelude.optional (lastParent != null && !(_visited ? ${lastKey})) lastParent;
+        ++ prelude.optional (lastParent != null && !(_visited ? ${toKey lastKey})) lastParent;
       segments = map contribOf keys;
       n = builtins.length segments;
     in

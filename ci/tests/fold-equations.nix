@@ -120,6 +120,7 @@ let
       inherit (import ../../lib/require-declared-dependencies.nix { graph = genGraph; })
         requireDeclaredDependencies
         ;
+      key = genGraph.key "gen-scope";
     }
   );
   incumbentNames = builtins.filter (n: !(builtins.elem n foldNames)) (builtins.attrNames genScope);

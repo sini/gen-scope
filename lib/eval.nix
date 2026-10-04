@@ -30,8 +30,12 @@ let
   callable = import ./callable.nix;
 
   # The accessors' identifier arguments are node identifiers; anything else is refused by the
-  # accessor's name before it reaches an attribute lookup.
-  identifier = who: import ./string-argument.nix who "a node identifier";
+  # accessor's name before it reaches an attribute lookup. It answers the identifier's TEXT: an id
+  # may carry store-path string context (`baseNameOf pkgs.hello`) and an attribute name cannot, so
+  # every table the evaluator keys by id is read through this key, while the records it answers
+  # keep the id as the caller wrote it (den-hoag-di165). The refusal text is the one
+  # `string-argument.nix` words, since gen-graph's key former says it in the same words.
+  identifier = (graph.key "gen-scope").attrKey;
 
   # A read of an attribute the evaluation does not declare. Two names the calculus reads by
   # construction are refused with what the caller has to declare (`calculus.nix`): the boundary-mark
@@ -1303,7 +1307,7 @@ let
             # between the two occurrences are that cycle exactly, and admission is asked of it —
             # a quotient declaration on the segment refuses BY NAME; otherwise the re-entry is served
             # the in-progress iterate.
-            instanceKey = nodeId: attrName: "${nodeId}.${attrName}";
+            instanceKey = nodeId: attrName: "${identifier "instanceKey" nodeId}.${attrName}";
 
             circularDemand =
               nodeId: attrName: decl:
@@ -1995,12 +1999,19 @@ let
             # malformed carrier are `false` there, and an undeclared name defaults to `false`.
             isQuotientAttr = attrName: quotientAttrs.${attrName} or false;
 
+            # `walkEntries` carry each id as it was written, so `allNodeIds` answers it with its context;
+            # the node MAP they become is keyed by the id's text.
+            byKey = es: prelude.listToAttrs (map (e: e // { name = identifier "allNodes" e.name; }) es);
+
             # The demand both accessors delegate to, kept off the record: a third published demand
             # form would stand outside the two-form contract. `who` names the entry the caller used.
             # The refusal sits OUTSIDE the error context, because that context renders the id.
             demand =
-              who: id: attrName:
-              builtins.seq (identifier who id) (
+              who: callerId: attrName:
+              let
+                id = identifier who callerId;
+              in
+              builtins.seq id (
                 builtins.addErrorContext "evaluating '${attrName}' on '${id}'" (
                   if !(runAttributes ? ${attrName}) then
                     throw (unknownAttribute id attrName)
@@ -2101,7 +2112,7 @@ let
             # An attrset is a SET: `attrNames` on it answers in bytewise codepoint order, and the
             # order the walk found the nodes in is not recoverable from this value. Consumers
             # that need that order read `allNodeIds`.
-            allNodes = prelude.listToAttrs walkEntries;
+            allNodes = byKey walkEntries;
 
             # The SAME node set as `allNodes`, as an ORDERED list of ids in MATERIALIZATION
             # order: root order, then pre-order depth-first through `children` /
@@ -2149,7 +2160,7 @@ let
                 n = builtins.length names;
                 firstAt = prelude.listToAttrs (
                   prelude.genList (i: {
-                    name = builtins.elemAt names i;
+                    name = identifier "allNodeIds" (builtins.elemAt names i);
                     value = i;
                   }) n
                 );
@@ -2159,7 +2170,7 @@ let
                 let
                   nodeId = builtins.elemAt names i;
                 in
-                prelude.optional (firstAt.${nodeId} == i) nodeId
+                prelude.optional (firstAt.${identifier "allNodeIds" nodeId} == i) nodeId
               ) (prelude.genList (i: i) n);
 
             # Selective materialization: forces only nodes matching a predicate.
@@ -2168,13 +2179,13 @@ let
             # O(n) walk but result size ≤ matching nodes.
             allNodesWhere =
               pred:
-              prelude.listToAttrs (
+              byKey (
                 builtins.filter (e: pred e.value) (prelude.concatMap self._walkFrom (builtins.attrNames roots))
               );
 
             # Subtree materialization: forces only the subtree rooted at a given node.
             # O(subtree size). Does not touch nodes outside the subtree.
-            subtreeOf = rootId: prelude.listToAttrs (self._walkFrom rootId);
+            subtreeOf = rootId: byKey (self._walkFrom rootId);
 
             # Type-targeted materialization: all nodes of a given type.
             # Walks full tree but only includes matching types.
@@ -2362,8 +2373,11 @@ let
                 fn s id;
 
           getTraced =
-            id: attrName:
-            builtins.seq (identifier "self.getTraced" id) (
+            callerId: attrName:
+            let
+              id = identifier "self.getTraced" callerId;
+            in
+            builtins.seq id (
               let
                 traceEntry = "${id}.${attrName}";
                 path = traceList ++ [ traceEntry ];
@@ -2392,7 +2406,7 @@ let
             s: host: name: group: key: attrName:
             let
               child = ntaMember "`getNta`" (s.get host ntaChannel) host name group key;
-              traceEntry = "${child.id}.${attrName}";
+              traceEntry = "${identifier "getNta" child.id}.${attrName}";
               path = traceList ++ [ traceEntry ];
             in
             if !(runAttributes ? ${attrName}) then
@@ -2471,11 +2485,12 @@ let
           trace = traceList;
 
           node =
-            id:
+            callerId:
             let
+              id = identifier "self.node" callerId;
               nta = ntaTarget (checked.kinds or null) checked.nodes runAttributes (mkSelf visited traceList) id;
             in
-            if roots ? ${identifier "self.node" id} then
+            if roots ? ${id} then
               roots.${id}
             else if nta != null then
               ntaLookup id nta
