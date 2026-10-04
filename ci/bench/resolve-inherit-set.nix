@@ -87,7 +87,7 @@ let
     })
     buildRoots
     ;
-  resolveLib = import ../../lib/resolve.nix { inherit prelude; };
+  resolveLib = import ../../. { };
   ag = import ../../lib/graph.nix;
 
   # Three nodes, one chain, n distinct contributions each. Parent edges point child -> parent.
@@ -156,6 +156,7 @@ let
       {
         children = _self: i: prelude.filterAttrs (_: node: node.parent == i) scope.nodes;
         imports = _self: _i: [ ];
+        marks = _: _: [ ];
         supp-set = dedup;
       }
       scope;

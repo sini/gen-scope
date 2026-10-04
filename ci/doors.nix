@@ -123,14 +123,8 @@ in
     ];
     foldEquations.optional = [ "settings" ];
     "inherit'".optional = [ ];
-    inheritAll.optional = [
-      "_visited"
-      "combine"
-    ];
-    inheritSet.optional = [
-      "_visited"
-      "eq"
-    ];
+    inheritAll.optional = [ "combine" ];
+    inheritSet.optional = [ "eq" ];
     mkKind.optional = [
       "below"
       "dedupKey"

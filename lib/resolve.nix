@@ -40,9 +40,22 @@ let
   # than re-spelled — the prefix below and the prefix the partition tests are one value.
   structural = import ./structural.nix { inherit prelude; };
 
-  # A node id may carry store-path string context, which an attribute name cannot, so `inheritAll`'s
-  # caller-supplied `_visited` set is read by the id's text; the ids it answers keep their context.
-  toKey = key.attrKey "inheritAll";
+  # A labelled edge's attribute name, as the calculus's `targetsAt` builds it: a label may carry
+  # store-path string context, which an attribute name cannot, so it is keyed by its text. A label
+  # that is not a string is refused naming the letter, which `attrKey`'s "node identifier" would
+  # misname.
+  edgeAttr =
+    site: label:
+    if builtins.isString label then
+      structural.edgePrefix + key.attrKey site label
+    else
+      throw "gen-scope.${site}: the label is a ${builtins.typeOf label}, not a letter (a string)";
+
+  # `"ancestors"`: every scope strictly above `id`, nearest first.
+  ancestorsWf = calculus.wellFormed {
+    alphabet = [ "parent" ];
+    expression = "parent parent*";
+  };
 
   # Shadow: merge two declaration sets, inner shadows outer (Neron §5 Def. 1).
   shadow = inner: outer: inner // prelude.filterAttrs (k: _: !(inner ? ${k})) outer;
@@ -75,15 +88,16 @@ let
     } self id).single
       "inherited";
 
-  # Inherited accumulator: walks parent chain collecting ALL values.
+  # Inherited accumulator: the data along `parent*` from `id`, nearest first, one segment per scope.
   #
-  # ★ THE CHAIN IS WALKED BY `genericClosure`, WHICH IS ALSO THE CYCLE GUARD. The prior form
-  # recursed a level at a time carrying a `_visited` attrset it rebuilt with `//` at every level, so
-  # the walk re-copied its own guard once per ancestor — Theta(depth^2) on the update axis, beside
-  # the Theta(depth^2) the `++` accumulator cost on the list axis. `genericClosure` dedups by `key`
-  # internally in ONE pass, which is the same termination guarantee for neither cost, and it makes
-  # the guard a property of the primitive rather than a set this module hand-carries.
-  # `ci/bench/resolve-inherit-all.sh` holds both axes against a live control.
+  # ★ THE CHAIN IS A RESOLUTION, NOT A HAND WALK (den-hoag-4or0a). It is the calculus's `parent*`
+  # under mode "reachable", whose answers come in first-reach order — nearest first on a chain — at
+  # a cost linear in the chain on both the list and the update axis (`ci/bench/resolve-folds.sh`).
+  # So it inherits the calculus's whole contract: a boundary mark at a scope withholds every edge it
+  # does not admit (ADR-0026), a parent chain that returns to itself is refused by name (D9), and a
+  # store-context id is keyed by its text. A withheld edge ends the chain SILENTLY: the reason is the
+  # same resolution's `withheld`, read through `resolve`. Every scope on the chain answers, an empty
+  # one with `[ ]`, because `extract`'s value is normalised to a list before the calculus sees it.
   #
   # ★ `combine ? null` STATES THE ORDERED-LIST DISCIPLINE AS A VALUE, and the reason is that Nix
   # compares no two functions: a default spelled `a: b: a ++ b` is indistinguishable at runtime from
@@ -96,37 +110,22 @@ let
     {
       extract,
       combine ? null,
-      _visited ? { },
     }:
     self: id:
     let
       contribOf =
-        i:
+        node:
         let
-          local = extract (self.node i);
+          local = extract node;
         in
         if local != null then (if builtins.isList local then local else [ local ]) else [ ];
-      chain = builtins.genericClosure {
-        startSet = [ { key = id; } ];
-        operator =
-          it:
-          let
-            p = (self.node it.key).parent;
-          in
-          if p == null || _visited ? ${toKey it.key} then [ ] else [ { key = p; } ];
-      };
-      lastKey = (builtins.elemAt chain (builtins.length chain - 1)).key;
-      lastParent = (self.node lastKey).parent;
-      # A walk that stopped because its next step was ALREADY ON THE CHAIN is a cycle, and the prior
-      # form ended by returning that node's own contribution a SECOND time before stopping — the
-      # `_visited` arm returns `localResults` rather than nothing. `genericClosure` drops the repeat
-      # as a duplicate key, so it is put back here: the guard's shape changed, the value it produces
-      # did not. The three ways the walk can end are distinguished by this test alone — a null
-      # parent and a parent already in the CALLER's `_visited` both end without a repeat.
-      keys =
-        map (it: it.key) chain
-        ++ prelude.optional (lastParent != null && !(_visited ? ${toKey lastKey})) lastParent;
-      segments = map contribOf keys;
+      segments =
+        map (a: a.value)
+          (calculus.resolve {
+            wf = inheritWf;
+            mode = "reachable";
+            dataFilter = contribOf;
+          } self id).answers;
       n = builtins.length segments;
     in
     if combine == null then
@@ -152,7 +151,7 @@ let
   # the ordered-list `++`. Nearest-first order is retained for a deterministic
   # rendering, but membership is the semantics.
   #
-  # Delegates the parent walk (and thus cycle-safety) to `inheritAll`, then folds out
+  # Delegates the parent walk (and thus the calculus's marks and D9) to `inheritAll`, then folds out
   # duplicates by `eq` (default structural `==`, matching the optional-`eq` idiom of
   # `circular`/`subtypeOf`). Demand-driven: only the queried node's parent chain is
   # forced. Extract contract is `inheritAll`'s: `node -> [value] | value | null`.
@@ -164,11 +163,10 @@ let
     {
       extract,
       eq ? (a: b: a == b),
-      _visited ? { },
     }:
     self: id:
     let
-      all = inheritAll { inherit extract _visited; } self id;
+      all = inheritAll { inherit extract; } self id;
       # One index list, shared by every element's look-back. A per-element prefix would be the
       # Theta(n^2) allocation this replaces, so the prefix is expressed as the `j < i` guard below.
       idx = prelude.genList (i: i) (builtins.length all);
@@ -283,46 +281,34 @@ let
             [ ]
           else
             builtins.filter (cid: cid != id) (builtins.attrNames (self._childRecords p))
+        # The two multi-step traversals are resolutions (den-hoag-4or0a), so each reads the marks, D9
+        # and the text-keyed id exactly as `resolve` does; a withheld edge drops its scopes silently.
         else if traverse == "ancestors" then
-          let
-            go =
-              visited: nid:
-              if nid == null || visited ? ${nid} then
-                [ ]
-              else
-                [ nid ] ++ go (visited // { ${nid} = true; }) (self.node nid).parent;
-          in
-          go { ${id} = true; } (self.node id).parent
+          map (a: a.node)
+            (calculus.resolve {
+              wf = ancestorsWf;
+              dataFilter = _: true;
+            } self id).answers
         else if traverse == "neron" then
-          let
-            neronCollect =
-              seen: nid:
-              let
-                node = self.node nid;
-                selfSeen = seen // {
-                  ${nid} = true;
-                };
-                importIds = self.get nid relations.imports;
-                unseenImports = builtins.filter (iid: !(selfSeen ? ${iid})) importIds;
-                newSeen =
-                  selfSeen
-                  // builtins.listToAttrs (
-                    map (iid: {
-                      name = iid;
-                      value = true;
-                    }) importIds
-                  );
-                parentContribs =
-                  if node.parent != null && !(newSeen ? ${node.parent}) then
-                    neronCollect newSeen node.parent
-                  else
-                    [ ];
-              in
-              [ nid ] ++ unseenImports ++ parentContribs;
-          in
-          neronCollect { } id
+          # Every scope `neron.wf` reaches, once, at its `<p`-least path: the visibility order
+          # `$ < imports < parent` IS the published self → imports → parent contract, and the sort is
+          # stable, so imports keep their declaration order. The operator-less `genericClosure` keeps
+          # each id's first occurrence in list order, compared by text — `reachable`'s own dedup.
+          map (it: it.key) (
+            builtins.genericClosure {
+              startSet = map (w: { key = w.node; }) (
+                builtins.sort (x: y: calculus.neron.order.pathPrecedes x.path y.path)
+                  (calculus.resolve {
+                    inherit (calculus.neron) wf;
+                    mode = "witnesses";
+                    dataFilter = _: true;
+                  } self id).answers
+              );
+              operator = _: [ ];
+            }
+          )
         else if prelude.hasPrefix "label:" traverse then
-          self.get id (structural.edgePrefix + prelude.removePrefix "label:" traverse)
+          self.get id (edgeAttr "collectionAttr" (prelude.removePrefix "label:" traverse))
         else
           throw "gen-scope: collectionAttr: unknown traverse '${traverse}'";
       filtered = builtins.filter (tid: filter (self.node tid)) targets;
@@ -372,7 +358,7 @@ let
   # Follow a custom edge label from a node.
   followEdge =
     label: self: id:
-    self.get id (structural.edgePrefix + label);
+    self.get id (edgeAttr "followEdge" label);
 
   # Collect data from nodes reachable via a custom edge label.
   collectByLabel =

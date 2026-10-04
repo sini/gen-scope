@@ -4332,4 +4332,48 @@ in
           ])
           ''gen-scope.resolve: node "p" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
     };
+
+  # ── THE FOUR COLLECTION WALKS ARE RESOLUTIONS (den-hoag-4or0a): what they refuse ──
+  # Each walk refuses where `resolve` refuses: a parent cycle is malformed containment (D9), the
+  # retired recursion state `_visited` is not an option, and a label that is not a string is not a
+  # letter. The answering cells and the scopes are `tests/walks-through-resolve.nix` and
+  # `tests/_fixtures/walks-through-resolve.nix`.
+  config.flake.testsError.walks-through-resolve =
+    let
+      F = import ./tests/_fixtures/walks-through-resolve.nix { inherit genScope; };
+      refused = expr: msg: {
+        expr = builtins.deepSeq expr expr;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly msg;
+        };
+      };
+      cycle = ''gen-scope.resolve: node "a" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
+      v = n: n.decls.v or null;
+    in
+    {
+      test-A5-inheritAll-refuses-a-parent-cycle = refused (genScope.inheritAll { } v F.cycle "a") cycle;
+      test-A5-ancestors-refuses-a-parent-cycle = refused (genScope.collectionAttr { } "ancestors" F.ex
+        F.cycle
+        "a"
+      ) cycle;
+      test-A5-neron-refuses-a-parent-cycle = refused (genScope.collectionAttr { } "neron" F.ex F.cycle
+        "a"
+      ) cycle;
+      test-A6-inheritAll-refuses-the-retired-visited =
+        refused
+          (genScope.inheritAll {
+            _visited = { };
+          })
+          "gen-scope.inheritAll: '_visited' is not an option of this door; the options are closed (accepted: 'combine') (in prelude.checkOptions)";
+      test-A6-inheritSet-refuses-the-retired-visited =
+        refused
+          (genScope.inheritSet {
+            _visited = { };
+          })
+          "gen-scope.inheritSet: '_visited' is not an option of this door; the options are closed (accepted: 'eq') (in prelude.checkOptions)";
+      test-A7-followEdge-refuses-a-label-that-is-not-a-string = refused (genScope.followEdge 1 F.labelled
+        "s"
+      ) "gen-scope.followEdge: the label is a int, not a letter (a string)";
+    };
 }

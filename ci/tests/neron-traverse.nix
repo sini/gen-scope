@@ -7,6 +7,7 @@ let
   mkAttrs = roots: {
     children = self: id: lib.filterAttrs (_: n: n.parent == id) roots;
     imports = self: id: (self.node id).decls.__edges.I or [ ];
+    marks = _: _: [ ];
     vals = collectionAttr { } "neron" (self: id: (self.node id).decls.val or null);
   };
 

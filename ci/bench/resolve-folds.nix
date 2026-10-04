@@ -15,9 +15,12 @@
 # ★ AND THE SUPPLIED-`combine` ARM WAS PINNED BY NOTHING AT ALL until this repair, in either
 # constructor: `combine` appeared in six `ci/tests` files and in none of them as an argument to
 # these two. Three cells shipped with the repair —
-# `test-inheritAll-supplied-combine-folds-right`, `test-inheritAll-cycle-repeats-its-entry-once`,
-# `test-traverse-children-supplied-combine-folds-left` — because the repair moved the default to a
-# `null` sentinel and replaced `inheritAll`'s fold and its cycle guard outright.
+# `test-inheritAll-supplied-combine-folds-right`, `test-traverse-children-supplied-combine-folds-left`
+# and a cycle cell — because the repair moved the default to a `null` sentinel and replaced
+# `inheritAll`'s fold and its cycle guard outright. The cycle cell is a refusal now: `inheritAll` is
+# a resolution (den-hoag-4or0a), so a parent cycle is refused by name, pinned in `ci/tests-error.nix`'s
+# `walks-through-resolve` group, outside the collected suite this header's citations are checked
+# against.
 #
 #   arm "collectionAttr"        — `collectionAttr` over n children with NO `combine` supplied,
 #                                 which is the shape `ci/tests/collection-attr.nix` and every
@@ -90,7 +93,7 @@ let
       graph
       ;
   };
-  resolveLib = import ../../lib/resolve.nix { inherit prelude; };
+  resolveLib = import ../../. { };
 
   range = builtins.genList (i: i) n;
   # The two constructors take DIFFERENT extract signatures — `inheritAll` is handed the node record,
@@ -181,6 +184,7 @@ let
       {
         children = _self: i: prelude.filterAttrs (_: node: node.parent == i) scope.nodes;
         imports = _self: _i: [ ];
+        marks = _: _: [ ];
         gathered = attr;
       }
       scope

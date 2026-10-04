@@ -40,6 +40,7 @@ let
       {
         children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
         imports = self: id: (self.node id).decls.__edges.I or [ ];
+        marks = _: _: [ ];
 
         tags = self: id: (self.node id).decls.tags or [ ];
 

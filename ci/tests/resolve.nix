@@ -28,6 +28,7 @@ let
           {
             children = _self: i: lib.filterAttrs (_: n: n.parent == i) roots.nodes;
             imports = _self: _i: [ ];
+            marks = _: _: [ ];
             ${attrName} = attr;
           }
           roots;
@@ -322,6 +323,7 @@ in
             {
               children = self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
               imports = self: id: [ ];
+              marks = _: _: [ ];
               all-tags = inheritAll { } (node: node.decls.tags or null);
             }
             roots;
@@ -335,43 +337,12 @@ in
         ];
       };
 
-    # ── THE TWO ARMS OF `inheritAll` THAT NOTHING PINNED ──
+    # ── THE ARM OF `inheritAll` THAT NOTHING PINNED ──
     # The parent walk was a level-at-a-time recursion carrying a `_visited` attrset rebuilt with
-    # `//`; it is one `genericClosure` now, whose key dedup IS the cycle guard. Both cells below
-    # cover behaviour the 895 did not reach, and both values were derived by running the PRIOR
-    # implementation and the replacement side by side rather than by reading either one.
-
-    # A CYCLE ENDS BY REPEATING ITS ENTRY, ONCE. The `_visited` arm returned the revisited node's
-    # own contribution before stopping — it answers `localResults`, not `[ ]` — so `a` contributes
-    # at both ends. `genericClosure` drops a duplicate key outright, so the repeat is reconstructed
-    # from the last node's parent; this cell is what says the reconstruction is the prior value and
-    # not one step short or one step long.
-    test-inheritAll-cycle-repeats-its-entry-once = {
-      expr = readAttr {
-        parentGraph = genScope.overlays [
-          (genScope.edge {
-            from = "a";
-            to = "b";
-          })
-          (genScope.edge {
-            from = "b";
-            to = "a";
-          })
-        ];
-        decls = {
-          a.supp = [ "A" ];
-          b.supp = [ "B" ];
-        };
-        attrName = "all-supp";
-        attr = inheritAll { } (node: node.decls.supp or null);
-        id = "a";
-      };
-      expected = [
-        "A"
-        "B"
-        "A"
-      ];
-    };
+    # `//`; it is a resolution now (`parent*`, mode "reachable"). The cell below covers behaviour the
+    # 895 did not reach, and its value was derived by running the PRIOR implementation and the
+    # replacement side by side rather than by reading either one. Its sibling, the cycle cell, is a
+    # refusal since den-hoag-4or0a (D9): `tests-error.nix`'s `walks-through-resolve`.
 
     # A SUPPLIED `combine` FOLDS RIGHT — `combine local (combine parent (combine grandparent …))` —
     # and the association is the assertion, not the membership. The recursion got it from its own
