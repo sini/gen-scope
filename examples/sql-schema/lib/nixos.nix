@@ -180,9 +180,11 @@ let
       };
     } serverModuleFn;
 
-  # Evaluate a server module — calls the wrapped module to get the plain config attrset.
+  # Evaluate a server module — calls the wrapped module to get the plain config attrset. Every
+  # formal is bound, so gen-bind's `.module` is a function of the module system's call args alone;
+  # with no module system here it is applied to `{ }`.
   # Backward-compatible replacement for code that expected buildServerModule to return a config.
-  evalServerModule = fleet: serverName: (buildServerModule fleet serverName).module;
+  evalServerModule = fleet: serverName: (buildServerModule fleet serverName).module { };
 
   # Build wrapped modules for all servers in the fleet.
   # Returns { serverName = gen-bind result; }
