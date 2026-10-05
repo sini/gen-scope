@@ -21,8 +21,9 @@
 # which edge graphs contribute a function of alphabetical label spelling. A list has somewhere for
 # the caller's declared order to live. It is the caller's OWN label space, open on every label
 # except `P` and `I`, which are this constructor's names for the containment and import relations,
-# and `imports` and `parent`, the calculus's letters for them; all four are refused by name at the
-# entry — see the reservation below.
+# and `imports` and `parent`, the calculus's letters for them, and `_` and `$`, which the calculus
+# reads as syntax and never as a letter; all six are refused by name at the entry — see the
+# reservation below.
 #
 # `kindSetDefect` is `cascade.nix`'s registry type check, taken as a formal for `require-scope.nix`'s
 # reason: the test belongs with the fold and the refusal belongs at the door. This constructor owns
@@ -64,6 +65,17 @@ let
     {
       label = "parent";
       relation = "the calculus's containment letter, whose edges arrive as the `parentGraph` argument";
+    }
+    # The calculus's two NON-LETTERS (`calculus.nix` `lettersLaw`): no alphabet may list either, so
+    # a label spelled like one would be carried and walked by no resolution at all (P14's reach
+    # census, `ci/tests/reach-census.nix`).
+    {
+      label = "_";
+      relation = "the path-expression grammar's any-label wildcard, which no alphabet may list as a letter";
+    }
+    {
+      label = "$";
+      relation = "the extended label marking the end of a path, which no alphabet may list as a letter";
     }
   ];
 

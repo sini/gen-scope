@@ -1217,9 +1217,13 @@ in
             "imports"
             "parent"
             "I"
+            "_"
+            "$"
             "peer"
           ];
       expected = [
+        true
+        true
         true
         true
         true

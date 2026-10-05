@@ -1479,6 +1479,26 @@ in
         msg = exactly (reservedLabelRefusal ''["P","I"]'' "${containment}; ${importing}");
       };
     };
+    # The calculus's non-letters: a label no alphabet may list is refused at the lift, not carried
+    # to be walked by nothing.
+    test-a-reserved-underscore-names-the-label-and-why-no-letter-walks-it = {
+      expr = (collide [ "_" ]).nodes.a.decls.__edges;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (
+          reservedLabelRefusal ''["_"]'' "'_' is the path-expression grammar's any-label wildcard, which no alphabet may list as a letter"
+        );
+      };
+    };
+    test-a-reserved-dollar-names-the-label-and-why-no-letter-walks-it = {
+      expr = (collide [ "$" ]).nodes.a.decls.__edges;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly (
+          reservedLabelRefusal ''["$"]'' "'$' is the extended label marking the end of a path, which no alphabet may list as a letter"
+        );
+      };
+    };
   };
 
   # ── MULTI-PARENT ATTACHMENT, THE DOORS ──
