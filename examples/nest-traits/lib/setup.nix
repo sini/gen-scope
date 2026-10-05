@@ -116,7 +116,7 @@ let
           if isSelector val then resolveSelector registry val else default;
       };
     in
-    genSchema.mkInstanceRegistry schema.trait {
+    genSchema.mkInstanceRegistry {
       strict = false;
       refinements = {
         name = [
@@ -130,7 +130,7 @@ let
         needs = coerceHook;
         neededBy = coerceHook;
       };
-    };
+    } schema.trait;
 
   mkRulesType =
     {

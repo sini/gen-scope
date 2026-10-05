@@ -385,24 +385,24 @@ let
             };
 
             # ── Instance registries ──
-            options.datacenters = mkInstanceRegistry eval.config.schema.datacenter { };
-            options.environments = mkInstanceRegistry eval.config.schema.environment {
+            options.datacenters = mkInstanceRegistry { } eval.config.schema.datacenter;
+            options.environments = mkInstanceRegistry {
               refinements.tier = refinements.envTier;
-            };
-            options.networks = mkInstanceRegistry eval.config.schema.network {
+            } eval.config.schema.environment;
+            options.networks = mkInstanceRegistry {
               refs.datacenter = eval.config.datacenters;
               refinements.cidr = refinements.cidr;
-            };
-            options.subnets = mkInstanceRegistry eval.config.schema.subnet {
+            } eval.config.schema.network;
+            options.subnets = mkInstanceRegistry {
               refs.network = eval.config.networks;
               refinements.cidr = refinements.cidr;
               refinements.gateway = refinements.ipv4Address;
-            };
-            options.vlans = mkInstanceRegistry eval.config.schema.vlan {
+            } eval.config.schema.subnet;
+            options.vlans = mkInstanceRegistry {
               refs.subnet = eval.config.subnets;
               refinements.id = refinements.vlanId;
-            };
-            options.servers = mkInstanceRegistry eval.config.schema.server {
+            } eval.config.schema.vlan;
+            options.servers = mkInstanceRegistry {
               refs.datacenter = eval.config.datacenters;
               refs.environment = eval.config.environments;
               refs.subnet = eval.config.subnets;
@@ -413,39 +413,39 @@ let
               refinements.hostname = refinements.nonEmpty;
               refinements.cores = refinements.positive;
               refinements.ram_gb = refinements.positive;
-            };
-            options.interfaces = mkInstanceRegistry eval.config.schema.interface {
+            } eval.config.schema.server;
+            options.interfaces = mkInstanceRegistry {
               refs.server = eval.config.servers;
               refs.vlan = eval.config.vlans;
               refinements.mac = refinements.macAddress;
               refinements.ip = refinements.ipv4Address;
-            };
-            options.services = mkInstanceRegistry eval.config.schema.service {
+            } eval.config.schema.interface;
+            options.services = mkInstanceRegistry {
               refs.server = eval.config.servers;
               refs.environment = eval.config.environments;
               refinements.protocol = refinements.serviceProtocol;
-            };
-            options.ports = mkInstanceRegistry eval.config.schema.port {
+            } eval.config.schema.service;
+            options.ports = mkInstanceRegistry {
               refs.service = eval.config.services;
               refinements.number = refinements.tcpPort;
               refinements.protocol = refinements.serviceProtocol;
-            };
-            options.service-dependencies = mkInstanceRegistry eval.config.schema.service-dependency {
+            } eval.config.schema.port;
+            options.service-dependencies = mkInstanceRegistry {
               refs.upstream = eval.config.services;
               refs.downstream = eval.config.services;
               refinements.protocol = refinements.serviceProtocol;
-            };
-            options.domains = mkInstanceRegistry eval.config.schema.domain {
+            } eval.config.schema.service-dependency;
+            options.domains = mkInstanceRegistry {
               refs.environment = eval.config.environments;
-            };
-            options.dns-records = mkInstanceRegistry eval.config.schema.dns-record {
+            } eval.config.schema.domain;
+            options.dns-records = mkInstanceRegistry {
               refs.server = eval.config.servers;
               refs.loadbalancer = eval.config.loadbalancers;
               refs.domain = eval.config.domains;
               refinements.type = refinements.dnsRecordType;
               refinements.ttl = refinements.positive;
-            };
-            options.loadbalancers = mkInstanceRegistry eval.config.schema.loadbalancer {
+            } eval.config.schema.dns-record;
+            options.loadbalancers = mkInstanceRegistry {
               refs.datacenter = eval.config.datacenters;
               refs.environment = eval.config.environments;
               refs.failover = {
@@ -453,14 +453,14 @@ let
                 deferred = true;
               };
               refinements.algorithm = refinements.lbAlgorithm;
-            };
-            options.backends = mkInstanceRegistry eval.config.schema.backend {
+            } eval.config.schema.loadbalancer;
+            options.backends = mkInstanceRegistry {
               refs.service = eval.config.services;
               refs.loadbalancer = eval.config.loadbalancers;
               refinements.weight = refinements.positive;
               refinements.maxconn = refinements.positive;
-            };
-            options.firewall-rules = mkInstanceRegistry eval.config.schema.firewall-rule {
+            } eval.config.schema.backend;
+            options.firewall-rules = mkInstanceRegistry {
               refs.src-subnet = eval.config.subnets;
               refs.dst-subnet = eval.config.subnets;
               refs.src-server = eval.config.servers;
@@ -469,32 +469,32 @@ let
               refinements.port = refinements.tcpPort;
               refinements.action = refinements.firewallAction;
               refinements.priority = refinements.positive;
-            };
-            options.certificates = mkInstanceRegistry eval.config.schema.certificate {
+            } eval.config.schema.firewall-rule;
+            options.certificates = mkInstanceRegistry {
               refs.server = eval.config.servers;
               refs.loadbalancer = eval.config.loadbalancers;
               refinements.issuer = refinements.certIssuer;
               refinements.expires-days = refinements.positive;
-            };
-            options.schedules = mkInstanceRegistry eval.config.schema.schedule {
+            } eval.config.schema.certificate;
+            options.schedules = mkInstanceRegistry {
               refs.service = eval.config.services;
               refs.server = eval.config.servers;
-            };
-            options.ldap-groups = mkInstanceRegistry eval.config.schema.ldap-group { };
-            options.ldap-roles = mkInstanceRegistry eval.config.schema.ldap-role {
+            } eval.config.schema.schedule;
+            options.ldap-groups = mkInstanceRegistry { } eval.config.schema.ldap-group;
+            options.ldap-roles = mkInstanceRegistry {
               refs.ldap-group = eval.config.ldap-groups;
-            };
-            options.users = mkInstanceRegistry eval.config.schema.user {
+            } eval.config.schema.ldap-role;
+            options.users = mkInstanceRegistry {
               refs.ldap-role = eval.config.ldap-roles;
               refs.servers = eval.config.servers;
               refs.manager = {
                 instances = eval.config.users;
                 deferred = true;
               };
-            };
-            options.access-policies = mkInstanceRegistry eval.config.schema.access-policy {
+            } eval.config.schema.user;
+            options.access-policies = mkInstanceRegistry {
               refs.ldap-role = eval.config.ldap-roles;
-            };
+            } eval.config.schema.access-policy;
 
             # ── Fleet data (config values) ──
             config.datacenters = fleet.datacenter or { };
