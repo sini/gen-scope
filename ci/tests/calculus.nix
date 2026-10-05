@@ -1724,6 +1724,129 @@ in
       }) refusals;
     };
 
+    # ── the visibility order compares the same head scope at every step (den-hoag-vvu9r) ──
+    # van Antwerpen 2018 Fig. 1's `<p` recurses only through an equal STEP. `s —imports→ x` and
+    # `s —imports→ y —imports→ z` share the label and part at the scope, so under `$ < imports` both
+    # declarers `x` and `z` are visible under either competition key, where a label-word reading
+    # answers `[ "x" ]`. ★ CONTROL: on ONE route `s → x → z` the nearer still shadows the farther.
+    test-vvu9r-a-shared-label-into-different-scopes-leaves-both-visible =
+      let
+        read =
+          imports: key:
+          sorted (
+            nodesOf (
+              S.resolve
+                (
+                  {
+                    wf = wf [ "imports" ] "imports*";
+                    order = flat [ "imports" ];
+                    mode = "visible";
+                    dataFilter = n: n.decls.v or null;
+                  }
+                  // key
+                )
+                (lift {
+                  nodes = [
+                    "s"
+                    "x"
+                    "y"
+                    "z"
+                  ];
+                  inherit imports;
+                  decls = {
+                    x.v = "vx";
+                    z.v = "vz";
+                  };
+                })
+                "s"
+            )
+          );
+        parted = {
+          s = [
+            "x"
+            "y"
+          ];
+          y = [ "z" ];
+        };
+        oneRoute = {
+          s = [ "x" ];
+          x = [ "z" ];
+        };
+      in
+      {
+        expr = {
+          group = read parted { group = "k"; };
+          groupBy = read parted { groupBy = _: "k"; };
+          controlGroup = read oneRoute { group = "k"; };
+          controlGroupBy = read oneRoute { groupBy = _: "k"; };
+        };
+        expected = {
+          group = [
+            "x"
+            "z"
+          ];
+          groupBy = [
+            "x"
+            "z"
+          ];
+          controlGroup = [ "x" ];
+          controlGroupBy = [ "x" ];
+        };
+      };
+
+    # The published `pathPrecedes` over the same shape: one shared label into `x` against into `y`
+    # then `z` is unordered both ways. ★ CONTROL: into the SAME scope, `$ < imports` orders stopping
+    # first. The residue of the origin check: an empty path carries no origin, so it is answered
+    # beside a path from any scope, and the caller's precondition is two paths from one origin.
+    test-vvu9r-pathPrecedes-recurses-only-through-an-equal-step =
+      let
+        o = flat [ "imports" ];
+        st = from: to: {
+          label = "imports";
+          inherit from to;
+        };
+      in
+      {
+        expr = {
+          divergentScope =
+            o.pathPrecedes
+              [ (st "s" "x") ]
+              [
+                (st "s" "y")
+                (st "y" "z")
+              ];
+          divergentScopeReversed =
+            o.pathPrecedes
+              [
+                (st "s" "y")
+                (st "y" "z")
+              ]
+              [ (st "s" "x") ];
+          sharedScope =
+            o.pathPrecedes
+              [ (st "s" "x") ]
+              [
+                (st "s" "x")
+                (st "x" "z")
+              ];
+          sharedScopeReversed =
+            o.pathPrecedes
+              [
+                (st "s" "x")
+                (st "x" "z")
+              ]
+              [ (st "s" "x") ];
+          emptyBesideAnyOrigin = o.pathPrecedes [ ] [ (st "t" "x") ];
+        };
+        expected = {
+          divergentScope = false;
+          divergentScopeReversed = false;
+          sharedScope = true;
+          sharedScopeReversed = false;
+          emptyBesideAnyOrigin = true;
+        };
+      };
+
     # ── the constructor chain keys under H1 at 5,000 levels ──
     test-constructor-chain-5000-keys = {
       expr = builtins.stringLength (regex.stateKey (chain 5000));

@@ -25,6 +25,13 @@ let
     [ "a" ]
     [ "b" ]
   ] (-1);
+  # A path step; a `null` target leaves `to` undeclared.
+  step =
+    from: label: to:
+    {
+      inherit from label;
+    }
+    // (if to == null then { } else { inherit to; });
 
   # A lifted scope over `a`, `b`, `c`: `a —e→ b`; `b` and `c` declare `x`. Every attribute is
   # overridable, and `null` leaves it undeclared.
@@ -265,6 +272,24 @@ in
   row7-label-outside-L-hat = {
     plant = goodOrder.pathPrecedes [ { label = "c"; } ] [ ];
     twin = goodOrder.pathPrecedes [ { label = "a"; } ] [ ];
+  };
+  # `pathPrecedes` reads a step's `to` at an equal label and the heads' `from` (den-hoag-vvu9r).
+  row7-step-without-to = {
+    plant = goodOrder.pathPrecedes [ (step "o" "a" null) ] [ (step "o" "a" "x") ];
+    twin = goodOrder.pathPrecedes [ (step "o" "a" "x") ] [ (step "o" "a" "x") ];
+  };
+  row7-step-without-label = {
+    plant =
+      goodOrder.pathPrecedes
+        [ (builtins.removeAttrs (step "o" "a" "x") [ "label" ]) ]
+        [
+          (step "o" "a" "x")
+        ];
+    twin = goodOrder.pathPrecedes [ (step "o" "a" "x") ] [ (step "o" "a" "x") ];
+  };
+  row7-paths-from-two-origins = {
+    plant = goodOrder.pathPrecedes [ (step "s" "a" "x") ] [ (step "t" "b" "y") ];
+    twin = goodOrder.pathPrecedes [ (step "s" "a" "x") ] [ (step "s" "b" "y") ];
   };
   row8-wf-missing = {
     plant = S.resolve { dataFilter = x; } ok "a";

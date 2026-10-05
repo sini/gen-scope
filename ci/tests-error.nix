@@ -4219,6 +4219,12 @@ in
         "row7-label-outside-L-hat" = ''gen-scope.labelOrder: 'c' is not a label of L̂ (["a","b"], or `$`)'';
         "row7-layers-not-a-list-of-lists" =
           "gen-scope.labelOrder: layers must be a list of lists — each inner list is one rank, and two letters sharing a rank are incomparable, which is how a strict PARTIAL order is declared";
+        "row7-step-without-to" =
+          "gen-scope.labelOrder: pathPrecedes: step 0 has no `to`; a step is `{ label; from; to; }`, and the order reads the target scope at an equal label";
+        "row7-step-without-label" =
+          "gen-scope.labelOrder: pathPrecedes: step 0 is a set without `label`; a step is `{ label; from; to; }`";
+        "row7-paths-from-two-origins" =
+          ''gen-scope.labelOrder: pathPrecedes: the two paths start at different scopes ("s", "t"); Fig. 1 orders two paths from one origin only'';
         "row7-unranked-letter" =
           "gen-scope.labelOrder: letter 'b' is not ranked; the label order is total over the alphabet, and an unranked letter would otherwise take a default rank nobody declared";
         "row8-dataFilter-missing" =

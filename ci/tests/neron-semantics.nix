@@ -757,8 +757,10 @@ in
     # ★ THIS IS WHAT MAKES THE TWO DIAMOND CELLS MEAN SOMETHING. Declare on BOTH routes at the same
     # depth and it refuses — so their non-refusal is the two routes collapsing onto one occurrence,
     # and not a fixture that failed to form two routes in the first place. A declarer on ONE route
-    # only is nearer than `D` and shadows it (`$ < imports`, den-hoag-gayc T6); the retired `query`
-    # refused that shape too, counting `B` and `D` as rivals.
+    # only refuses too: `r·imports·B` and `r·imports·C·imports·D` take one label into different
+    # scopes and part there, so van Antwerpen 2018 Fig. 1's `<p` leaves them unordered and `B` and
+    # `D` are both visible. Nearer shadows farther only on ONE route, as `$ < imports` orders
+    # `r·imports·B` before `r·imports·B·imports·D`.
     test-a-diamond-with-declarers-on-both-routes-refuses = {
       expr =
         let
@@ -795,16 +797,16 @@ in
             C.x = [ "c" ];
             D.x = [ "d" ];
           });
-          oneRoute = read {
+          oneRoute = didRefuse (read {
             r = { };
             B.x = [ "b" ];
             C = { };
             D.x = [ "d" ];
-          };
+          });
         };
       expected = {
         bothRoutes = true;
-        oneRoute = [ "b" ];
+        oneRoute = true;
       };
     };
 

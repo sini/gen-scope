@@ -251,16 +251,41 @@ let
           __element = "labelOrder";
           inherit alphabet rankOf;
           inherit (a) layers endOfPath;
-          # Fig. 1's Visibility Order, rule by rule: recursion is licensed by label EQUALITY only;
-          # where the labels differ this is the last position read, and the two paths are ordered
-          # only if `<l` orders those two labels (van Antwerpen 2018 114:6, "the prefix order only
-          # orders paths that have a common prefix").
+          # Fig. 1's Visibility Order, rule by rule, over two paths `[ { label; from; to; } ]` from
+          # one origin. Rules 2–4 share one head scope `s`, and rule 1 recurses into paths that each
+          # begin at the scope the shared `l`-edge reaches, so recursion is licensed by an equal
+          # STEP, the same label to the same scope; an equal label into different scopes leaves the
+          # pair unordered. Where the labels differ this is the last position read, and the pair is
+          # ordered only if `<l` orders them. The prose at 114:6 states the head-scope half: "s1·l1·s2
+          # ≮p s'1·l'1·s'2·l'2·s'3 when s1 ≠ s'1 or l1 ≠ l'1" (van Antwerpen 2018).
+          # Two non-empty paths from different origins are refused: rules 2–4 never fire across
+          # two heads. An empty path carries no origin, so that pair is the caller's precondition.
           pathPrecedes =
             pa: pb:
             let
               la = length pa;
               lb = length pb;
-              labelAt = p: i: (builtins.elemAt p i).label;
+              stepAt =
+                p: i:
+                let
+                  st = builtins.elemAt p i;
+                in
+                if isAttrs st && st ? label then
+                  st
+                else
+                  refuse "labelOrder" "pathPrecedes: step ${toString i} is a ${typeOf st} without `label`; a step is `{ label; from; to; }`";
+              labelAt = p: i: (stepAt p i).label;
+              field =
+                n: p: i:
+                let
+                  st = stepAt p i;
+                in
+                if st ? ${n} then
+                  st.${n}
+                else
+                  refuse "labelOrder" "pathPrecedes: step ${toString i} has no `${n}`; a step is `{ label; from; to; }`, and the order reads the ${
+                    if n == "to" then "target scope at an equal label" else "origin of a non-empty path"
+                  }";
               go =
                 i:
                 if i >= la && i >= lb then
@@ -270,11 +295,14 @@ let
                 else if i >= lb then
                   rankOf (labelAt pa i) < rankOf "$"
                 else if labelAt pa i == labelAt pb i then
-                  go (i + 1)
+                  field "to" pa i == field "to" pb i && go (i + 1)
                 else
                   rankOf (labelAt pa i) < rankOf (labelAt pb i);
             in
-            go 0;
+            if la > 0 && lb > 0 && field "from" pa 0 != field "from" pb 0 then
+              refuse "labelOrder" "pathPrecedes: the two paths start at different scopes (${renderId (field "from" pa 0)}, ${renderId (field "from" pb 0)}); Fig. 1 orders two paths from one origin only"
+            else
+              go 0;
         }
       );
 
@@ -731,23 +759,26 @@ let
       # (NR-Vis) UNDER A DECLARED KEY, `group` (den-hoag-gayc C1, owner-ruled 2026-09-30): resolution
       # stays lazy in data it shadows. Every candidate (a nullable visit) is in group `group` before
       # any datum is read, and presence is tested in shadowing order, rank class by rank class down
-      # the trie of label words: at a word class the symbols (`$` for its nullable visits, then its
-      # kids' letters) are taken one rank at a time, lowest first, and the first rank class with a
-      # present stop or a non-empty child selection is the answer. A higher class is never visited,
-      # so a candidate under a lower-ranked present one is never forced.
+      # the trie of step prefixes: at a trie node the symbols (`$` for its nullable visits, then its
+      # kids, each ranked by the letter it was reached by) are taken one rank at a time, lowest
+      # first, and the first rank class with a present stop or a non-empty child selection is the
+      # answer. A higher class is never visited, so a candidate under a lower-ranked present one is
+      # never forced.
       #
       # EXACT, by the trie argument (not by citation): `labelOrder` declares integer ranks, so `<l`
       # is a strict weak order and `<p` its lexicographic extension with `$` at `endOfPath`. A
       # member survives the strict prefix minimum (`strictParts`) iff at every trie node of its
-      # word its symbol has the minimum rank among the symbols PRESENT members take there; a child
-      # class with no present member selects `[ ]` and so cannot win a rank, which makes the first
-      # non-empty rank class exactly that minimum. Néron 2015 §5's staged shadowing operator is
+      # step word its symbol has the minimum rank among the symbols PRESENT members take there; a
+      # kid with no present member below it selects `[ ]` and so cannot win a rank, which makes the
+      # first non-empty rank class exactly that minimum. Néron 2015 §5's staged shadowing operator is
       # this, applied once per trie node; Néron's own algorithm does not cover a general WF and
       # `<` (its §2.5 variants), so the citation names the operator, not the proof.
       #
-      # A word class is the visits sharing one label word: the root class is `[ tree ]`, and the
-      # class reached by `l` is every kid with `via == l`, so each visit is examined once and no
-      # candidate list is re-grouped (the re-grouping trie is quadratic in a chain and refused by
+      # A trie node is a STEP prefix, label and target scope together, never a label word: Fig. 1's
+      # rules share one head scope, so two kids by one label into different scopes are two nodes,
+      # equal in rank and never compared again. The walk tree is that trie (one tree node per
+      # acyclic path from the origin), so each visit is examined once and no candidate list is
+      # re-grouped (the re-grouping trie is quadratic in a chain and refused by
       # `ci/bench/resolve-parent-chain.sh`).
       lazyParts =
         let
@@ -801,22 +832,24 @@ let
                 renderId (builtins.elemAt chain (length chain - 1)).parent
               } is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk";
           # The staged selection as a loop, not a recursion: `genericClosure` steps an explicit stack of
-          # word classes, so its stack depth is constant in the walk's depth (`pick`'s recursion
-          # aborted at a parent chain of 1,700). A frame is one class: `ranks` still to try, `cur` the
-          # symbols of the rank being tried, `acc` that rank's selection so far. A class is examined
+          # trie nodes, so its stack depth is constant in the walk's depth (`pick`'s recursion
+          # aborted at a parent chain of 1,700). A frame is one trie node: `ranks` still to try, `cur` the
+          # symbols of the rank being tried, `acc` that rank's selection so far. A node is examined
           # (its members' edges read) when its frame is pushed, and a frame returns `acc` to its parent
           # at the first non-empty rank or `[ ]` when its ranks run out (Néron §5's staged shadowing,
           # one trie node per frame). Every state field is forced per step (ADR-0022).
+          symRank = s: rankOf (if s == "$" then s else s.via);
           frameOf =
             cls:
             let
               stops = filter (t: regex.nullable t.st) cls;
-              labels = prelude.unique (concatMap (t: map (c: c.via) t.kids) cls);
-              syms = (if stops != [ ] then [ "$" ] else [ ]) ++ labels;
+              # A symbol is `$` or one kid: Fig. 1's rules share one head scope, so a kid is its own
+              # trie node and two kids by one label into different scopes are never compared.
+              syms = (if stops != [ ] then [ "$" ] else [ ]) ++ concatMap (t: t.kids) cls;
             in
             {
               inherit cls stops syms;
-              ranks = builtins.sort builtins.lessThan (prelude.unique (map rankOf syms));
+              ranks = builtins.sort builtins.lessThan (prelude.unique (map symRank syms));
               cur = [ ];
               acc = [ ];
             };
@@ -856,7 +889,7 @@ let
                 }
               else
                 let
-                  g = frameOf (concatMap (t: filter (c: c.via == s) t.kids) f.cls);
+                  g = frameOf [ s ];
                 in
                 {
                   stack = {
@@ -874,7 +907,7 @@ let
               {
                 stack = {
                   f = f // {
-                    cur = filter (s: rankOf s == head f.ranks) f.syms;
+                    cur = filter (s: symRank s == head f.ranks) f.syms;
                     ranks = builtins.tail f.ranks;
                   };
                   inherit (stack) up;
@@ -951,9 +984,10 @@ let
           };
 
       # (NR-Vis) UNDER A DATA-READING KEY, `groupBy`: the witnesses grouped by k, each group's
-      # minimal set under `<p`, computed as a prefix minimum over label words (gen-view
-      # `relation.nix` step 6, carried): a member survives iff at every node of its word ŵ = w·$ its
-      # symbol takes the minimum rank among the symbols the group's members take there. The key is
+      # minimal set under `<p`, computed as a prefix minimum over step words (gen-view
+      # `relation.nix` step 6, carried): a member's word ŵ = w·$ spells each step as its label and
+      # target scope, and it survives iff at every node of ŵ its symbol's label takes the minimum
+      # rank among the symbols the group's members take there. The key is
       # a function of the datum (vA2018 Fig. 1, `≤d ⊆ D × D`), so membership is unknowable without
       # it, and every witness's presence and key are forced: the strict form.
       strictParts =
@@ -982,7 +1016,17 @@ let
           split =
             members:
             let
-              words = map (c: map (step: step.label) c.path ++ [ "$" ]) members;
+              # A trie node is a STEP prefix — label and target scope — never a label word: Fig. 1's
+              # rules share one head scope, so two members meeting one label into different scopes
+              # part there and are never compared again.
+              words = map (
+                c:
+                map (step: [
+                  step.label
+                  step.to
+                ]) c.path
+                ++ [ [ "$" ] ]
+              ) members;
               deepest = builtins.foldl' (m: w: if length w > m then length w else m) 0 words;
               # One `genericClosure` item per level (a loop, so no level list is re-copied), each
               # level's `alive` forced before the next is keyed (ADR-0022).
@@ -997,8 +1041,8 @@ let
                     {
                       inherit (a) m;
                       node = a.key;
-                      rank = rankOf sym;
-                      combo = attrKey "resolve" "${a.key} ${sym}";
+                      rank = rankOf (head sym);
+                      combo = attrKey "resolve" "${a.key} ${toJSON sym}";
                     }
                   ) (filter (a: length (builtins.elemAt words a.m) > i) alive);
                   ids = builtins.listToAttrs (
