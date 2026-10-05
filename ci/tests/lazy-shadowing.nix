@@ -211,11 +211,18 @@ let
           # the staged selection never tries w's rank there. A scope none of whose visits is needed
           # gets throwing edges, marks and `parent`, and the lazy read must not change.
           wordOf = p: map (step: step.label) p;
+          # A shadowing oracle compares STEPS, label and target scope (vA2018 Fig. 1).
+          stepsOf =
+            p:
+            map (step: [
+              step.label
+              step.to
+            ]) p;
           rankOf = opts.order.rankOf;
           beats =
             u: w:
             let
-              u' = u ++ [ "$" ];
+              u' = u ++ [ [ "$" ] ];
               go =
                 i:
                 if i >= length w || i >= length u' then
@@ -223,7 +230,7 @@ let
                 else if elemAt u' i == elemAt w i then
                   go (i + 1)
                 else
-                  rankOf (elemAt u' i) < rankOf (elemAt w i);
+                  rankOf (builtins.head (elemAt u' i)) < rankOf (builtins.head (elemAt w i));
             in
             go 0;
           spineRow =
@@ -233,7 +240,7 @@ let
                 group = "k";
               };
               clean = S.resolve lazyOpts ev s;
-              winners = map (a: wordOf a.path) clean.answers;
+              winners = map (a: stepsOf a.path) clean.answers;
               visits =
                 (S.resolve {
                   wf = S.wellFormed {
@@ -247,7 +254,7 @@ let
                 map (v: {
                   name = v.node;
                   value = true;
-                }) (filter (v: !(builtins.any (u: beats u (wordOf v.path)) winners)) visits)
+                }) (filter (v: !(builtins.any (u: beats u (stepsOf v.path)) winners)) visits)
               );
               plant = listToAttrs (
                 map (id: {
@@ -333,13 +340,13 @@ let
                   mode = "witnesses";
                   inherit dataFilter;
                 } twin s).answers;
-              presentWords = map (a: wordOf a.path) (
+              presentWords = map (a: stepsOf a.path) (
                 witnesses (renExpr (elemAt wfl.expressions wfIx)) opts.dataFilter
               );
               beatsT =
                 u: w:
                 let
-                  u' = u ++ [ "$" ];
+                  u' = u ++ [ [ "$" ] ];
                   go =
                     i:
                     if i >= length w || i >= length u' then
@@ -347,12 +354,12 @@ let
                     else if elemAt u' i == elemAt w i then
                       go (i + 1)
                     else
-                      twinOrder.rankOf (elemAt u' i) < twinOrder.rankOf (elemAt w i);
+                      twinOrder.rankOf (builtins.head (elemAt u' i)) < twinOrder.rankOf (builtins.head (elemAt w i));
                 in
                 go 0;
               examined = w: !(builtins.any (u: beatsT u w) presentWords);
               readFrom = map (z: (lib.last z.path).from) (
-                filter (z: isSink z.node && examined (lib.init (wordOf z.path))) (
+                filter (z: isSink z.node && examined (lib.init (stepsOf z.path))) (
                   witnesses (renExpr (elemAt wfl.closures wfIx)) (nd: nd.id)
                 )
               );
@@ -540,15 +547,15 @@ in
         reads = 794;
         mismatches = 0;
         answered = 627;
-        shadowedSome = 282;
-        multiAnswer = 181;
-        ambiguityRefused = 91;
+        shadowedSome = 276;
+        multiAnswer = 198;
+        ambiguityRefused = 99;
         tiedLayers = 125;
         inbound = 32;
         spineReads = 666;
         spineMismatches = 0;
-        spinePlantVisited = 136;
-        spineStrictForced = 129;
+        spinePlantVisited = 134;
+        spineStrictForced = 127;
       };
     };
 
