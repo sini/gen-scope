@@ -3431,11 +3431,11 @@ in
       };
       test-followEdge-refuses-a-record-at-self-get = {
         expr = S.followEdge "I" self X;
-        expectedError = get;
+        expectedError = refused "resolve" "a node identifier";
       };
       test-collectImports-refuses-a-record-at-self-get = {
         expr = S.collectImports (_: _: [ ]) self X;
-        expectedError = get;
+        expectedError = refused "resolve" "a node identifier";
       };
       test-isAncestor-refuses-a-record-it-would-only-compare = {
         expr = S.isAncestor self X "b";
@@ -4375,5 +4375,40 @@ in
       test-A7-followEdge-refuses-a-label-that-is-not-a-string = refused (genScope.followEdge 1 F.labelled
         "s"
       ) "gen-scope.followEdge: the label is a int, not a letter (a string)";
+
+      # The one-hop reads (den-hoag-4or0a U2) refuse where `resolve` refuses.
+      # E1: an evaluation declaring no `marks` is refused at the first read, at each of the five.
+    }
+    // builtins.listToAttrs (
+      map
+        (read: {
+          name = "test-E1-${read}-refuses-an-undeclared-marks-floor";
+          value =
+            refused (F.five (F.hop { declareMarks = false; }) "s").${read}
+              "gen-scope: node 's' is read for its boundary marks, but this evaluation declares no `marks` attribute — a scope that declares no boundary mark; `_: _: [ ]` states none. An absent mark is never read as an open floor (ADR-0026).";
+        })
+        [
+          "imports"
+          "label"
+          "collectImports"
+          "collectByLabel"
+          "followEdge"
+        ]
+    )
+    // {
+      # E2, E3: a malformed edge list is refused by name.
+      test-E2-followEdge-refuses-an-edge-attribute-that-is-not-a-list =
+        refused (genScope.followEdge "include" (F.hop { edgesInclude.s = "r"; }) "s")
+          ''gen-scope.resolve: node "s", letter 'include': the edge attribute is a string, not a list of node ids'';
+      test-E3-followEdge-refuses-an-edge-target-that-is-not-an-id =
+        refused (genScope.followEdge "include" (F.hop { edgesInclude.s = [ 7 ]; }) "s")
+          ''gen-scope.resolve: node "s", letter 'include': an edge target is a int, not a node id (a string)'';
+      # E4: the reserved letters `_` and `$` are WFL syntax and name no edge.
+      test-E4-followEdge-refuses-the-reserved-letter-underscore =
+        refused (genScope.followEdge "_" (F.hop { extra."edges-_" = _: _: [ "a" ]; }) "s")
+          "gen-scope.wellFormed: alphabet carries the reserved letter '_' — `_` is the any-label wildcard of the path-expression grammar and `$` the extended label marking the end of a path (van Antwerpen 2018 Fig. 1); neither can also name an edge";
+      test-E4-followEdge-refuses-the-reserved-letter-dollar =
+        refused (genScope.followEdge "$" (F.hop { extra."edges-$" = _: _: [ "a" ]; }) "s")
+          "gen-scope.wellFormed: alphabet carries the reserved letter '$' — `_` is the any-label wildcard of the path-expression grammar and `$` the extended label marking the end of a path (van Antwerpen 2018 Fig. 1); neither can also name an edge";
     };
 }

@@ -77,6 +77,7 @@ let
     children = self: id: { };
     "edges-owns" = self: id: (self.node id).decls.owns or [ ];
     imports = self: id: (self.node id).decls.imports or [ ];
+    marks = _self: _id: [ ];
     includes = self: id: (self.node id).decls.includes or [ ];
     label = self: id: "fresh-${id}";
     owned = genScope.collectByLabel "owns" (self: id: [ id ]);

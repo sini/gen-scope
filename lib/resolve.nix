@@ -3,8 +3,8 @@
 # Neron (2015) and van Antwerpen (2018) resolution semantics.
 # Kiama-inspired vocabulary (Sloane et al., 2010) for attribute definitions.
 #
-# Key design: import edges are COMPUTED ATTRIBUTES (self.get id relations.imports),
-# not structural fields. This allows dynamic import resolution.
+# Key design: import edges are COMPUTED ATTRIBUTES (the `imports` attribute), not structural
+# fields. This allows dynamic import resolution.
 #
 # The relation NAME is not written down here. It comes from `lib/traversal-names.nix`, the one
 # binding this module and the structural classifier both read: a relation this resolver traverses
@@ -12,21 +12,11 @@
 # over a stale import relation without saying so. Two agreeing literals would make that a
 # coincidence; one binding makes it a property.
 #
-# The EDGE NAMESPACE is not written down here either, and the argument runs the other way round.
-# Labelled edges are an OPEN family (Neron et al. 2015, Fig. 2), so the classifier reserves them by
-# a PREFIX predicate rather than by a list — and this module is what CONSTRUCTS the names that
-# predicate decides about, at `followEdge` and at `collectionAttr`'s `label:` traversal. The prefix
-# is a joint fact of the two modules, so it is taken from the one that owns and publishes it. A
-# classifier reserving one prefix while the resolver builds another fails exactly as a drifted
-# relation name does: the constructed name falls outside the reserved namespace, is classified
-# resolutional, and is served from a prior — a complete, well-typed answer over a stale edge set,
-# with nothing in the result saying so.
-#
-# WHAT THAT DOES NOT CLOSE, because the wide reading of it would be false: it makes the two
-# spellings one for the names THIS module builds, and for no others. A caller assembling the name
-# itself still escapes, since a predicate over attribute names has no access to a caller's
-# literals. That residual belongs to `structural`'s stated domain and is named at `interface.nix`'s
-# facade note; it is not closed here.
+# The EDGE NAMESPACE is not written down here at all. Every edge read in this module — the walks
+# and the one-hop reads alike — is a resolution, and the calculus's `targetsAt` is the one place
+# that constructs an `edges-<label>` name, from the prefix `structural` owns and publishes. A caller
+# assembling the name itself still escapes, since a predicate over attribute names has no access to
+# a caller's literals; that residual is named at `interface.nix`'s facade note.
 {
   prelude,
   calculus,
@@ -36,18 +26,26 @@ let
   door = import ./door.nix { inherit prelude; };
   relations = import ./traversal-names.nix;
 
-  # The reserved structural namespace, read from the classifier that owns and publishes it rather
-  # than re-spelled — the prefix below and the prefix the partition tests are one value.
-  structural = import ./structural.nix { inherit prelude; };
-
-  # A labelled edge's attribute name, as the calculus's `targetsAt` builds it: a label may carry
-  # store-path string context, which an attribute name cannot, so it is keyed by its text. A label
-  # that is not a string is refused naming the letter, which `attrKey`'s "node identifier" would
-  # misname.
-  edgeAttr =
-    site: label:
+  # A one-hop edge read is the resolution `wf = l` under mode "reachable" (den-hoag-4or0a U2): the
+  # targets of the edges labelled `l` that leave `id`, each once, in the edge list's declared order.
+  # Mode "reachable" because the read answers TARGET SCOPES, and a scope's reachable set is
+  # "reachable" by definition — not because edges form a set: the store keeps parallel identical
+  # edges (distinct paths under "witnesses"), and they are one scope here. So it reads the marks at `id` exactly as every resolution does (ADR-0026), keys a store-context
+  # label or target by its text, and refuses a malformed edge list by name. The letter is a WFL term
+  # (`wfl.lit`), never parsed, so no character of a label is read as path-expression syntax. A label
+  # that is not a string is refused here naming the site, which `wellFormed`'s alphabet refusal
+  # would not.
+  oneHop =
+    site: label: self: id:
     if builtins.isString label then
-      structural.edgePrefix + key.attrKey site label
+      map (a: a.node)
+        (calculus.resolve {
+          wf = calculus.wellFormed {
+            alphabet = [ label ];
+            expression = calculus.wfl.lit label;
+          };
+          dataFilter = _: true;
+        } self id).answers
     else
       throw "gen-scope.${site}: the label is a ${builtins.typeOf label}, not a letter (a string)";
 
@@ -270,7 +268,7 @@ let
         if builtins.isFunction traverse then
           traverse self id
         else if traverse == relations.imports then
-          self.get id relations.imports
+          oneHop "collectionAttr" relations.imports self id
         else if traverse == "children" then
           builtins.attrNames (self._childRecords id)
         else if traverse == "siblings" then
@@ -308,7 +306,7 @@ let
             }
           )
         else if prelude.hasPrefix "label:" traverse then
-          self.get id (edgeAttr "collectionAttr" (prelude.removePrefix "label:" traverse))
+          oneHop "collectionAttr" (prelude.removePrefix "label:" traverse) self id
         else
           throw "gen-scope: collectionAttr: unknown traverse '${traverse}'";
       filtered = builtins.filter (tid: filter (self.node tid)) targets;
@@ -330,7 +328,9 @@ let
   # Import-scoped collection: demand-driven (Neron §2.4, rule I).
   collectImports =
     extract: self: id:
-    prelude.concatMap (importId: extract self importId) (self.get id relations.imports);
+    prelude.concatMap (importId: extract self importId) (
+      oneHop "collectImports" relations.imports self id
+    );
 
   # Global collection (WARNING: forces full tree — Tier 2). Answers in MATERIALIZATION
   # order (`self.allNodeIds`), not the codepoint key order `attrNames self.allNodes` would
@@ -358,7 +358,7 @@ let
   # Follow a custom edge label from a node.
   followEdge =
     label: self: id:
-    self.get id (edgeAttr "followEdge" label);
+    oneHop "followEdge" label self id;
 
   # Collect data from nodes reachable via a custom edge label.
   collectByLabel =

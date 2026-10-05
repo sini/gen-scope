@@ -7,7 +7,7 @@
 #
 # WHY A PREDICATE OVER THE NAME AND NOT AN ENUMERATION. `edges-<label>` is an OPEN FAMILY
 # whose members are constructed during evaluation (`self.get id "edges-${label}"`, see
-# `followEdge` and `collectionAttr`'s `label:` traversal in resolve.nix), so no list of names
+# `targetsAt` in calculus.nix, which every edge read resolves through), so no list of names
 # can be complete. An under-inclusive partition admits a structural name into the reuse
 # vocabulary, where a consumer naming it is served a STALE STRUCTURAL VALUE — a wrong answer
 # reachable without malice, through nothing worse than a classifier that missed a label. A

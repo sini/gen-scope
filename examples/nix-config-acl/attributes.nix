@@ -19,6 +19,7 @@ in
   attributes = {
     children = _self: id: lib.filterAttrs (_: n: n.parent == id) roots.nodes;
     imports = _self: _id: [ ];
+    marks = _self: _id: [ ];
     "edges-M" = _self: id: (_self.node id).decls.__edges.M or [ ];
 
     # Merged system-access-groups for a host:

@@ -950,6 +950,7 @@ in
           };
           attributes = {
             imports = _self: _id: [ ];
+            marks = _self: _id: [ ];
             children = _self: _id: { };
             "edges-R" = self: id: (self.node id).decls.__edges.R or [ ];
           };
@@ -991,6 +992,7 @@ in
           };
           attributes = {
             imports = _self: _id: [ ];
+            marks = _self: _id: [ ];
             children = _self: _id: { };
             "edges-R" = self: id: (self.node id).decls.__edges.R or [ ];
           };
@@ -1040,6 +1042,7 @@ in
           };
           attributes = {
             imports = _self: _id: [ ];
+            marks = _self: _id: [ ];
             children = _self: _id: { };
             "edges-R" = self: id: (self.node id).decls.__edges.R or [ ];
             "edges-E" = self: id: (self.node id).decls.__edges.E or [ ];

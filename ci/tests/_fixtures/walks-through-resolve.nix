@@ -22,21 +22,29 @@ let
       imports ? { },
       edgesInclude ? { },
       marked ? [ ],
+      mark ? shut,
+      declareMarks ? true,
+      extra ? { },
     }:
     S.eval { parseParent = id: nodes.${id}.parent; }
-      {
-        children =
-          _: id:
-          builtins.listToAttrs (
-            map (c: {
-              name = c;
-              value = nodes.${c};
-            }) (builtins.filter (c: nodes.${c}.parent == id) (builtins.attrNames nodes))
-          );
-        imports = _: id: imports.${id} or [ ];
-        edges-include = _: id: edgesInclude.${id} or [ ];
-        marks = _: id: if builtins.elem id marked then [ shut ] else [ ];
-      }
+      (
+        {
+          children =
+            _: id:
+            builtins.listToAttrs (
+              map (c: {
+                name = c;
+                value = nodes.${c};
+              }) (builtins.filter (c: nodes.${c}.parent == id) (builtins.attrNames nodes))
+            );
+          imports = _: id: imports.${id} or [ ];
+          edges-include = _: id: edgesInclude.${id} or [ ];
+        }
+        // extra
+        // (
+          if declareMarks then { marks = _: id: if builtins.elem id marked then [ mark ] else [ ]; } else { }
+        )
+      )
       {
         inherit nodes;
         nodeOrder = builtins.attrNames nodes;
@@ -73,6 +81,13 @@ let
       imports.s = [ "x" ];
       inherit marked;
     };
+  # One letter as a resolution: `wf = l`, the letter a WFL term (never parsed), mode reachable.
+  hopRef =
+    l:
+    nodesOf (S.wellFormed {
+      alphabet = [ l ];
+      expression = S.wfl.lit l;
+    }) "reachable";
 in
 {
   inherit ids ex;
@@ -126,6 +141,48 @@ in
       s = [ "x" ];
       p = [ "x" ];
     };
+  };
+
+  # THE ONE-HOP READS (den-hoag-4or0a U2), each from `s`: the import relation through
+  # `collectionAttr`'s `"imports"` and `collectImports`, and the letter `include` through `"label:"`,
+  # `collectByLabel` and `followEdge`.
+  five = self: id: {
+    imports = S.collectionAttr { } "imports" ids self id;
+    label = S.collectionAttr { } "label:include" ids self id;
+    collectImports = S.collectImports ids self id;
+    collectByLabel = S.collectByLabel "include" ids self id;
+    followEdge = S.followEdge "include" self id;
+  };
+  # Each one-hop read's reference: the question put to `resolve` with `wf = l`.
+  fiveRef = self: id: rec {
+    imports = hopRef "imports" self id;
+    collectImports = imports;
+    label = hopRef "include" self id;
+    collectByLabel = label;
+    followEdge = label;
+  };
+  # s imports x and s -include-> r, under the arguments given (`marked`, `mark`, edge lists, `extra`).
+  hop =
+    args:
+    mk (
+      {
+        nodes = {
+          s = node "s" "p" { };
+          p = node "p" null { };
+          x = node "x" null { };
+          r = node "r" null { };
+          a = node "a" null { };
+          b = node "b" null { };
+        };
+        imports.s = [ "x" ];
+        edgesInclude.s = [ "r" ];
+      }
+      // args
+    );
+  # A mark admitting the letter `imports` and no other.
+  importsOnly = {
+    name = "importsOnly";
+    admits = l: l == "imports";
   };
 
   # A parent 2-cycle a <-> b.

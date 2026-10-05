@@ -883,6 +883,7 @@
           result = genScope.eval { } {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
             imports = _self: id: (_self.node id).decls.__edges.I or [ ];
+            marks = _self: _id: [ ];
             available-fns = genScope.collectImports (self: importId: (self.node importId).decls.exports or [ ]);
           } nodes;
         in
@@ -986,6 +987,7 @@
           result = genScope.eval { } {
             children = _self: id: lib.filterAttrs (_: n: n.parent == id) nodes.nodes;
             imports = _self: _id: [ ];
+            marks = _self: _id: [ ];
             "edges-R" = _self: id: (_self.node id).decls.__edges.R or [ ];
             "edges-E" = _self: id: (_self.node id).decls.__edges.E or [ ];
           } nodes;
