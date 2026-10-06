@@ -501,6 +501,13 @@ in
       };
     };
 
+    # A leaf decided in place is read as its frame would read it (den-hoag-f8ikh): a leaf the WF does
+    # not accept selects nothing and its datum is never forced.
+    test-kid-order-a-leaf-the-wf-does-not-accept-is-not-read = {
+      expr = F.unacceptedLeaves;
+      expected = [ ];
+    };
+
     # F2: gen-scope's own `config-cascade` example, unedited, over the C1 fixture (gen-scope main
     # answered 8080; a strict constant `groupBy` threw).
     test-C1-config-cascade-example-shadows-a-throwing-ancestor-unforced = {

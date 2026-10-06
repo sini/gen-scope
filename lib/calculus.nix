@@ -853,6 +853,32 @@ let
               cur = [ ];
               acc = [ ];
             };
+          # LEAF-STOP: a kid with no kids is a trie leaf, whose frame would select only its own stop. The
+          # run of leaves at the head of a symbol list is decided in one step and none is pushed. It is
+          # read in kid order, each leaf's edges then its datum, as the leaves' own frames would read
+          # them, so the first read to fail is the one the frames would have met first.
+          leafRun =
+            xs:
+            let
+              # The run's length; a negative count is a stopped one, so no symbol past the run is read.
+              n = builtins.foldl' (
+                r: t:
+                if r < 0 then
+                  r
+                else if t != "$" && t.kids == [ ] then
+                  builtins.seq (regex.nullable t.st && present t) (r + 1)
+                else
+                  -r - 1
+              ) 0 xs;
+              k = if n < 0 then -n - 1 else n;
+              whole = k == length xs;
+              leaves = if whole then xs else builtins.genList (builtins.elemAt xs) k;
+            in
+            {
+              inherit leaves;
+              rest = if whole then [ ] else builtins.genList (i: builtins.elemAt xs (i + k)) (length xs - k);
+              sel = filter (t: regex.nullable t.st && present t) leaves;
+            };
           step =
             stack:
             let
@@ -887,6 +913,20 @@ let
                     inherit (stack) up;
                   };
                 }
+              else if s.kids == [ ] then
+                let
+                  r = leafRun f.cur;
+                in
+                {
+                  stack = {
+                    f = f // {
+                      cur = r.rest;
+                      acc = f.acc ++ r.sel;
+                    };
+                    inherit (stack) up;
+                  };
+                  examined = r.leaves;
+                }
               else
                 let
                   g = frameOf [ s ];
@@ -904,15 +944,36 @@ let
             else if f.acc != [ ] || f.ranks == [ ] then
               ret f.acc
             else
-              {
-                stack = {
-                  f = f // {
-                    cur = filter (s: symRank s == head f.ranks) f.syms;
-                    ranks = builtins.tail f.ranks;
+              let
+                cls = filter (s: symRank s == head f.ranks) f.syms;
+              in
+              # A class of one symbol is entered as on main, so a chain pays nothing; a wider class
+              # decides its leading run of leaves on entry.
+              if builtins.tail cls == [ ] then
+                {
+                  stack = {
+                    f = f // {
+                      cur = cls;
+                      ranks = builtins.tail f.ranks;
+                    };
+                    inherit (stack) up;
                   };
-                  inherit (stack) up;
+                }
+              else
+                let
+                  r = leafRun cls;
+                in
+                {
+                  stack = {
+                    f = f // {
+                      cur = r.rest;
+                      ranks = builtins.tail f.ranks;
+                      acc = f.acc ++ r.sel;
+                    };
+                    inherit (stack) up;
+                  };
+                  examined = r.leaves;
                 };
-              };
           forced =
             st:
             if st ? done then

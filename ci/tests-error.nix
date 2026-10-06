@@ -4357,6 +4357,11 @@ in
             [ "imports" ]
           ])
           ''gen-scope.resolve: node "p" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
+      test-kid-order-a-subtree-datum-before-a-later-leaf-datum = forced (builtins.deepSeq F.orderNonLeafFirst F.orderNonLeafFirst) "EARLIER-DATUM-FORCED";
+      test-kid-order-a-leaf-datum-before-a-later-leaf-edge = forced (builtins.deepSeq F.orderLeafEdges F.orderLeafEdges) "EARLIER-DATUM-FORCED";
+      test-kid-order-a-leaf-datum-before-a-later-subtree-edge = forced (builtins.deepSeq F.orderNonLeafEdges F.orderNonLeafEdges) "EARLIER-DATUM-FORCED";
+      test-kid-order-a-subtree-datum-before-a-later-leaf-edge = forced (builtins.deepSeq F.orderSubtreeThenLeafEdges F.orderSubtreeThenLeafEdges) "EARLIER-DATUM-FORCED";
+      test-D9-a-parent-cycle-through-a-batched-leaf-is-refused = forced (builtins.deepSeq F.cycleBatched F.cycleBatched) ''gen-scope.resolve: node "a" is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk'';
     };
 
   # ── THE FOUR COLLECTION WALKS ARE RESOLUTIONS (den-hoag-4or0a): what they refuse ──
