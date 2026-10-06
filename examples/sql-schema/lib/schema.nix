@@ -178,350 +178,357 @@ let
   evalSchema =
     fleet:
     let
-      eval = lib.evalModules {
-        modules = [
-          {
-            # ── Schema kind declarations ──
-            options.schema = mkSchemaOption { };
+      # The kinds, from their own evaluation strictly before the fleet's.
+      kinds =
+        (lib.evalModules {
+          modules = [
+            {
+              options.schema = mkSchemaOption { };
+              config.schema = top.config.schema;
+            }
+          ];
+        }).config.schema;
+      eval = lib.evalModules { modules = [ top ]; };
+      top = {
+        # ── Schema kind declarations ──
+        options.schema = mkSchemaOption { };
 
-            # Infrastructure topology
-            config.schema.datacenter = {
-              options.region = lib.mkOption { type = lib.types.str; };
-            };
+        # Infrastructure topology
+        config.schema.datacenter = {
+          options.region = lib.mkOption { type = lib.types.str; };
+        };
 
-            config.schema.environment = {
-              options.tier = lib.mkOption { type = lib.types.str; };
-            };
+        config.schema.environment = {
+          options.tier = lib.mkOption { type = lib.types.str; };
+        };
 
-            config.schema.network = {
-              parent = "datacenter";
-              options.cidr = lib.mkOption { type = lib.types.str; };
-              options.datacenter = lib.mkOption { type = declarationOf "datacenter"; };
-            };
+        config.schema.network = {
+          parent = "datacenter";
+          options.cidr = lib.mkOption { type = lib.types.str; };
+          options.datacenter = lib.mkOption { type = declarationOf "datacenter"; };
+        };
 
-            config.schema.subnet = {
-              parent = "network";
-              options.cidr = lib.mkOption { type = lib.types.str; };
-              options.gateway = lib.mkOption { type = lib.types.str; };
-              options.network = lib.mkOption { type = declarationOf "network"; };
-            };
+        config.schema.subnet = {
+          parent = "network";
+          options.cidr = lib.mkOption { type = lib.types.str; };
+          options.gateway = lib.mkOption { type = lib.types.str; };
+          options.network = lib.mkOption { type = declarationOf "network"; };
+        };
 
-            config.schema.vlan = {
-              parent = "subnet";
-              options.id = lib.mkOption { type = lib.types.int; };
-              options.vlan-name = lib.mkOption { type = lib.types.str; };
-              options.subnet = lib.mkOption { type = declarationOf "subnet"; };
-            };
+        config.schema.vlan = {
+          parent = "subnet";
+          options.id = lib.mkOption { type = lib.types.int; };
+          options.vlan-name = lib.mkOption { type = lib.types.str; };
+          options.subnet = lib.mkOption { type = declarationOf "subnet"; };
+        };
 
-            # Compute
-            config.schema.server = {
-              options.hostname = lib.mkOption { type = lib.types.str; };
-              options.os = lib.mkOption { type = lib.types.str; };
-              options.cores = lib.mkOption { type = lib.types.int; };
-              options.ram_gb = lib.mkOption { type = lib.types.int; };
-              options.tags = lib.mkOption {
-                type = lib.types.listOf lib.types.str;
-                default = [ ];
-              };
-              options.datacenter = lib.mkOption { type = declarationOf "datacenter"; };
-              options.environment = lib.mkOption { type = declarationOf "environment"; };
-              options.subnet = lib.mkOption { type = declarationOf "subnet"; };
-              options.replaces = lib.mkOption {
-                type = lib.types.nullOr (declarationOf "server");
-                default = null;
-              };
-              validators = [ validators.server-ram-proportional ];
-            };
+        # Compute
+        config.schema.server = {
+          options.hostname = lib.mkOption { type = lib.types.str; };
+          options.os = lib.mkOption { type = lib.types.str; };
+          options.cores = lib.mkOption { type = lib.types.int; };
+          options.ram_gb = lib.mkOption { type = lib.types.int; };
+          options.tags = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+          };
+          options.datacenter = lib.mkOption { type = declarationOf "datacenter"; };
+          options.environment = lib.mkOption { type = declarationOf "environment"; };
+          options.subnet = lib.mkOption { type = declarationOf "subnet"; };
+          options.replaces = lib.mkOption {
+            type = lib.types.nullOr (declarationOf "server");
+            default = null;
+          };
+          validators = [ validators.server-ram-proportional ];
+        };
 
-            config.schema.interface = {
-              parent = "server";
-              options.mac = lib.mkOption { type = lib.types.str; };
-              options.ip = lib.mkOption { type = lib.types.str; };
-              options.primary_ = lib.mkOption { type = lib.types.bool; };
-              options.server = lib.mkOption { type = declarationOf "server"; };
-              options.vlan = lib.mkOption { type = declarationOf "vlan"; };
-            };
+        config.schema.interface = {
+          parent = "server";
+          options.mac = lib.mkOption { type = lib.types.str; };
+          options.ip = lib.mkOption { type = lib.types.str; };
+          options.primary_ = lib.mkOption { type = lib.types.bool; };
+          options.server = lib.mkOption { type = declarationOf "server"; };
+          options.vlan = lib.mkOption { type = declarationOf "vlan"; };
+        };
 
-            # Services
-            config.schema.service = {
-              options.protocol = lib.mkOption { type = lib.types.str; };
-              options.healthcheck = lib.mkOption { type = lib.types.str; };
-              options.server = lib.mkOption { type = declarationOf "server"; };
-              options.environment = lib.mkOption { type = declarationOf "environment"; };
-            };
+        # Services
+        config.schema.service = {
+          options.protocol = lib.mkOption { type = lib.types.str; };
+          options.healthcheck = lib.mkOption { type = lib.types.str; };
+          options.server = lib.mkOption { type = declarationOf "server"; };
+          options.environment = lib.mkOption { type = declarationOf "environment"; };
+        };
 
-            config.schema.port = {
-              parent = "service";
-              options.number = lib.mkOption { type = lib.types.int; };
-              options.protocol = lib.mkOption { type = lib.types.str; };
-              options.expose = lib.mkOption { type = lib.types.bool; };
-              options.service = lib.mkOption { type = declarationOf "service"; };
-            };
+        config.schema.port = {
+          parent = "service";
+          options.number = lib.mkOption { type = lib.types.int; };
+          options.protocol = lib.mkOption { type = lib.types.str; };
+          options.expose = lib.mkOption { type = lib.types.bool; };
+          options.service = lib.mkOption { type = declarationOf "service"; };
+        };
 
-            config.schema.service-dependency = {
-              options.upstream = lib.mkOption { type = declarationOf "service"; };
-              options.downstream = lib.mkOption { type = declarationOf "service"; };
-              options.required = lib.mkOption { type = lib.types.bool; };
-              options.protocol = lib.mkOption { type = lib.types.str; };
-              validators = [ validators.no-self-dependency ];
-            };
+        config.schema.service-dependency = {
+          options.upstream = lib.mkOption { type = declarationOf "service"; };
+          options.downstream = lib.mkOption { type = declarationOf "service"; };
+          options.required = lib.mkOption { type = lib.types.bool; };
+          options.protocol = lib.mkOption { type = lib.types.str; };
+          validators = [ validators.no-self-dependency ];
+        };
 
-            # DNS
-            config.schema.domain = {
-              options.tld = lib.mkOption { type = lib.types.bool; };
-              options.wildcard = lib.mkOption { type = lib.types.bool; };
-              options.environment = lib.mkOption { type = declarationOf "environment"; };
-            };
+        # DNS
+        config.schema.domain = {
+          options.tld = lib.mkOption { type = lib.types.bool; };
+          options.wildcard = lib.mkOption { type = lib.types.bool; };
+          options.environment = lib.mkOption { type = declarationOf "environment"; };
+        };
 
-            config.schema.dns-record = {
-              parent = "domain";
-              options.type = lib.mkOption { type = lib.types.str; };
-              options.ttl = lib.mkOption { type = lib.types.int; };
-              options.server = lib.mkOption {
-                type = lib.types.nullOr (declarationOf "server");
-                default = null;
-              };
-              options.loadbalancer = lib.mkOption {
-                type = lib.types.nullOr (declarationOf "loadbalancer");
-                default = null;
-              };
-              options.domain = lib.mkOption { type = declarationOf "domain"; };
-              validators = [ validators.dns-record-has-target ];
-            };
+        config.schema.dns-record = {
+          parent = "domain";
+          options.type = lib.mkOption { type = lib.types.str; };
+          options.ttl = lib.mkOption { type = lib.types.int; };
+          options.server = lib.mkOption {
+            type = lib.types.nullOr (declarationOf "server");
+            default = null;
+          };
+          options.loadbalancer = lib.mkOption {
+            type = lib.types.nullOr (declarationOf "loadbalancer");
+            default = null;
+          };
+          options.domain = lib.mkOption { type = declarationOf "domain"; };
+          validators = [ validators.dns-record-has-target ];
+        };
 
-            # Load balancing
-            config.schema.loadbalancer = {
-              options.algorithm = lib.mkOption { type = lib.types.str; };
-              options.datacenter = lib.mkOption { type = declarationOf "datacenter"; };
-              options.environment = lib.mkOption { type = declarationOf "environment"; };
-              options.failover = lib.mkOption {
-                type = lib.types.nullOr (declarationOf "loadbalancer");
-                default = null;
-              };
-            };
+        # Load balancing
+        config.schema.loadbalancer = {
+          options.algorithm = lib.mkOption { type = lib.types.str; };
+          options.datacenter = lib.mkOption { type = declarationOf "datacenter"; };
+          options.environment = lib.mkOption { type = declarationOf "environment"; };
+          options.failover = lib.mkOption {
+            type = lib.types.nullOr (declarationOf "loadbalancer");
+            default = null;
+          };
+        };
 
-            config.schema.backend = {
-              parent = "loadbalancer";
-              options.weight = lib.mkOption { type = lib.types.int; };
-              options.maxconn = lib.mkOption { type = lib.types.int; };
-              options.service = lib.mkOption { type = declarationOf "service"; };
-              options.loadbalancer = lib.mkOption { type = declarationOf "loadbalancer"; };
-            };
+        config.schema.backend = {
+          parent = "loadbalancer";
+          options.weight = lib.mkOption { type = lib.types.int; };
+          options.maxconn = lib.mkOption { type = lib.types.int; };
+          options.service = lib.mkOption { type = declarationOf "service"; };
+          options.loadbalancer = lib.mkOption { type = declarationOf "loadbalancer"; };
+        };
 
-            # Firewall
-            config.schema.firewall-rule = {
-              options.src-subnet = lib.mkOption { type = declarationOf "subnet"; };
-              options.dst-subnet = lib.mkOption { type = declarationOf "subnet"; };
-              options.src-server = lib.mkOption {
-                type = lib.types.nullOr (declarationOf "server");
-                default = null;
-              };
-              options.dst-server = lib.mkOption {
-                type = lib.types.nullOr (declarationOf "server");
-                default = null;
-              };
-              options.protocol = lib.mkOption { type = lib.types.str; };
-              options.port = lib.mkOption { type = lib.types.int; };
-              options.action = lib.mkOption { type = lib.types.str; };
-              options.priority = lib.mkOption { type = lib.types.int; };
-            };
+        # Firewall
+        config.schema.firewall-rule = {
+          options.src-subnet = lib.mkOption { type = declarationOf "subnet"; };
+          options.dst-subnet = lib.mkOption { type = declarationOf "subnet"; };
+          options.src-server = lib.mkOption {
+            type = lib.types.nullOr (declarationOf "server");
+            default = null;
+          };
+          options.dst-server = lib.mkOption {
+            type = lib.types.nullOr (declarationOf "server");
+            default = null;
+          };
+          options.protocol = lib.mkOption { type = lib.types.str; };
+          options.port = lib.mkOption { type = lib.types.int; };
+          options.action = lib.mkOption { type = lib.types.str; };
+          options.priority = lib.mkOption { type = lib.types.int; };
+        };
 
-            # Certificates
-            config.schema.certificate = {
-              options.domains = lib.mkOption { type = lib.types.listOf lib.types.str; };
-              options.issuer = lib.mkOption { type = lib.types.str; };
-              options.expires-days = lib.mkOption { type = lib.types.int; };
-              options.server = lib.mkOption {
-                type = lib.types.nullOr (declarationOf "server");
-                default = null;
-              };
-              options.loadbalancer = lib.mkOption {
-                type = lib.types.nullOr (declarationOf "loadbalancer");
-                default = null;
-              };
-              validators = [ validators.cert-has-target ];
-            };
+        # Certificates
+        config.schema.certificate = {
+          options.domains = lib.mkOption { type = lib.types.listOf lib.types.str; };
+          options.issuer = lib.mkOption { type = lib.types.str; };
+          options.expires-days = lib.mkOption { type = lib.types.int; };
+          options.server = lib.mkOption {
+            type = lib.types.nullOr (declarationOf "server");
+            default = null;
+          };
+          options.loadbalancer = lib.mkOption {
+            type = lib.types.nullOr (declarationOf "loadbalancer");
+            default = null;
+          };
+          validators = [ validators.cert-has-target ];
+        };
 
-            # Scheduling
-            config.schema.schedule = {
-              options.cron = lib.mkOption { type = lib.types.str; };
-              options.enabled = lib.mkOption { type = lib.types.bool; };
-              options.service = lib.mkOption { type = declarationOf "service"; };
-              options.server = lib.mkOption { type = declarationOf "server"; };
-            };
+        # Scheduling
+        config.schema.schedule = {
+          options.cron = lib.mkOption { type = lib.types.str; };
+          options.enabled = lib.mkOption { type = lib.types.bool; };
+          options.service = lib.mkOption { type = declarationOf "service"; };
+          options.server = lib.mkOption { type = declarationOf "server"; };
+        };
 
-            # Identity
-            config.schema.ldap-group = {
-              options.gid = lib.mkOption { type = lib.types.int; };
-              options.description = lib.mkOption { type = lib.types.str; };
-            };
+        # Identity
+        config.schema.ldap-group = {
+          options.gid = lib.mkOption { type = lib.types.int; };
+          options.description = lib.mkOption { type = lib.types.str; };
+        };
 
-            config.schema.ldap-role = {
-              options.permissions = lib.mkOption { type = lib.types.listOf lib.types.str; };
-              options.ldap-group = lib.mkOption { type = declarationOf "ldap-group"; };
-            };
+        config.schema.ldap-role = {
+          options.permissions = lib.mkOption { type = lib.types.listOf lib.types.str; };
+          options.ldap-group = lib.mkOption { type = declarationOf "ldap-group"; };
+        };
 
-            config.schema.user = {
-              options.uid = lib.mkOption { type = lib.types.int; };
-              options.shell = lib.mkOption { type = lib.types.str; };
-              options.ssh-key = lib.mkOption { type = lib.types.str; };
-              options.ldap-role = lib.mkOption { type = declarationOf "ldap-role"; };
-              options.servers = lib.mkOption {
-                type = setOf (declarationOf "server");
-                default = [ ];
-              };
-              options.manager = lib.mkOption {
-                type = lib.types.nullOr (declarationOf "user");
-                default = null;
-              };
-            };
+        config.schema.user = {
+          options.uid = lib.mkOption { type = lib.types.int; };
+          options.shell = lib.mkOption { type = lib.types.str; };
+          options.ssh-key = lib.mkOption { type = lib.types.str; };
+          options.ldap-role = lib.mkOption { type = declarationOf "ldap-role"; };
+          options.servers = lib.mkOption {
+            type = setOf (declarationOf "server");
+            default = [ ];
+          };
+          options.manager = lib.mkOption {
+            type = lib.types.nullOr (declarationOf "user");
+            default = null;
+          };
+        };
 
-            # Policy
-            config.schema.access-policy = {
-              options.ldap-role = lib.mkOption { type = declarationOf "ldap-role"; };
-              options.resource-kind = lib.mkOption { type = lib.types.str; };
-              options.scope = lib.mkOption { type = lib.types.str; };
-              options.actions = lib.mkOption { type = lib.types.listOf lib.types.str; };
-            };
+        # Policy
+        config.schema.access-policy = {
+          options.ldap-role = lib.mkOption { type = declarationOf "ldap-role"; };
+          options.resource-kind = lib.mkOption { type = lib.types.str; };
+          options.scope = lib.mkOption { type = lib.types.str; };
+          options.actions = lib.mkOption { type = lib.types.listOf lib.types.str; };
+        };
 
-            # ── Instance registries ──
-            options.datacenters = mkInstanceRegistry { } eval.config.schema.datacenter;
-            options.environments = mkInstanceRegistry {
-              refinements.tier = refinements.envTier;
-            } eval.config.schema.environment;
-            options.networks = mkInstanceRegistry {
-              refs.datacenter = eval.config.datacenters;
-              refinements.cidr = refinements.cidr;
-            } eval.config.schema.network;
-            options.subnets = mkInstanceRegistry {
-              refs.network = eval.config.networks;
-              refinements.cidr = refinements.cidr;
-              refinements.gateway = refinements.ipv4Address;
-            } eval.config.schema.subnet;
-            options.vlans = mkInstanceRegistry {
-              refs.subnet = eval.config.subnets;
-              refinements.id = refinements.vlanId;
-            } eval.config.schema.vlan;
-            options.servers = mkInstanceRegistry {
-              refs.datacenter = eval.config.datacenters;
-              refs.environment = eval.config.environments;
-              refs.subnet = eval.config.subnets;
-              refs.replaces = {
-                instances = eval.config.servers;
-                deferred = true;
-              };
-              refinements.hostname = refinements.nonEmpty;
-              refinements.cores = refinements.positive;
-              refinements.ram_gb = refinements.positive;
-            } eval.config.schema.server;
-            options.interfaces = mkInstanceRegistry {
-              refs.server = eval.config.servers;
-              refs.vlan = eval.config.vlans;
-              refinements.mac = refinements.macAddress;
-              refinements.ip = refinements.ipv4Address;
-            } eval.config.schema.interface;
-            options.services = mkInstanceRegistry {
-              refs.server = eval.config.servers;
-              refs.environment = eval.config.environments;
-              refinements.protocol = refinements.serviceProtocol;
-            } eval.config.schema.service;
-            options.ports = mkInstanceRegistry {
-              refs.service = eval.config.services;
-              refinements.number = refinements.tcpPort;
-              refinements.protocol = refinements.serviceProtocol;
-            } eval.config.schema.port;
-            options.service-dependencies = mkInstanceRegistry {
-              refs.upstream = eval.config.services;
-              refs.downstream = eval.config.services;
-              refinements.protocol = refinements.serviceProtocol;
-            } eval.config.schema.service-dependency;
-            options.domains = mkInstanceRegistry {
-              refs.environment = eval.config.environments;
-            } eval.config.schema.domain;
-            options.dns-records = mkInstanceRegistry {
-              refs.server = eval.config.servers;
-              refs.loadbalancer = eval.config.loadbalancers;
-              refs.domain = eval.config.domains;
-              refinements.type = refinements.dnsRecordType;
-              refinements.ttl = refinements.positive;
-            } eval.config.schema.dns-record;
-            options.loadbalancers = mkInstanceRegistry {
-              refs.datacenter = eval.config.datacenters;
-              refs.environment = eval.config.environments;
-              refs.failover = {
-                instances = eval.config.loadbalancers;
-                deferred = true;
-              };
-              refinements.algorithm = refinements.lbAlgorithm;
-            } eval.config.schema.loadbalancer;
-            options.backends = mkInstanceRegistry {
-              refs.service = eval.config.services;
-              refs.loadbalancer = eval.config.loadbalancers;
-              refinements.weight = refinements.positive;
-              refinements.maxconn = refinements.positive;
-            } eval.config.schema.backend;
-            options.firewall-rules = mkInstanceRegistry {
-              refs.src-subnet = eval.config.subnets;
-              refs.dst-subnet = eval.config.subnets;
-              refs.src-server = eval.config.servers;
-              refs.dst-server = eval.config.servers;
-              refinements.protocol = refinements.serviceProtocol;
-              refinements.port = refinements.tcpPort;
-              refinements.action = refinements.firewallAction;
-              refinements.priority = refinements.positive;
-            } eval.config.schema.firewall-rule;
-            options.certificates = mkInstanceRegistry {
-              refs.server = eval.config.servers;
-              refs.loadbalancer = eval.config.loadbalancers;
-              refinements.issuer = refinements.certIssuer;
-              refinements.expires-days = refinements.positive;
-            } eval.config.schema.certificate;
-            options.schedules = mkInstanceRegistry {
-              refs.service = eval.config.services;
-              refs.server = eval.config.servers;
-            } eval.config.schema.schedule;
-            options.ldap-groups = mkInstanceRegistry { } eval.config.schema.ldap-group;
-            options.ldap-roles = mkInstanceRegistry {
-              refs.ldap-group = eval.config.ldap-groups;
-            } eval.config.schema.ldap-role;
-            options.users = mkInstanceRegistry {
-              refs.ldap-role = eval.config.ldap-roles;
-              refs.servers = eval.config.servers;
-              refs.manager = {
-                instances = eval.config.users;
-                deferred = true;
-              };
-            } eval.config.schema.user;
-            options.access-policies = mkInstanceRegistry {
-              refs.ldap-role = eval.config.ldap-roles;
-            } eval.config.schema.access-policy;
+        # ── Instance registries ──
+        options.datacenters = mkInstanceRegistry { } kinds.datacenter;
+        options.environments = mkInstanceRegistry {
+          refinements.tier = refinements.envTier;
+        } kinds.environment;
+        options.networks = mkInstanceRegistry {
+          refs.datacenter = eval.config.datacenters;
+          refinements.cidr = refinements.cidr;
+        } kinds.network;
+        options.subnets = mkInstanceRegistry {
+          refs.network = eval.config.networks;
+          refinements.cidr = refinements.cidr;
+          refinements.gateway = refinements.ipv4Address;
+        } kinds.subnet;
+        options.vlans = mkInstanceRegistry {
+          refs.subnet = eval.config.subnets;
+          refinements.id = refinements.vlanId;
+        } kinds.vlan;
+        options.servers = mkInstanceRegistry {
+          refs.datacenter = eval.config.datacenters;
+          refs.environment = eval.config.environments;
+          refs.subnet = eval.config.subnets;
+          refs.replaces = {
+            instances = eval.config.servers;
+            deferred = true;
+          };
+          refinements.hostname = refinements.nonEmpty;
+          refinements.cores = refinements.positive;
+          refinements.ram_gb = refinements.positive;
+        } kinds.server;
+        options.interfaces = mkInstanceRegistry {
+          refs.server = eval.config.servers;
+          refs.vlan = eval.config.vlans;
+          refinements.mac = refinements.macAddress;
+          refinements.ip = refinements.ipv4Address;
+        } kinds.interface;
+        options.services = mkInstanceRegistry {
+          refs.server = eval.config.servers;
+          refs.environment = eval.config.environments;
+          refinements.protocol = refinements.serviceProtocol;
+        } kinds.service;
+        options.ports = mkInstanceRegistry {
+          refs.service = eval.config.services;
+          refinements.number = refinements.tcpPort;
+          refinements.protocol = refinements.serviceProtocol;
+        } kinds.port;
+        options.service-dependencies = mkInstanceRegistry {
+          refs.upstream = eval.config.services;
+          refs.downstream = eval.config.services;
+          refinements.protocol = refinements.serviceProtocol;
+        } kinds.service-dependency;
+        options.domains = mkInstanceRegistry {
+          refs.environment = eval.config.environments;
+        } kinds.domain;
+        options.dns-records = mkInstanceRegistry {
+          refs.server = eval.config.servers;
+          refs.loadbalancer = eval.config.loadbalancers;
+          refs.domain = eval.config.domains;
+          refinements.type = refinements.dnsRecordType;
+          refinements.ttl = refinements.positive;
+        } kinds.dns-record;
+        options.loadbalancers = mkInstanceRegistry {
+          refs.datacenter = eval.config.datacenters;
+          refs.environment = eval.config.environments;
+          refs.failover = {
+            instances = eval.config.loadbalancers;
+            deferred = true;
+          };
+          refinements.algorithm = refinements.lbAlgorithm;
+        } kinds.loadbalancer;
+        options.backends = mkInstanceRegistry {
+          refs.service = eval.config.services;
+          refs.loadbalancer = eval.config.loadbalancers;
+          refinements.weight = refinements.positive;
+          refinements.maxconn = refinements.positive;
+        } kinds.backend;
+        options.firewall-rules = mkInstanceRegistry {
+          refs.src-subnet = eval.config.subnets;
+          refs.dst-subnet = eval.config.subnets;
+          refs.src-server = eval.config.servers;
+          refs.dst-server = eval.config.servers;
+          refinements.protocol = refinements.serviceProtocol;
+          refinements.port = refinements.tcpPort;
+          refinements.action = refinements.firewallAction;
+          refinements.priority = refinements.positive;
+        } kinds.firewall-rule;
+        options.certificates = mkInstanceRegistry {
+          refs.server = eval.config.servers;
+          refs.loadbalancer = eval.config.loadbalancers;
+          refinements.issuer = refinements.certIssuer;
+          refinements.expires-days = refinements.positive;
+        } kinds.certificate;
+        options.schedules = mkInstanceRegistry {
+          refs.service = eval.config.services;
+          refs.server = eval.config.servers;
+        } kinds.schedule;
+        options.ldap-groups = mkInstanceRegistry { } kinds.ldap-group;
+        options.ldap-roles = mkInstanceRegistry {
+          refs.ldap-group = eval.config.ldap-groups;
+        } kinds.ldap-role;
+        options.users = mkInstanceRegistry {
+          refs.ldap-role = eval.config.ldap-roles;
+          refs.servers = eval.config.servers;
+          refs.manager = {
+            instances = eval.config.users;
+            deferred = true;
+          };
+        } kinds.user;
+        options.access-policies = mkInstanceRegistry {
+          refs.ldap-role = eval.config.ldap-roles;
+        } kinds.access-policy;
 
-            # ── Fleet data (config values) ──
-            config.datacenters = fleet.datacenter or { };
-            config.environments = fleet.environment or { };
-            config.networks = fleet.network or { };
-            config.subnets = fleet.subnet or { };
-            config.vlans = lib.mapAttrs (_: v: builtins.removeAttrs v [ "name" ] // { vlan-name = v.name; }) (
-              fleet.vlan or { }
-            );
-            config.servers = fleet.server or { };
-            config.interfaces = fleet.interface or { };
-            config.services = fleet.service or { };
-            config.ports = fleet.port or { };
-            config.service-dependencies = fleet.service-dependency or { };
-            config.domains = fleet.domain or { };
-            config.dns-records = fleet.dns-record or { };
-            config.loadbalancers = fleet.loadbalancer or { };
-            config.backends = fleet.backend or { };
-            config.firewall-rules = fleet.firewall-rule or { };
-            config.certificates = fleet.certificate or { };
-            config.schedules = fleet.schedule or { };
-            config.ldap-groups = fleet.ldap-group or { };
-            config.ldap-roles = fleet.ldap-role or { };
-            config.users = fleet.user or { };
-            config.access-policies = fleet.access-policy or { };
-          }
-        ];
+        # ── Fleet data (config values) ──
+        config.datacenters = fleet.datacenter or { };
+        config.environments = fleet.environment or { };
+        config.networks = fleet.network or { };
+        config.subnets = fleet.subnet or { };
+        config.vlans = lib.mapAttrs (_: v: builtins.removeAttrs v [ "name" ] // { vlan-name = v.name; }) (
+          fleet.vlan or { }
+        );
+        config.servers = fleet.server or { };
+        config.interfaces = fleet.interface or { };
+        config.services = fleet.service or { };
+        config.ports = fleet.port or { };
+        config.service-dependencies = fleet.service-dependency or { };
+        config.domains = fleet.domain or { };
+        config.dns-records = fleet.dns-record or { };
+        config.loadbalancers = fleet.loadbalancer or { };
+        config.backends = fleet.backend or { };
+        config.firewall-rules = fleet.firewall-rule or { };
+        config.certificates = fleet.certificate or { };
+        config.schedules = fleet.schedule or { };
+        config.ldap-groups = fleet.ldap-group or { };
+        config.ldap-roles = fleet.ldap-role or { };
+        config.users = fleet.user or { };
+        config.access-policies = fleet.access-policy or { };
       };
     in
     {
