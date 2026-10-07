@@ -454,7 +454,9 @@ let
   # ADR-0032 (a named refusal where a real ceiling exists): the parser's recursion is bounded
   # by the pattern's length, knowable before the first frame. Nested groups bind: `(`×k a `)`×k
   # returns at k = 623 (1,247 characters) and aborts at 624, and 200 caller frames move that
-  # boundary by 13 levels. The default leaves ~1,900 caller frames of headroom. LOWER it to match
+  # boundary by 13 levels. The default's caller-frame headroom depends on the shape: `(`×499 a
+  # `)`×499 leaves ~1,990, but the binding in-band shape, `?`-nesting `(`×333 a `)?`×333 at
+  # 1,000 characters, aborts past 984 caller frames (986 on Lix). LOWER it to match
   # the stack a caller is itself nested in; raising it past the measured boundary is out of
   # contract and meets the uncatchable abort this cap exists to replace.
   parseMaxLength = 1000;
