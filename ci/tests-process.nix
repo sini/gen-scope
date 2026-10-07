@@ -250,9 +250,21 @@
           [ "$val" = "800" ] || die child-cost-400 "expected value 800, got '$val'"
           [ $((stat - t100)) -le $((36 * 300)) ] || die child-cost-400 "the nta channel costs $((stat - t100)) thunks over 300 children, above 36 per child"
 
+          # den-hoag-hm8t1 — a dedup group's per-key combination is linear in the group: one
+          # group of n claims, each writing its own key, at n = 100, 400, 1600. Linear growth makes
+          # the second difference in function calls 4x the first; it must stay under 5x. A per-key
+          # scan of the group read 14.7x (168840 then 2478058 calls). Calls, not thunks: the scan's
+          # predicate allocates no thunk, so the thunk count reads it as linear.
+          for n in 100 400 1600; do
+            callsOf "claim-group-$n"
+            [ "$val" = "$n" ] || die "claim-group-$n" "expected value $n, got '$val'"
+            eval "cg$n=$calls"
+          done
+          [ $((cg1600 - cg400)) -lt $((5 * (cg400 - cg100))) ] || die claim-group-1600 "function calls grow faster than linear in the group: $cg100 / $cg400 / $cg1600"
+
           # 0/0 is a false pass: the runner must have executed every cell above.
-          [ "$ran" = "31" ] || die runner "expected 31 evaluations, ran $ran"
-          echo "tests-process: 31 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
+          [ "$ran" = "34" ] || die runner "expected 34 evaluations, ran $ran"
+          echo "tests-process: 34 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
         ''
         + ''
           cat "$out"

@@ -28,7 +28,13 @@ let
   # readable inside the build sandbox.
   graph = import "${genGraphSrc}" { inherit prelude; };
   # The registry type check ships with `mkKinds`; the two guards below take it as a formal.
-  inherit (import "${libSrc}/cascade.nix" { inherit prelude; }) kindSetDefect mkKind mkKinds;
+  inherit (import "${libSrc}/cascade.nix" { inherit prelude; })
+    kindSetDefect
+    mkClaim
+    mkKind
+    mkKinds
+    resolveClaims
+    ;
   inherit (import "${libSrc}/require-scope.nix" { inherit prelude kindSetDefect; }) requireScope;
   # The declared relation's input type. The evaluator takes it as a formal like `requireScope`, so
   # this wiring binds it the same way; none of the arms below supplies a relation, so every one of
@@ -592,6 +598,37 @@ let
       ) "r" (builtins.genList (x: x) n);
     in
     if what == "ids" then builtins.length ev.allNodeIds else ev.get deepest "depth";
+
+  # den-hoag-hm8t1 — one dedup group of `n` claims, each writing its own resource key: the
+  # group's per-key combination over `n` keys and `n` contributors. The runner reads the
+  # evaluator's function calls at three sizes and requires linear growth; a per-key scan of the
+  # group grows as keys × claims. The value is the hand-derived key count, n.
+  claimGroup =
+    n:
+    let
+      r =
+        resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              dedupKey = _: "g";
+              fold = _: vs: vs;
+              resolve = c: _: { resources.${c.tag} = c.tag; };
+            } "item")
+          ])
+          (
+            builtins.genList (
+              i:
+              mkClaim {
+                kind = "item";
+                subject.id_hash = "id-${toString i}";
+                tag = "t${toString i}";
+              }
+            ) n
+          );
+    in
+    builtins.deepSeq [ r.resources r.trace.resources ] (
+      builtins.length (builtins.attrNames r.resources.item)
+    );
 in
 if arm == "lrp2" then
   lrp2 (builtins.div 1 0)
@@ -660,5 +697,11 @@ else if arm == "child-cost-100" then
   childCost 100
 else if arm == "child-cost-400" then
   childCost 400
+else if arm == "claim-group-100" then
+  claimGroup 100
+else if arm == "claim-group-400" then
+  claimGroup 400
+else if arm == "claim-group-1600" then
+  claimGroup 1600
 else
   throw "tests-process-cells: unknown arm '${arm}'"

@@ -1166,24 +1166,35 @@ let
                 gkey = k;
                 insts = g.${k};
               }) (attrNames g);
+          # One pass over the group's fragments, keyed by resource key. Each key's contributors stay
+          # in schedule order, which is the order a fold is promised. A per-key scan of the group
+          # would cost keys × claims.
           foldGroup =
             grp:
             let
-              allKeys = unique (concatMap (i: attrNames (i.result.resources or { })) grp.insts);
+              byKey = groupBy (f: f.key) (
+                concatMap (
+                  i:
+                  map (key: {
+                    inherit key;
+                    inherit (i) path;
+                    value = i.result.resources.${key};
+                  }) (attrNames (i.result.resources or { }))
+                ) grp.insts
+              );
               keyEntry =
                 key:
                 let
-                  contributors = filter (i: (i.result.resources or { }) ? ${key}) grp.insts;
-                  values = map (i: i.result.resources.${key}) contributors;
-                  paths = map (i: i.path) contributors;
+                  values = map (f: f.value) byKey.${key};
                 in
                 {
-                  inherit key paths;
+                  inherit key;
+                  paths = map (f: f.path) byKey.${key};
                   groupKey = grp.gkey;
                   value = if kf == null then head values else kf key values;
                 };
             in
-            map keyEntry allKeys;
+            map keyEntry (attrNames byKey);
           allEntries = concatLists (map foldGroup groups);
           # A key produced by more than one group has two authors and no merge rule between them.
           byKeyName = groupBy (e: e.key) allEntries;
