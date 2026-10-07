@@ -75,6 +75,20 @@ let
   # A family-2 equation seeded with each violation mode, and with each admitting control.
   seeded = value: evalWith { "edges-owns" = _self: _id: value; };
 
+  # A cell over `a`'s findings under `seeded value`. The findings are gen-graph's text, so each is cut
+  # to the length of the sentence the cell pins: the cell holds the identifying sentence and position,
+  # anchored at the start, and what gen-graph says after them is gen-graph's to reword.
+  pinsFindings = value: want: {
+    expr = lib.imap0 (
+      i: m:
+      if i < builtins.length want then
+        builtins.substring 0 (builtins.stringLength (builtins.elemAt want i)) m
+      else
+        m
+    ) ((seeded value).projectionFindings "a");
+    expected = want;
+  };
+
   # Both resolutional attributes poisoned. The projection reads the structural partition, so it
   # never reaches these; the control below shows they really throw when read.
   poisonedResolutional = evalWith {
@@ -172,12 +186,9 @@ in
       expr = didThrow ((seeded "not-a-list").structuralEdges "a");
       expected = true;
     };
-    test-non-list-message-names-node-family-and-type = {
-      expr = (seeded "not-a-list").projectionFindings "a";
-      expected = [
-        "gen-graph.mkEndpointProjection: node 'a' structural attribute 'edges-owns': got string, expected a list of node ids"
-      ];
-    };
+    test-non-list-message-names-node-family-and-type = pinsFindings "not-a-list" [
+      "gen-graph.mkEndpointProjection: node 'a' structural attribute 'edges-owns': got string, expected a list of node ids"
+    ];
     test-junk-element-is-refused = {
       expr = didThrow (
         (seeded [
@@ -190,28 +201,26 @@ in
     };
     # Neither message interpolates its offender — naming a non-string is the coercion abort that
     # would make this very cell unable to fire.
-    test-junk-element-messages-name-position-and-type = {
-      expr =
-        (seeded [
+    test-junk-element-messages-name-position-and-type =
+      pinsFindings
+        [
           42
           { nope = 1; }
-        ]).projectionFindings
-          "a";
-      expected = [
-        "gen-graph.mkEndpointProjection: node 'a' structural attribute 'edges-owns' element 0: got int, expected a node id"
-        "gen-graph.mkEndpointProjection: node 'a' structural attribute 'edges-owns' element 1: got set, expected a node id"
-      ];
-    };
+        ]
+        [
+          "gen-graph.mkEndpointProjection: node 'a' structural attribute 'edges-owns' element 0: got int, expected a node id"
+          "gen-graph.mkEndpointProjection: node 'a' structural attribute 'edges-owns' element 1: got set, expected a node id"
+        ];
     test-phantom-id-is-refused = {
       expr = didThrow ((seeded [ "ghost" ]).structuralEdges "a");
       expected = true;
     };
-    test-phantom-message-names-the-offending-id = {
-      expr = (seeded [ "ghost" ]).projectionFindings "a";
-      expected = [
-        "gen-graph.mkEndpointProjection: node 'a' structural attribute 'edges-owns': 'ghost' is not a node of the evaluated graph"
-      ];
-    };
+    test-phantom-message-names-the-offending-id =
+      pinsFindings
+        [ "ghost" ]
+        [
+          "gen-graph.mkEndpointProjection: node 'a' structural attribute 'edges-owns': 'ghost' is not a node of the evaluated graph"
+        ];
 
     # ★ THE CONTROL THAT MATTERS MOST HERE, because it is the one only the real substrate can pose:
     # the authority is the EVALUATED set, so a family-2 equation naming a SPAWNED node is admitted.
