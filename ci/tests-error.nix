@@ -3351,7 +3351,7 @@ in
         expr = handNode kD kD23;
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope.eval: node 'a' of kind 'host': ${collision}";
+          msg = exactly "gen-scope.eval: node 'a' of kind 'host': carry the kind's own value (`buildRoots` stamps it); two constructions of one kind are two kinds: ${collision}";
         };
       };
       # gzjf7: a marked value carrying no `__sealed` cannot be decided at an equal mark: refused by
@@ -3360,7 +3360,7 @@ in
         expr = handNode kD (builtins.removeAttrs kD [ "__sealed" ]);
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope.eval: node 'a' of kind 'host': the kind value 'host' carries a mark but no sealed subjects (`__sealed`), so an equal mark cannot be decided; take the kind from a gen-schema that stamps both";
+          msg = exactly "gen-scope.eval: node 'a' of kind 'host': carry the kind's own value (`buildRoots` stamps it); two constructions of one kind are two kinds: the kind value 'host' carries a mark but no sealed subjects (`__sealed`), so an equal mark cannot be decided; take the kind from a gen-schema that stamps both";
         };
       };
       # gzjf7: the registry door decides a `//` merge the same way.
@@ -3375,7 +3375,7 @@ in
         };
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope: the kind registry files under 'host' a kind whose value is not the one entry 'leaf' resolved in its `below`: ${collision}";
+          msg = exactly "gen-scope: the kind registry files under 'host' a kind whose value is not the one entry 'leaf' resolved in its `below`: file the one kind value under both (`mkKinds` shares it); two constructions of one kind are two kinds: ${collision}";
         };
       };
       # c11: a merge filing under `host` a kind whose value differs from the one `leaf` resolved.

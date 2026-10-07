@@ -336,8 +336,9 @@ let
   # and an equal-mark pair goes to gen-algebra's `sealedCollisionEq` over `{ name; mark; sealed; }`,
   # the subject gen-schema's own `kindEq` and gen-select's `kindEq` hand it: `true` where the sealed
   # subjects are one value, a refusal naming the differing component(s) where they are not. Two
-  # constructions of one declaration over a sealed lambda are refused too, as the producer refuses
-  # them: a lambda's inequality under `==` is evidence of nothing. A marked value carrying no
+  # constructions of a declaration holding any sealed component — an option default, or a nixpkgs
+  # type record built per construction — are refused too, as the producer refuses them: a closure's
+  # inequality under `==` is evidence of nothing. A marked value carrying no
   # `__sealed` is refused at an equal mark, as the producer's `kindSubject` refuses it: absent is not
   # "nothing sealed". `null` (no value) equals only `null`; an unmarked value equals nothing.
   sameKindValue =
@@ -357,6 +358,12 @@ let
         throw "${site}: the kind value '${
           (if a ? __sealed then b else a).kind or "(unnamed)"
         }' carries a mark but no sealed subjects (`__sealed`), so an equal mark cannot be decided; take the kind from a gen-schema that stamps both"
+      # `sealedCollisionEq`'s own first limb (`eq a.sealed b.sealed`, the same `==` under the same
+      # `tryEval`), hoisted so that the equal case allocates no subjects; every other outcome is
+      # still the helper's. The helper's shape check (`sealed` an attribute set) is not repeated
+      # here, so two equal non-set `__sealed` are admitted where the helper would refuse the shape.
+      else if (builtins.tryEval (a.__sealed == b.__sealed)).value or false then
+        true
       else
         algebra.sealedCollisionEq site
           {
@@ -685,7 +692,7 @@ let
     && attrNames a.nta == attrNames b.nta
     &&
       sameKindValue
-        "gen-scope: the kind registry files under '${a.name}' a kind whose value is not the one entry '${host}' resolved in its `below`"
+        "gen-scope: the kind registry files under '${a.name}' a kind whose value is not the one entry '${host}' resolved in its `below`: file the one kind value under both (`mkKinds` shares it); two constructions of one kind are two kinds"
         a.kindValue
         b.kindValue;
 

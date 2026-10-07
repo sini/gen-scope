@@ -163,7 +163,7 @@ in
     # (gen-algebra's `hasMark`/`markOf`), where `identityOf` answers the compared arm for it. Both
     # doors read it: `mkKinds` admission and the eval door's node-against-registry comparison, whose
     # live arm is a node carrying a different kind's value.
-    test-dg8d1-a-sealed-kind-value-is-admitted-and-compared-by-its-mark = {
+    test-dg8d1-a-sealed-kind-value-is-admitted-and-bucketed-by-its-mark = {
       expr = {
         declared = (scopeWith sealedReg).nodes.a.type;
         coherent = handBuilt sealedReg { kindValue = sealedHost; };

@@ -272,6 +272,7 @@ in
             kindValue = {
               kind = "nest";
               __mint.minted = "nest:v";
+              __sealed = { };
             };
             nta.sub =
               self: id:

@@ -86,7 +86,9 @@
             n ? kindValue
             && builtins.isString t
             && kinds.kinds ? ${t}
-            && !(sameKindValue "gen-scope.${entry}: node '${id}' of kind '${t}'" n.kindValue
+            && !(sameKindValue
+              "gen-scope.${entry}: node '${id}' of kind '${t}': carry the kind's own value (`buildRoots` stamps it); two constructions of one kind are two kinds"
+              n.kindValue
               kinds.kinds.${t}.kindValue
             )
           ) (builtins.attrNames scope.nodes);
