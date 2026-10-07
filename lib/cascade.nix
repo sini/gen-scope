@@ -316,12 +316,17 @@ let
   # digest) and `markOf` demands, never `__mint.minted` raw. Not `identityOf`: a kind with an option
   # default carries a non-empty `__sealed`, and `identityOf` answers the compared arm for it while
   # its mark still answers. A name is a reference and a hand-written `{ kind = ...; }` carries no
-  # mint, so each is refused by name rather than admitted as a kind.
+  # mint, so each is refused by name rather than admitted as a kind. A `__sealed` that is present
+  # and not an attribute set is refused here too: every comparison of two kind values
+  # (`sameKindValue`) then holds one operand that passed this door, and so reads `__sealed` as the
+  # set of sealed subjects it is.
   isKindValue = v: isAttrs v && v ? kind && algebra.hasMark v;
   kindValueDefect =
     v:
-    if v == null || isKindValue v then
+    if v == null || isKindValue v && isAttrs (v.__sealed or { }) then
       null
+    else if isKindValue v then
+      "carries a `kindValue` whose `__sealed` is a ${typeOf v.__sealed}, not an attribute set of sealed subjects: take the kind from a gen-schema that stamps it"
     else if isString v then
       "carries the kind name \"${v}\" as its `kindValue`; a name is a reference, not a kind declaration: pass the kind value itself (e.g. `schema.widget`)"
     else if isAttrs v then
@@ -360,8 +365,9 @@ let
         }' carries a mark but no sealed subjects (`__sealed`), so an equal mark cannot be decided; take the kind from a gen-schema that stamps both"
       # `sealedCollisionEq`'s own first limb (`eq a.sealed b.sealed`, the same `==` under the same
       # `tryEval`), hoisted so that the equal case allocates no subjects; every other outcome is
-      # still the helper's. The helper's shape check (`sealed` an attribute set) is not repeated
-      # here, so two equal non-set `__sealed` are admitted where the helper would refuse the shape.
+      # still the helper's. The helper's shape check (`sealed` an attribute set) needs no repeat:
+      # both callers hand a registry value as one operand, which `kindValueDefect` admitted only
+      # with a set `__sealed`, so an equal `__sealed` is a set on both sides.
       else if (builtins.tryEval (a.__sealed == b.__sealed)).value or false then
         true
       else

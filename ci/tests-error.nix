@@ -3267,6 +3267,19 @@ in
           msg = exactly ''gen-scope.mkKind: kind 'host' carries the kind name "host" as its `kindValue`; a name is a reference, not a kind declaration: pass the kind value itself (e.g. `schema.widget`)'';
         };
       };
+      # gzjf7: a marked value whose `__sealed` is not a set of sealed subjects is refused at the door,
+      # so `sameKindValue`'s equal-sealed fast path only ever compares two sets.
+      test-gzjf7-mkKind-refuses-a-kind-value-whose-sealed-subjects-are-not-a-set = {
+        expr = mkKind {
+          kindValue = valueOf "host" "host:a" // {
+            __sealed = null;
+          };
+        } "host";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.mkKind: kind 'host' carries a `kindValue` whose `__sealed` is a null, not an attribute set of sealed subjects: take the kind from a gen-schema that stamps it";
+        };
+      };
       test-mkKind-refuses-a-kind-value-of-another-type = {
         expr = mkKind { kindValue = 42; } "host";
         expectedError = {
