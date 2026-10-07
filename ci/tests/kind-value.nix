@@ -3,16 +3,18 @@
 # admitting half over the same fixtures.
 #
 # The kind values here are SHAPE fixtures: records carrying gen-schema's tagged sum
-# (`kind`, `__mint.minted`) without having been minted. That is the whole of what gen-scope reads —
-# it takes no gen-schema input and its door asks `__mint ? minted` and stops — so a minted value
-# and this fixture cross the door identically. The minted value's behaviour at `sel.kind` is
-# gen-select's to test.
+# (`kind`, `__mint.minted`) and its total `__sealed` without having been minted. That is the whole
+# of what gen-scope reads — it takes no gen-schema input; its door asks `__mint ? minted`, and two
+# values at one mark are decided over `__sealed` (den-hoag-gzjf7) — so a minted value and this
+# fixture cross the door identically. The minted value's behaviour at `sel.kind` is gen-select's to
+# test.
 { genScope, ... }:
 let
   S = genScope;
   valueOf = name: mark: {
     kind = name;
     __mint.minted = mark;
+    __sealed = { };
   };
   hostA = valueOf "host" "host:a";
   # The shape a gen-schema kind with an option default has: a mark beside a sealed component.
@@ -44,6 +46,15 @@ let
       host = withValue plain.kinds.host hostA;
       leaf = plain.kinds.leaf // {
         belowKinds.host = withValue plain.kinds.host hostA;
+      };
+    };
+  };
+
+  mergedSealed = {
+    kinds = {
+      host = withValue plain.kinds.host sealedHost;
+      leaf = plain.kinds.leaf // {
+        belowKinds.host = withValue plain.kinds.host sealedHost;
       };
     };
   };
@@ -114,7 +125,7 @@ in
         "type"
       ];
     };
-    # The node carries its kind's value itself — the same reference, read by its mark.
+    # The node carries its kind's value itself — the same reference: one mark, one sealed subject.
     test-a-node-carries-its-kinds-value = {
       expr = declared.nodes.a.kindValue.__mint.minted;
       expected = "host:a";
@@ -148,7 +159,7 @@ in
       expr = handBuilt bareReg { kindValue = hostA; };
       expected = [ "a" ];
     };
-    # den-hoag-dg8d1: a kind value beside sealed components is admitted and compared by its MARK
+    # den-hoag-dg8d1: a kind value beside sealed components is admitted and bucketed by its MARK
     # (gen-algebra's `hasMark`/`markOf`), where `identityOf` answers the compared arm for it. Both
     # doors read it: `mkKinds` admission and the eval door's node-against-registry comparison, whose
     # live arm is a node carrying a different kind's value.
@@ -162,6 +173,18 @@ in
         declared = "host";
         coherent = [ "a" ];
         contradicting = false;
+      };
+    };
+    # gzjf7: at one mark the sealed subjects decide, so a node carrying its kind's OWN sealed value
+    # is admitted, and so is a `//` merge whose two records carry that one value.
+    test-gzjf7-one-sealed-value-at-one-mark-is-one-kind = {
+      expr = {
+        node = handBuilt sealedReg { kindValue = sealedHost; };
+        merge = (scopeWith mergedSealed).nodes.a.type;
+      };
+      expected = {
+        node = [ "a" ];
+        merge = "host";
       };
     };
     # c14: a spawned child carries its PRODUCED kind's value, stamped with its `type`.

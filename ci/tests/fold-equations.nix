@@ -114,13 +114,13 @@ let
       inherit
         (import ../../lib/require-scope.nix {
           prelude = genPreludeLib;
-          algebra = genAlgebra;
           inherit
             (import ../../lib/cascade.nix {
               prelude = genPreludeLib;
               algebra = genAlgebra;
             })
             kindSetDefect
+            sameKindValue
             ;
         })
         requireScope

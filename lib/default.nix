@@ -80,8 +80,8 @@ let
   interface = import ./interface.nix { inherit prelude; };
   inherit
     (import ./require-scope.nix {
-      inherit prelude algebra;
-      inherit (cascadeModule) kindSetDefect;
+      inherit prelude;
+      inherit (cascadeModule) kindSetDefect sameKindValue;
     })
     requireScope
     ;
@@ -141,7 +141,10 @@ let
   folds = import ./folds.nix { inherit prelude; };
   cascadeModule = import ./cascade.nix { inherit prelude algebra; };
   # The registry door's predicate is the doors' and not the consumer's: it leaves before the merge.
-  cascade = builtins.removeAttrs cascadeModule [ "kindSetDefect" ];
+  cascade = builtins.removeAttrs cascadeModule [
+    "kindSetDefect"
+    "sameKindValue"
+  ];
   # The cold fold over a validated schedule, which takes the demand fixpoint from the module next
   # door rather than reaching for a second evaluator: the entry is the evaluator's caller, and the
   # one it calls is this library's own.

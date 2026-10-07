@@ -48,15 +48,16 @@
 # matches `sel.kind` on the NODE's copy. A hand-built record whose node of registered kind K carries
 # a value K does not declare gives the node two kinds that silently disagree — the registry's and
 # the carried one — which is the registry door's own coherence defect at node grain. So it is
-# refused by name, compared by mark (a value holds functions). Decided ONCE per scope: only a
+# refused by name, decided by `cascade.nix`'s `sameKindValue`: the mark, then at an equal mark the
+# sealed subjects through gen-algebra's `sealedCollisionEq`. Decided ONCE per scope: only a
 # registry in which some kind declares a value is walked, so a scope whose kinds declare none pays
 # nothing per node. A node omitting the field is admitted (it stays kind-blind at `sel.kind`, and
 # is refused there by name); a node carrying a value in a scope whose registry declares none is the
 # node's own declaration and is admitted too.
 {
   prelude,
-  algebra,
   kindSetDefect,
+  sameKindValue,
 }:
 {
   requireScope =
@@ -72,15 +73,6 @@
       kindsPass = "Mint the kinds with `mkKinds` over their declarations and pass the result.";
       badKinds = detail: throw "${kindsMust}; ${detail}. ${kindsPass}";
 
-      # A mark, or `null` for no value; `false` for a value carrying none, which equals neither.
-      kindMarkOf =
-        v:
-        if v == null then
-          null
-        else if algebra.hasMark v then
-          algebra.markOf v
-        else
-          false;
       contradicting =
         if !(prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds)) then
           [ ]
@@ -94,7 +86,9 @@
             n ? kindValue
             && builtins.isString t
             && kinds.kinds ? ${t}
-            && kindMarkOf n.kindValue != kindMarkOf kinds.kinds.${t}.kindValue
+            && !(sameKindValue "gen-scope.${entry}: node '${id}' of kind '${t}'" n.kindValue
+              kinds.kinds.${t}.kindValue
+            )
           ) (builtins.attrNames scope.nodes);
     in
     if !(builtins.isAttrs scope) then
@@ -116,5 +110,5 @@
         id = builtins.head contradicting;
         t = scope.nodes.${id}.type;
       in
-      throw "gen-scope.${entry}: node '${id}' of kind '${t}' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
+      throw "gen-scope.${entry}: node '${id}' of kind '${t}' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark and, at an equal mark, its sealed subjects). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
 }

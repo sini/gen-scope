@@ -237,13 +237,13 @@ let
   o10RequireScope =
     (import (libDir + "/require-scope.nix") {
       prelude = genPreludeLib;
-      algebra = genAlgebra;
       inherit
         (import (libDir + "/cascade.nix") {
           prelude = genPreludeLib;
           algebra = genAlgebra;
         })
         kindSetDefect
+        sameKindValue
         ;
     }).requireScope;
   o10RequireDeclaredDependencies =

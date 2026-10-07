@@ -33,12 +33,13 @@ let
   # The registry type check ships with `mkKinds`; the two guards below take it as a formal.
   inherit (import "${libSrc}/cascade.nix" { inherit prelude algebra; })
     kindSetDefect
+    sameKindValue
     mkClaim
     mkKind
     mkKinds
     resolveClaims
     ;
-  inherit (import "${libSrc}/require-scope.nix" { inherit prelude algebra kindSetDefect; })
+  inherit (import "${libSrc}/require-scope.nix" { inherit prelude kindSetDefect sameKindValue; })
     requireScope
     ;
   # The declared relation's input type. The evaluator takes it as a formal like `requireScope`, so

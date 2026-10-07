@@ -328,6 +328,48 @@ let
       "carries a `kindValue` with no mint-backed mark (`__mint.minted`); a hand-written `{ kind = ...; ... }` is not a kind value: take the kind from a schema"
     else
       "carries a `kindValue` that is a ${typeOf v}, not a kind value";
+
+  # ── TWO KIND VALUES, DECIDED AS THEIR PRODUCER DECIDES THEM (den-hoag-gzjf7) ──
+  # A kind value's mark is a BUCKET LABEL wherever it seals a component (ADR-0034's regimes; an
+  # option `default` is a sealed lambda): two different declarations differing only there mint one
+  # mark. So the mark decides only `false` (distinct marks, distinct kinds: the mint is a function),
+  # and an equal-mark pair goes to gen-algebra's `sealedCollisionEq` over `{ name; mark; sealed; }`,
+  # the subject gen-schema's own `kindEq` and gen-select's `kindEq` hand it: `true` where the sealed
+  # subjects are one value, a refusal naming the differing component(s) where they are not. Two
+  # constructions of one declaration over a sealed lambda are refused too, as the producer refuses
+  # them: a lambda's inequality under `==` is evidence of nothing. A marked value carrying no
+  # `__sealed` is refused at an equal mark, as the producer's `kindSubject` refuses it: absent is not
+  # "nothing sealed". `null` (no value) equals only `null`; an unmarked value equals nothing.
+  sameKindValue =
+    site: a: b:
+    if a == null || b == null then
+      a == b
+    else if !(algebra.hasMark a && algebra.hasMark b) then
+      false
+    else
+      let
+        ma = algebra.markOf a;
+        mb = algebra.markOf b;
+      in
+      if ma != mb then
+        false
+      else if !(a ? __sealed && b ? __sealed) then
+        throw "${site}: the kind value '${
+          (if a ? __sealed then b else a).kind or "(unnamed)"
+        }' carries a mark but no sealed subjects (`__sealed`), so an equal mark cannot be decided; take the kind from a gen-schema that stamps both"
+      else
+        algebra.sealedCollisionEq site
+          {
+            name = a.kind or "(unnamed)";
+            mark = ma;
+            sealed = a.__sealed;
+          }
+          {
+            name = b.kind or "(unnamed)";
+            mark = mb;
+            sealed = b.__sealed;
+          };
+
   declarationMarker = "gen-scope/kind-declaration";
 
   # ★★ THIS IS THE SUBSTRATE'S KIND REGISTRY, AND `resolve` IS ONE VOCABULARY INSIDE IT.
@@ -626,26 +668,26 @@ let
   # declared expansion silently does not happen. So it is refused by name. Two kinds are compared on
   # `name`, `below`, `depth`, the key sets of `spawns` and `nta`, and their kind values' MARKS;
   # builders are functions and are not compared, so two kinds differing only in a builder's body are
-  # one kind to this door. The kind value is compared by its mark for the same reason — it holds
-  # functions — so kinds differing only at a sealed component share a mark and are one kind here
-  # too: two constructions of one declaration, and equally two DIFFERENT declarations (an option
-  # whose default differs, 22 against 23). gen-algebra's mark is a bucket label there, and deciding
-  # within the bucket by `sealedCollisionEq` is `den-hoag-gzjf7`'s; until then, the same residue,
-  # one class.
+  # one kind to this door. The kind values are decided by `sameKindValue` (the mark, then the sealed
+  # subjects at an equal mark), so two kinds whose values differ only at a sealed component are
+  # refused by name rather than read as one kind.
   #
   # COST: one pass over the entries and one over each entry's resolved `below`, paid per door
   # crossing (every `eval` and `buildRoots` handed a registry) and never per node.
   #
   # Internal: `default.nix` binds it into the two doors and keeps it off the published surface.
   sameKind =
-    a: b:
+    host: a: b:
     a.name == b.name
     && a.below == b.below
     && a.depth == b.depth
     && attrNames a.spawns == attrNames b.spawns
     && attrNames a.nta == attrNames b.nta
-    && kindMarkOf a.kindValue == kindMarkOf b.kindValue;
-  kindMarkOf = v: if v == null then null else algebra.markOf v;
+    &&
+      sameKindValue
+        "gen-scope: the kind registry files under '${a.name}' a kind whose value is not the one entry '${host}' resolved in its `below`"
+        a.kindValue
+        b.kindValue;
 
   # ADMISSION FIRST, THE REASON ONLY ON A REFUSAL. `kindSetAdmitted` decides the set
   # `kindSetDefect'` accepts, conjunct for conjunct and in its order — every entry a kind, every
@@ -667,7 +709,7 @@ let
       && all (n: ks.${n}.name == n) registered
       && all (n: all (b: ks ? ${b}) (attrNames ks.${n}.belowKinds)) registered
       && all (
-        n: all (b: sameKind ks.${b} ks.${n}.belowKinds.${b}) (attrNames ks.${n}.belowKinds)
+        n: all (b: sameKind n ks.${b} ks.${n}.belowKinds.${b}) (attrNames ks.${n}.belowKinds)
       ) registered
     );
 
@@ -701,7 +743,7 @@ let
           }) (attrNames ks.${n}.belowKinds)
         ) registered;
         absent = filter (e: !(ks ? ${e.name})) edges;
-        split = filter (e: !(sameKind ks.${e.name} ks.${e.host}.belowKinds.${e.name})) edges;
+        split = filter (e: !(sameKind e.host ks.${e.name} ks.${e.host}.belowKinds.${e.name})) edges;
       in
       if malformed != [ ] then
         "holds entries that are not minted kinds: ${toJSON malformed}"
@@ -712,7 +754,7 @@ let
       else if absent != [ ] then
         "holds kind '${(head absent).host}', whose resolved `below` carries kind '${(head absent).name}', which the registry does not"
       else if split != [ ] then
-        "files under '${(head split).name}' a kind that differs from the kind '${(head split).name}' that entry '${(head split).host}' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value's mark). Two different kinds share one name — a merge of registries built from different declarations"
+        "files under '${(head split).name}' a kind that differs from the kind '${(head split).name}' that entry '${(head split).host}' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
       else
         null;
 
@@ -1385,6 +1427,8 @@ in
     # INTERNAL, and removed before the surface merge in `default.nix`: the two doors take it as a
     # formal, and no consumer needs a predicate the doors already decide.
     kindSetDefect
+    # INTERNAL too: `requireScope` decides a node's kind value against its kind's with it.
+    sameKindValue
     ;
   # Options first, then the operands (den-hoag-7gp66 P2, R7): `mkKind { below ? …; resolve ? …; … }
   # name`, the name being what the kind IS; `resolveClaims { ctx ? … } kinds claims`, the claims the

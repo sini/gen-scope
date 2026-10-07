@@ -3094,7 +3094,7 @@ in
         "gen-scope.${entry}: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it; ${detail}. Mint the kinds with `mkKinds` over their declarations and pass the result.";
 
       declarationDetail = ''holds entries that are not minted kinds: ["`k` is a kind declaration built by `mkKind`, not a kind `mkKinds` minted: pass the declarations through `mkKinds`"]'';
-      mergeDetail = "files under 'k' a kind that differs from the kind 'k' that entry 'item' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value's mark). Two different kinds share one name — a merge of registries built from different declarations";
+      mergeDetail = "files under 'k' a kind that differs from the kind 'k' that entry 'item' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value). Two different kinds share one name — a merge of registries built from different declarations";
     in
     {
       # G4 — the EVALUATOR, on a hand-built registry of declarations: a TYPE refusal naming it.
@@ -3214,7 +3214,27 @@ in
       valueOf = name: mark: {
         kind = name;
         __mint.minted = mark;
+        __sealed = { };
       };
+      # den-hoag-gzjf7: two kind values at ONE mark, differing only at a sealed component (an option
+      # `default`, which gen-schema seals as a lambda) — two declarations the mark cannot separate.
+      sealedAt = d: valueOf "host" "host:a" // { __sealed."open.options.port.default" = _: d; };
+      kD = sealedAt 22;
+      kD23 = sealedAt 23;
+      collision = "two declarations of 'host' mint one identity and are unequal only at sealed component(s) 'open.options.port.default': a sealed component is compared by its seal, the whole value under Nix `==`, where two separately built functions are never equal, so two separate constructions are refused even where the values they compute are equal; a sealed component has no identity, because identity is minted from inert structure alone: migrate it to a first-order term, a registered constructor over inert arguments, so that it mints";
+      handNode =
+        regValue: nodeValue:
+        (genScope.eval { } { children = _self: _id: { }; } {
+          kinds = mkKinds [ (mkKind { kindValue = regValue; } "host") ];
+          nodeOrder = [ "a" ];
+          nodes.a = {
+            id = "a";
+            type = "host";
+            parent = null;
+            decls = { };
+            kindValue = nodeValue;
+          };
+        }).allNodeIds;
       plain = mkKinds [
         (mkKind { } "host")
         (mkKind { below = [ "host" ]; } "leaf")
@@ -3321,7 +3341,41 @@ in
           }).allNodeIds;
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope.eval: node 'a' of kind 'host' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
+          msg = exactly "gen-scope.eval: node 'a' of kind 'host' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark and, at an equal mark, its sealed subjects). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
+        };
+      };
+      # gzjf7: a node carrying a value at its kind's mark that differs only at a sealed component is
+      # refused by name, naming the node, its kind and the component (gen-algebra's
+      # `sealedCollisionEq`, as gen-schema's and gen-select's `kindEq` decide the same pair).
+      test-gzjf7-eval-refuses-a-node-whose-kind-value-differs-only-at-a-sealed-component = {
+        expr = handNode kD kD23;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.eval: node 'a' of kind 'host': ${collision}";
+        };
+      };
+      # gzjf7: a marked value carrying no `__sealed` cannot be decided at an equal mark: refused by
+      # name, as gen-schema's `kindSubject` refuses it, never read as "nothing sealed".
+      test-gzjf7-eval-refuses-an-equal-mark-value-carrying-no-sealed-subjects = {
+        expr = handNode kD (builtins.removeAttrs kD [ "__sealed" ]);
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.eval: node 'a' of kind 'host': the kind value 'host' carries a mark but no sealed subjects (`__sealed`), so an equal mark cannot be decided; take the kind from a gen-schema that stamps both";
+        };
+      };
+      # gzjf7: the registry door decides a `//` merge the same way.
+      test-gzjf7-buildRoots-refuses-a-merge-whose-kind-values-differ-only-at-a-sealed-component = {
+        expr = buildWith {
+          kinds = {
+            host = withValue plain.kinds.host kD;
+            leaf = plain.kinds.leaf // {
+              belowKinds.host = withValue plain.kinds.host kD23;
+            };
+          };
+        };
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: the kind registry files under 'host' a kind whose value is not the one entry 'leaf' resolved in its `below`: ${collision}";
         };
       };
       # c11: a merge filing under `host` a kind whose value differs from the one `leaf` resolved.
@@ -3337,7 +3391,7 @@ in
         expectedError = {
           type = "ThrownError";
           msg = exactly (
-            registryRefusal "files under 'host' a kind that differs from the kind 'host' that entry 'leaf' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value's mark). Two different kinds share one name — a merge of registries built from different declarations"
+            registryRefusal "files under 'host' a kind that differs from the kind 'host' that entry 'leaf' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
           );
         };
       };

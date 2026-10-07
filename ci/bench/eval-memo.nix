@@ -42,8 +42,8 @@ let
   # The registry discriminator ships with `mkKinds`; the two guards below take it as a formal.
   # gen-algebra's mark readers, which the two guards read a kind value through.
   algebra = import "${fetch "gen-algebra"}/lib";
-  inherit (import ../../lib/cascade.nix { inherit prelude algebra; }) kindSetDefect;
-  inherit (import ../../lib/require-scope.nix { inherit prelude algebra kindSetDefect; })
+  inherit (import ../../lib/cascade.nix { inherit prelude algebra; }) kindSetDefect sameKindValue;
+  inherit (import ../../lib/require-scope.nix { inherit prelude kindSetDefect sameKindValue; })
     requireScope
     ;
   inherit (import ../../lib/require-declared-dependencies.nix { inherit graph; })
