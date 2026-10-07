@@ -700,16 +700,18 @@ let
         null;
 
   # ★ WHAT A HOST PAYS, AND WHAT IT DOES NOT. A host owes its product: its record, its kind, the
-  # table its seeds read and one map per NTA name. Everything else here is decided by the KIND or by
-  # the failure, so it is bound once, over `ntaFrom`'s lambda, as functions of the host's
-  # coordinates (`host` the kind record, `hostKind` its `type`, `hostAttr`, `id`), never re-closed
-  # per host: a `let`-bound closure is an allocation each time its scope is entered, and a host's
-  # scope is entered once per node. The kind decisions read the record the host FOLLOWS — the one
-  # `kindOfNode` answers (`nta`, `kindValue`) — and never a registry entry filed under its name
-  # (`kindOfNode`'s "WHY RECORDS AND NOT NAMES"). `registered` is the evaluation's own decision:
-  # the scope's node set when some registered id could be a minted one (every minted id carries the
-  # prefix), `null` when none can, so no key collides and the collision check mints nothing per
-  # child.
+  # table its seeds read, and the two closures that build the product over its coordinates
+  # (`groupOf`, `productOf`). What only a refusal or a seed read enters — the refusal texts, the
+  # address reader, the seed reader — is bound once, over `ntaFrom`'s lambda, as functions of the
+  # host's coordinates, and never re-closed per host: a `let`-bound closure is an allocation each
+  # time its scope is entered, and a host's scope is entered once per node. The two product
+  # closures stay per host because they are the healthy path: lifted, each call re-passes the
+  # coordinates, an environment per argument, and that costs more than the closure. The kind
+  # decisions read the record the host FOLLOWS — the one `kindOfNode` answers (`nta`, `kindValue`)
+  # — and never a registry entry filed under its name (`kindOfNode`'s "WHY RECORDS AND NOT
+  # NAMES"). `registered` is the evaluation's own decision: the scope's node set when some
+  # registered id could be a minted one (every minted id carries the prefix), `null` when none can,
+  # so no key collides and the collision check mints nothing per child.
   ntaFrom =
     let
       at =
@@ -794,9 +796,28 @@ let
           throw "${at hostKind id name}, child '${group}'/'${key}': a seed is a list of addresses into the host's evaluated definitions, and this builder returned a ${builtins.typeOf seed}. A builder points into its host's definitions and never supplies its child's definitions as a value, which is what makes a constant seed inexpressible."
         else
           prelude.imap0 (readAddress hostAttr hostKind id name group key) seed;
-
+    in
+    kinds: nodes:
+    let
+      registered =
+        if builtins.any (n: builtins.substring 0 4 n == ntaIdPrefix) (builtins.attrNames nodes) then
+          nodes
+        else
+          null;
+    in
+    declared: ev: id:
+    let
+      # The host is resolved ONCE and its kind and `type` are read off that one record: a reader
+      # that resolves by identifier pays a resolution per call, and two per level compound into
+      # 2^depth down a nested chain.
+      hostNode = ev.node id;
+      host = kindOfNode kinds nodes id hostNode;
+      hostKind = hostNode.type or null;
+      # The host attributes a seed may address, each demanded once per host: every element of every
+      # child's seed reads one, and a demand per element re-ran `get`'s checks per child.
+      hostAttr = builtins.mapAttrs (a: _: ev.get id a) declared;
       groupOf =
-        registered: host: hostKind: hostAttr: id: name: group: members:
+        name: group: members:
         if !builtins.isAttrs members then
           throw "${at hostKind id name}: the builder's group '${group}' is a ${builtins.typeOf members} rather than an attribute set of seeds keyed by child key"
         # Checked on the group's own KEYS, eager the moment the group is forced: a minted id that
@@ -840,39 +861,16 @@ let
           }) members;
 
       productOf =
-        registered: ev: id: host: hostKind: hostAttr: name: builder:
+        name: builder:
         let
           raw = builder ev id;
         in
         if !builtins.isAttrs raw then
           throw "${at hostKind id name}: the builder returned a ${builtins.typeOf raw} rather than an attribute set of groups { <group> = { <key> = <seed>; }; }"
         else
-          builtins.mapAttrs (groupOf registered host hostKind hostAttr id name) raw;
+          builtins.mapAttrs (groupOf name) raw;
     in
-    kinds: nodes:
-    let
-      registered =
-        if builtins.any (n: builtins.substring 0 4 n == ntaIdPrefix) (builtins.attrNames nodes) then
-          nodes
-        else
-          null;
-    in
-    declared: ev: id:
-    let
-      # The host is resolved ONCE and its kind and `type` are read off that one record: a reader
-      # that resolves by identifier pays a resolution per call, and two per level compound into
-      # 2^depth down a nested chain.
-      hostNode = ev.node id;
-      host = kindOfNode kinds nodes id hostNode;
-      hostKind = hostNode.type or null;
-      # The host attributes a seed may address, each demanded once per host: every element of every
-      # child's seed reads one, and a demand per element re-ran `get`'s checks per child.
-      hostAttr = builtins.mapAttrs (a: _: ev.get id a) declared;
-    in
-    if host == null then
-      { }
-    else
-      builtins.mapAttrs (productOf registered ev id host hostKind hostAttr) host.nta;
+    if host == null then { } else builtins.mapAttrs productOf host.nta;
 
   # The `nta` arm both evaluators' `node` take BEFORE any `parseParent` arm: the decoded host's
   # memoized product, one group's key set forced and nothing else. `null` when the id is not an
@@ -1223,10 +1221,7 @@ let
                     builtins.mapAttrs (
                       group:
                       builtins.mapAttrs (
-                        # The child's id is bound once, by the pattern, and shared by its reader
-                        # and its memo: a selection in argument position is an allocation per use.
-                        key:
-                        childNode@{ id, ... }:
+                        key: childNode:
                         let
                           own = self // {
                             # The host's equation at this child's coordinates (Söderberg & Hedin 2013
@@ -1235,13 +1230,14 @@ let
                               a:
                               hostVals.${a}.${name}.${group}.${key}
                                 or (hostAtMiss runAttributes isQuotientAttr nodeId name group key a);
-                            getNta = getNtaAt own id;
-                            node = tid: if tid == id then wrapped else self.node tid;
+                            getNta = getNtaAt own childNode.id;
+                            node = tid: if tid == childNode.id then wrapped else self.node tid;
                             get =
-                              tid: a: if tid == id && !(quotientAttrs.${a} or true) then wrapped._eval.${a} else self.get tid a;
+                              tid: a:
+                              if tid == childNode.id && !(quotientAttrs.${a} or true) then wrapped._eval.${a} else self.get tid a;
                           };
                           wrapped = childNode // {
-                            _eval = builtins.mapAttrs (evalAttr own id) runAttributes;
+                            _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
                           };
                         in
                         wrapped
