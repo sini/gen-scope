@@ -914,7 +914,7 @@ resolveClaims {
 #     trace     = { claims; resources; wiring; }; }
 ```
 
-**This construction imports one module of the library and only one.** `lib/cascade.nix` takes `forceFields` — the round-loop forcing — from `lib/least-model.nix`, which is the module staged minting takes it from as well, rather than either of them writing a second copy of a discipline that agrees only for as long as someone keeps two copies in step. Nothing else of the evaluator, the engine or staged minting is reached from here, and nothing there reaches this: the cascade is handed `{ prelude }` and no more.
+**This construction imports one module of the library and only one.** `lib/cascade.nix` takes `forceFields` — the round-loop forcing — from `lib/least-model.nix`, which is the module staged minting takes it from as well, rather than either of them writing a second copy of a discipline that agrees only for as long as someone keeps two copies in step. Nothing else of the evaluator, the engine or staged minting is reached from here, and nothing there reaches this: the cascade is handed `{ prelude, algebra }` and no more, `algebra` being gen-algebra's mark readers (`hasMark`, `markOf`) a kind value is read through.
 
 ### The registry, and what registration decides
 

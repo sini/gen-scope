@@ -41,6 +41,7 @@
           }:$PATH
           export cells=${./tests-process-cells.nix} libSrc=${../lib}
           export genPreludeSrc=${inputs.gen-prelude} genGraphSrc=${inputs.gen-graph}
+          export genAlgebraSrc=${inputs.gen-algebra}
           # A FRESH working directory per run: the `hctl2` arm copies lib/ into the CWD, and a second
           # run in the same directory finds the first run's patched copy (measured, den-hoag-jutgv).
           TMPDIR=$(mktemp -d) out=$(mktemp)
@@ -65,6 +66,7 @@
               --argstr arm "$1" \
               --argstr genPreludeSrc "$genPreludeSrc" \
               --argstr genGraphSrc "$genGraphSrc" \
+              --argstr genAlgebraSrc "$genAlgebraSrc" \
               --argstr libSrc "$2" \
               "$cells" 2> "$TMPDIR/err") || rc=$?
             ran=$((ran + 1))

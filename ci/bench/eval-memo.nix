@@ -40,8 +40,12 @@ let
   # formal gained downstream is defaulted downstream instead of re-tracked here by hand.
   graph = import "${fetch "gen-graph"}" { inherit prelude; };
   # The registry discriminator ships with `mkKinds`; the two guards below take it as a formal.
-  inherit (import ../../lib/cascade.nix { inherit prelude; }) kindSetDefect;
-  inherit (import ../../lib/require-scope.nix { inherit prelude kindSetDefect; }) requireScope;
+  # gen-algebra's mark readers, which the two guards read a kind value through.
+  algebra = import "${fetch "gen-algebra"}/lib";
+  inherit (import ../../lib/cascade.nix { inherit prelude algebra; }) kindSetDefect;
+  inherit (import ../../lib/require-scope.nix { inherit prelude algebra kindSetDefect; })
+    requireScope
+    ;
   inherit (import ../../lib/require-declared-dependencies.nix { inherit graph; })
     requireDeclaredDependencies
     ;

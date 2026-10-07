@@ -18,6 +18,7 @@
   arm,
   genPreludeSrc,
   genGraphSrc,
+  genAlgebraSrc,
   libSrc,
 }:
 let
@@ -27,15 +28,19 @@ let
   # `prelude` means the entry's own fetching default is never forced, which is what keeps this
   # readable inside the build sandbox.
   graph = import "${genGraphSrc}" { inherit prelude; };
+  # gen-algebra's mark readers, which the two guards read a kind value through.
+  algebra = import "${genAlgebraSrc}/lib";
   # The registry type check ships with `mkKinds`; the two guards below take it as a formal.
-  inherit (import "${libSrc}/cascade.nix" { inherit prelude; })
+  inherit (import "${libSrc}/cascade.nix" { inherit prelude algebra; })
     kindSetDefect
     mkClaim
     mkKind
     mkKinds
     resolveClaims
     ;
-  inherit (import "${libSrc}/require-scope.nix" { inherit prelude kindSetDefect; }) requireScope;
+  inherit (import "${libSrc}/require-scope.nix" { inherit prelude algebra kindSetDefect; })
+    requireScope
+    ;
   # The declared relation's input type. The evaluator takes it as a formal like `requireScope`, so
   # this wiring binds it the same way; none of the arms below supplies a relation, so every one of
   # them runs under the evaluator's third state and the guard is never reached.
