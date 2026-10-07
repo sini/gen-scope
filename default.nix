@@ -1,6 +1,6 @@
 # Standalone (non-flake) entry. Flake consumers should use the `.lib` output.
 #
-# gen-scope is nixpkgs-lib-free: it depends on gen-prelude, gen-graph and gen-identity.
+# gen-scope is nixpkgs-lib-free: it depends on gen-prelude, gen-graph, gen-identity and gen-algebra.
 #
 # THREE CHANNELS, ONE PRECEDENCE, AND NONE OF THEM IS A PROBE. A named formal per dependency wins;
 # the `inputs` bag is next, tested by attrset membership so a supplied-but-throwing value throws as
@@ -12,7 +12,7 @@
 # library's dependency graph and its test/oracle graph are SEPARATE, and the second must not enter
 # the first — "whatever the optimal pattern is, it can no longer be DEFER TO THE TEST LOCK". The
 # ci lock keeps every input it has, including any cycle it carries, and is the TEST graph's own
-# pin source; no library code reads it any more. All 3 dependencies are root inputs of the root
+# pin source; no library code reads it any more. All 4 dependencies are root inputs of the root
 # lock, so every path below is one segment.
 #
 # `src` AND `dep` ARE FORMALS, NOT `let` BINDINGS, AND THAT IS THE INJECTABLE RESOLVER SEAM — the

@@ -627,8 +627,11 @@ let
   # `name`, `below`, `depth`, the key sets of `spawns` and `nta`, and their kind values' MARKS;
   # builders are functions and are not compared, so two kinds differing only in a builder's body are
   # one kind to this door. The kind value is compared by its mark for the same reason — it holds
-  # functions — so two constructions of one declaration differing only at a sealed component share
-  # a mark and are one kind here too: the same residue, one class.
+  # functions — so kinds differing only at a sealed component share a mark and are one kind here
+  # too: two constructions of one declaration, and equally two DIFFERENT declarations (an option
+  # whose default differs, 22 against 23). gen-algebra's mark is a bucket label there, and deciding
+  # within the bucket by `sealedCollisionEq` is `den-hoag-gzjf7`'s; until then, the same residue,
+  # one class.
   #
   # COST: one pass over the entries and one over each entry's resolved `below`, paid per door
   # crossing (every `eval` and `buildRoots` handed a registry) and never per node.
@@ -641,8 +644,8 @@ let
     && a.depth == b.depth
     && attrNames a.spawns == attrNames b.spawns
     && attrNames a.nta == attrNames b.nta
-    && markOf a.kindValue == markOf b.kindValue;
-  markOf = v: if v == null then null else algebra.markOf v;
+    && kindMarkOf a.kindValue == kindMarkOf b.kindValue;
+  kindMarkOf = v: if v == null then null else algebra.markOf v;
 
   # ADMISSION FIRST, THE REASON ONLY ON A REFUSAL. `kindSetAdmitted` decides the set
   # `kindSetDefect'` accepts, conjunct for conjunct and in its order — every entry a kind, every

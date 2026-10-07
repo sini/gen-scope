@@ -1,8 +1,8 @@
 {
   description = "gen-scope: demand-driven attribute grammar evaluator over algebraic scope graphs";
 
-  # gen-scope is nixpkgs-lib-free: its inputs are gen-prelude, gen-graph and gen-identity, all three
-  # pure and nixpkgs-lib-free. The HOAG evaluator is pure list/attr combinators + builtins — no
+  # gen-scope is nixpkgs-lib-free: its inputs are gen-prelude, gen-graph, gen-identity and
+  # gen-algebra, all four pure and nixpkgs-lib-free. The HOAG evaluator is pure list/attr combinators + builtins — no
   # module system, no nixpkgs.lib.
   #
   # gen-graph is the ENGINE's dependency, not the evaluator's: the well-founded engine consumes

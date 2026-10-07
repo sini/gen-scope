@@ -96,9 +96,9 @@ The tree is not fixed. **`derived-children` grows the node set on demand** — t
 
 ## Usage
 
-gen-scope is **Class B**: nixpkgs-lib-free, depending on [gen-prelude](https://github.com/sini/gen-prelude) (pure, zero-input), [gen-graph](https://github.com/sini/gen-graph) and [gen-identity](https://github.com/sini/gen-identity). Every concern here is pure list/attr combinators + builtins — no module system, no `nixpkgs.lib`, enforced by the `purity` suite over the library source. The flake exposes a single `.lib` value output.
+gen-scope is **Class B**: nixpkgs-lib-free, depending on [gen-prelude](https://github.com/sini/gen-prelude) (pure, zero-input), [gen-graph](https://github.com/sini/gen-graph), [gen-identity](https://github.com/sini/gen-identity) and [gen-algebra](https://github.com/sini/gen-algebra). Every concern here is pure list/attr combinators + builtins — no module system, no `nixpkgs.lib`, enforced by the `purity` suite over the library source. The flake exposes a single `.lib` value output.
 
-Neither of the two siblings is the evaluator's. The **gen-graph** dependency is the engine's: the well-founded engine consumes that library's one published SCC-partition front door rather than carrying a second partitioner, because reverse reachability and the condensation are its concern. The **gen-identity** dependency is [staged minting](#staged-minting)'s: that library is the identity authority's home — a dependency-free leaf — and the one function it supplies reaches the minting module by injection from `lib/default.nix` rather than by that module importing a library of its own. **gen-schema is not a dependency**: nothing here reads it, and a declared-and-unread input is a second pin of a library this one never evaluates. A `follows` a CONSUMER writes over gen-scope is load-bearing for the same reason a leaf mint is — two instances of a library in one evaluation are two formulas for the same node.
+None of the three siblings is the evaluator's. The **gen-graph** dependency is the engine's: the well-founded engine consumes that library's one published SCC-partition front door rather than carrying a second partitioner, because reverse reachability and the condensation are its concern. The **gen-identity** dependency is [staged minting](#staged-minting)'s: that library is the identity authority's home — a dependency-free leaf — and the one function it supplies reaches the minting module by injection from `lib/default.nix` rather than by that module importing a library of its own. The **gen-algebra** dependency is the kind value's: a kind's gen-schema value is admitted and compared through that library's mark readers (`hasMark`, `markOf`), from the library that authors the `__mint` tagged sum, never by reading `__mint` raw. **gen-schema is not a dependency**: nothing here reads it, and a declared-and-unread input is a second pin of a library this one never evaluates. A `follows` a CONSUMER writes over gen-scope is load-bearing for the same reason a leaf mint is — two instances of a library in one evaluation are two formulas for the same node.
 
 ```nix
 # flake.nix
@@ -109,7 +109,7 @@ Neither of the two siblings is the evaluator's. The **gen-graph** dependency is 
     in { /* ... */ };
 }
 
-# Or without flakes (all three inputs auto-derived from the pinned flake.lock):
+# Or without flakes (all four inputs auto-derived from the pinned flake.lock):
 let engine = import ./gen-scope { };
 in { /* ... */ }
 ```

@@ -73,7 +73,7 @@
       badKinds = detail: throw "${kindsMust}; ${detail}. ${kindsPass}";
 
       # A mark, or `null` for no value; `false` for a value carrying none, which equals neither.
-      markOf =
+      kindMarkOf =
         v:
         if v == null then
           null
@@ -94,7 +94,7 @@
             n ? kindValue
             && builtins.isString t
             && kinds.kinds ? ${t}
-            && markOf n.kindValue != markOf kinds.kinds.${t}.kindValue
+            && kindMarkOf n.kindValue != kindMarkOf kinds.kinds.${t}.kindValue
           ) (builtins.attrNames scope.nodes);
     in
     if !(builtins.isAttrs scope) then
