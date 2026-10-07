@@ -48,6 +48,7 @@
   genPreludeLib,
   genGraph,
   genIdentity,
+  genAlgebra,
   lib,
   lockedRepo,
   ...
@@ -75,6 +76,7 @@ let
     prelude = genPreludeLib;
     graph = genGraph;
     identity = genIdentity;
+    algebra = genAlgebra;
     # The shim's own plumbing, which this cell is now obliged to CHOOSE rather than inherit. The
     # `throw` is what makes non-hermeticity IMPOSSIBLE for this application rather than merely
     # detected — but it is NOT the guard: a shim carrying `...` would swallow these keys unread and

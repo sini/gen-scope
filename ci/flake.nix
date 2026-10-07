@@ -12,6 +12,8 @@
     # leave the suite asserting identity behaviour under a revision free to drift from the one the
     # library ships.
     gen-identity.url = "github:sini/gen-identity";
+    # The mark readers, pinned here as well as at the root for the reason gen-identity is.
+    gen-algebra.url = "github:sini/gen-algebra";
     # nixpkgs is the CI runner's dependency (test harness, treefmt) and supplies the
     # `lib` the test modules use. The library itself (../lib) takes gen-prelude, gen-graph and
     # gen-identity.
@@ -24,6 +26,7 @@
       gen-prelude,
       gen-graph,
       gen-identity,
+      gen-algebra,
       ...
     }:
     let
@@ -32,6 +35,7 @@
         inherit prelude;
         graph = gen-graph.lib;
         identity = gen-identity.lib;
+        algebra = gen-algebra.lib;
       };
     in
     gen-harness.lib.mkCi {
@@ -53,6 +57,7 @@
         genGraph = gen-graph.lib;
         genPreludeLib = prelude;
         genIdentity = gen-identity.lib;
+        genAlgebra = gen-algebra.lib;
       };
       # Cells whose subject is an error MESSAGE cannot live under `testModules`: the batch
       # asserter behind `checks.default` quantifies over `flake.tests` and forces every `expr`

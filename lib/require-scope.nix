@@ -53,7 +53,11 @@
 # nothing per node. A node omitting the field is admitted (it stays kind-blind at `sel.kind`, and
 # is refused there by name); a node carrying a value in a scope whose registry declares none is the
 # node's own declaration and is admitted too.
-{ prelude, kindSetDefect }:
+{
+  prelude,
+  algebra,
+  kindSetDefect,
+}:
 {
   requireScope =
     entry: scope:
@@ -73,8 +77,8 @@
         v:
         if v == null then
           null
-        else if builtins.isAttrs v && v ? __mint && v.__mint ? minted then
-          v.__mint.minted
+        else if algebra.hasMark v then
+          algebra.markOf v
         else
           false;
       contradicting =
