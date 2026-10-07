@@ -59,6 +59,9 @@ let
   # The message, pinned to the byte. `escapeRegex` is the prelude's own and its metacharacter set
   # is byte-identical to nixpkgs', so what is anchored below is the text as written above it.
   exactly = msg: "^" + genPreludeLib.escapeRegex msg + "$";
+  # gen-prelude's refusal text, composed with this library's own literal door, field and accepted
+  # set (den-hoag-7jltk): every assertion kept, none of gen-prelude's wording copied.
+  inherit (genPreludeLib) refusals;
 
   # The assembly's own fold, over module sets the cell builds: the real module set has no duplicate
   # to refuse, so what the library's evaluation shows is that the merge MERGES, and a synthetic set
@@ -1202,7 +1205,16 @@ in
       expr = mint (withKinds [ smuggledFieldEmitter ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.mintStrata: an emitter: 'kindOption' is not an option of this door; the options are closed (accepted: 'pass', 'identifier', 'kind', 'relata', 'content', 'site') (in prelude.checkOptions)";
+        msg = exactly (
+          refusals.unknownOption "gen-scope.mintStrata: an emitter" [
+            "pass"
+            "identifier"
+            "kind"
+            "relata"
+            "content"
+            "site"
+          ] "kindOption"
+        );
       };
     };
   };
@@ -2160,7 +2172,7 @@ in
         expr = r.getRepresentative { name = "node"; } "enriched";
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope.self.getRepresentative: got set, expected a node identifier (a string)";
+          msg = exactly ((genGraph.key "gen-scope").notAnIdentifier "self.getRepresentative" { });
         };
       };
 
@@ -2168,7 +2180,7 @@ in
         expr = debug.getRepresentative { name = "node"; } "enriched";
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope.self.getRepresentative: got set, expected a node identifier (a string)";
+          msg = exactly ((genGraph.key "gen-scope").notAnIdentifier "self.getRepresentative" { });
         };
       };
     };
@@ -3397,8 +3409,14 @@ in
         type = "ThrownError";
         msg = exactly "gen-scope.${who}: got set, expected ${noun} (a string)";
       };
-      node = refused "self.node" "a node identifier";
-      get = refused "self.get" "a node identifier";
+      # gen-graph's identifier refusal, composed with this library's own literal door and value
+      # (den-hoag-7jltk): the text is gen-graph's `notAnIdentifier`, the door is gen-scope's.
+      refusedId = who: {
+        type = "ThrownError";
+        msg = exactly ((genGraph.key "gen-scope").notAnIdentifier who { });
+      };
+      node = refusedId "self.node";
+      get = refusedId "self.get";
     in
     {
       test-self-node-refuses-a-record = {
@@ -3419,7 +3437,7 @@ in
       };
       test-evalDebug-getTraced-refuses-a-record = {
         expr = (debug.getTraced X "x").trace;
-        expectedError = refused "self.getTraced" "a node identifier";
+        expectedError = refusedId "self.getTraced";
       };
       test-evalWarm-node-refuses-a-record = {
         expr = warm.node X;
@@ -3451,19 +3469,19 @@ in
       };
       test-followEdge-refuses-a-record-at-self-get = {
         expr = S.followEdge "I" self X;
-        expectedError = refused "resolve" "a node identifier";
+        expectedError = refusedId "resolve";
       };
       test-collectImports-refuses-a-record-at-self-get = {
         expr = S.collectImports (_: _: [ ]) self X;
-        expectedError = refused "resolve" "a node identifier";
+        expectedError = refusedId "resolve";
       };
       test-isAncestor-refuses-a-record-it-would-only-compare = {
         expr = S.isAncestor self X "b";
-        expectedError = refused "isAncestor" "a node identifier";
+        expectedError = refusedId "isAncestor";
       };
       test-isDescendant-refuses-a-record-it-would-only-compare = {
         expr = S.isDescendant self X "a";
-        expectedError = refused "isDescendant" "a node identifier";
+        expectedError = refusedId "isDescendant";
       };
       test-nodesByType-refuses-a-record-kind = {
         expr = S.nodesByType self X;
@@ -3471,11 +3489,11 @@ in
       };
       test-mintStrata-refuses-a-record-identifier = {
         expr = builtins.attrNames (mint X "pewter").nodes;
-        expectedError = refused "mintStrata: an emitter's identifier" "a node identifier";
+        expectedError = refusedId "mintStrata: an emitter's identifier";
       };
       test-mintStrata-refuses-a-record-relatum = {
         expr = builtins.attrNames (mint "b1" { name = "pewter"; }).nodes;
-        expectedError = refused "mintStrata: relatum 'warp' of 'b1'" "a node identifier";
+        expectedError = refusedId "mintStrata: relatum 'warp' of 'b1'";
       };
     };
 
@@ -4143,7 +4161,6 @@ in
   config.flake.testsError.door-checks =
     let
       F = import ./doors.nix { inherit genScope genGraph; };
-      names = ns: builtins.concatStringsSep ", " (map (n: "'${n}'") ns);
       thrown = expr: msg: {
         inherit expr;
         expectedError = {
@@ -4157,12 +4174,12 @@ in
           door = "gen-scope.${name}";
         in
         {
-          "test-${name}-options-unknown-refused" =
-            thrown (genScope.${name} { unknownField = 1; })
-              "${door}: 'unknownField' is not an option of this door; the options are closed (accepted: ${names d.optional}) (in prelude.checkOptions)";
-          "test-${name}-options-non-set-refused" =
-            thrown (genScope.${name} 1)
-              "${door}: the options must be an attrset, not a int (accepted: ${names d.optional}) (in prelude.checkOptions)";
+          "test-${name}-options-unknown-refused" = thrown (genScope.${name} { unknownField = 1; }) (
+            refusals.unknownOption door d.optional "unknownField"
+          );
+          "test-${name}-options-non-set-refused" = thrown (genScope.${name} 1) (
+            refusals.optionsNotASet door d.optional 1
+          );
         };
       recordCells =
         name: d:
@@ -4170,20 +4187,21 @@ in
           door = "gen-scope.${name}";
         in
         {
-          "test-${name}-record-missing-field-refused" =
-            thrown (d.step (builtins.removeAttrs d.good [ d.drop ]))
-              "${door}: required field '${d.drop}' is missing (required: ${names d.required}) (in prelude.checkRequired)";
-          "test-${name}-record-non-set-refused" =
-            thrown (d.step 1) "${door}: the argument must be an attrset, not a int (required: ${names d.required}) (in prelude.checkRequired)";
+          "test-${name}-record-missing-field-refused" = thrown (d.step (
+            builtins.removeAttrs d.good [ d.drop ]
+          )) (refusals.missingField door d.required d.drop);
+          "test-${name}-record-non-set-refused" = thrown (d.step 1) (
+            refusals.recordNotASet door d.required 1
+          );
         }
         // (
           if d ? guardedBy then
             builtins.listToAttrs (
               map (o: {
                 name = "test-${name}-record-misplaced-option-${o}-refused";
-                value =
-                  thrown (d.step (d.good // { ${o} = null; }))
-                    "${door}: '${o}' is an option of gen-scope.${d.guardedBy}, not a field of this record (in prelude.checkGuarded)";
+                value = thrown (d.step (d.good // { ${o} = null; })) (
+                  refusals.guardedField door "gen-scope.${d.guardedBy}" o
+                );
               }) F.options.${d.guardedBy}.optional
             )
           else
@@ -4221,8 +4239,9 @@ in
         "row1-malformed-expression" = ''gen-scope.regex.parse: expected a label or '(' (in "a (")'';
         "row2-longer-than-maxLength" =
           ''gen-scope.regex.parse: pattern length 5 exceeds the stated cap of 3 characters; past it the parser's recursion meets the evaluator's call-depth ceiling, an abort tryEval cannot catch (lower the cap with parseWith { maxLength; } when calling from deep in a stack) (in "a b a")'';
-        "row3-unknown-wellFormed-option" =
-          "gen-scope.wellFormed: 'depth' is not an option of this door; the options are closed (accepted: 'alphabet', 'expression', 'maxLength') (in prelude.checkOptions)";
+        "row3-unknown-wellFormed-option" = (
+          refusals.unknownOption "gen-scope.wellFormed" [ "alphabet" "expression" "maxLength" ] "depth"
+        );
         "row4-not-a-constructor-term" =
           "gen-scope.regex: this value was not built by the regex constructors (eps, empty, any, lit, seq, alt, star, opt, plus, deriv, parse), so it has no canonical key";
         "row5-duplicate-letter" = "gen-scope.labelOrder: alphabet lists the letter 'a' more than once";
@@ -4247,10 +4266,10 @@ in
           ''gen-scope.labelOrder: pathPrecedes: the two paths start at different scopes ("s", "t"); Fig. 1 orders two paths from one origin only'';
         "row7-unranked-letter" =
           "gen-scope.labelOrder: letter 'b' is not ranked; the label order is total over the alphabet, and an unranked letter would otherwise take a default rank nobody declared";
-        "row8-dataFilter-missing" =
-          "gen-scope.resolve: required field 'dataFilter' is missing (required: 'wf', 'dataFilter') (in prelude.checkRequired)";
-        "row8-wf-missing" =
-          "gen-scope.resolve: required field 'wf' is missing (required: 'wf', 'dataFilter') (in prelude.checkRequired)";
+        "row8-dataFilter-missing" = (
+          refusals.missingField "gen-scope.resolve" [ "wf" "dataFilter" ] "dataFilter"
+        );
+        "row8-wf-missing" = (refusals.missingField "gen-scope.resolve" [ "wf" "dataFilter" ] "wf");
         "row9-visible-without-a-key" =
           ''gen-scope.resolve: mode "visible" requires a competition key, and it is never defaulted (den-hoag-l7af / ADR-0024 ruling 3): state `group = "k";` (a declared constant, lazy in shadowed data) or `groupBy = ans: …;` (a function of the answer, strict); a caller wanting the per-node reading states `groupBy = ans: ans.node;` explicitly'';
         "rowG1-group-and-groupBy" =
@@ -4271,8 +4290,18 @@ in
           ''gen-scope.resolve: `order` is read only by mode "visible", and the mode is "reachable"'';
         "row10-unknown-mode" =
           ''gen-scope.resolve: unknown mode "all" (one of ["reachable","witnesses","visible"])'';
-        "row10-unknown-option" =
-          "gen-scope.resolve: 'follow' is not an option of this door; the options are closed (accepted: 'wf', 'dataFilter', 'mode', 'order', 'groupBy', 'group', 'bound', 'direction') (in prelude.checkOptions)";
+        "row10-unknown-option" = (
+          refusals.unknownOption "gen-scope.resolve" [
+            "wf"
+            "dataFilter"
+            "mode"
+            "order"
+            "groupBy"
+            "group"
+            "bound"
+            "direction"
+          ] "follow"
+        );
         "row10-unknown-direction" =
           ''gen-scope.resolve: unknown direction "sideways" (one of ["outbound","inbound"])'';
         "row10-visible-without-order" =
@@ -4282,12 +4311,13 @@ in
         "row11-admits-not-callable" =
           ''gen-scope.resolve: a mark's admits (`marks` of node "a") is a int, not a function returning a bool'';
         "row11-dataFilter-not-callable" =
-          "gen-scope.resolve: dataFilter is a int, not a function returning a datum or null";
+          (genGraph.key "gen-scope").notA "resolve" "dataFilter" "a function returning a datum or null"
+            1;
         "row11-groupBy-not-a-string" =
           ''gen-scope.resolve: groupBy on the answer at "b" returned a int, not a string, the answer's competition key'';
         "row11-groupBy-not-callable" =
           "gen-scope.resolve: groupBy is a string, not a function returning a string, the answer's competition key";
-        "row12-from-not-a-node-id" = "gen-scope.resolve: got int, expected a node identifier (a string)";
+        "row12-from-not-a-node-id" = (genGraph.key "gen-scope").notAnIdentifier "resolve" 1;
         "row13-edge-attribute-not-a-list" =
           ''gen-scope.resolve: node "a", letter 'e': the edge attribute is a string, not a list of node ids'';
         "row13-edge-target-not-a-string" =
@@ -4391,18 +4421,12 @@ in
       test-A5-neron-refuses-a-parent-cycle = refused (genScope.collectionAttr { } "neron" F.ex F.cycle
         "a"
       ) cycle;
-      test-A6-inheritAll-refuses-the-retired-visited =
-        refused
-          (genScope.inheritAll {
-            _visited = { };
-          })
-          "gen-scope.inheritAll: '_visited' is not an option of this door; the options are closed (accepted: 'combine') (in prelude.checkOptions)";
-      test-A6-inheritSet-refuses-the-retired-visited =
-        refused
-          (genScope.inheritSet {
-            _visited = { };
-          })
-          "gen-scope.inheritSet: '_visited' is not an option of this door; the options are closed (accepted: 'eq') (in prelude.checkOptions)";
+      test-A6-inheritAll-refuses-the-retired-visited = refused (genScope.inheritAll {
+        _visited = { };
+      }) (refusals.unknownOption "gen-scope.inheritAll" [ "combine" ] "_visited");
+      test-A6-inheritSet-refuses-the-retired-visited = refused (genScope.inheritSet {
+        _visited = { };
+      }) (refusals.unknownOption "gen-scope.inheritSet" [ "eq" ] "_visited");
       test-A7-followEdge-refuses-a-label-that-is-not-a-string = refused (genScope.followEdge 1 F.labelled
         "s"
       ) "gen-scope.followEdge: the label is a int, not a letter (a string)";
