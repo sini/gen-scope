@@ -3477,11 +3477,11 @@ in
       };
       test-isAncestor-refuses-a-record-it-would-only-compare = {
         expr = S.isAncestor self X "b";
-        expectedError = refusedId "isAncestor";
+        expectedError = refused "isAncestor" "a node identifier";
       };
       test-isDescendant-refuses-a-record-it-would-only-compare = {
         expr = S.isDescendant self X "a";
-        expectedError = refusedId "isDescendant";
+        expectedError = refused "isDescendant" "a node identifier";
       };
       test-nodesByType-refuses-a-record-kind = {
         expr = S.nodesByType self X;
@@ -4309,14 +4309,18 @@ in
         "row11-admits-not-a-bool" =
           ''gen-scope.resolve: a mark's admits at node "a" on the label "e" returned a int, not a bool'';
         "row11-admits-not-callable" =
-          ''gen-scope.resolve: a mark's admits (`marks` of node "a") is a int, not a function returning a bool'';
+          (genGraph.key "gen-scope").notA "resolve" ''a mark's admits (`marks` of node "a")''
+            "a function returning a bool"
+            1;
         "row11-dataFilter-not-callable" =
           (genGraph.key "gen-scope").notA "resolve" "dataFilter" "a function returning a datum or null"
             1;
         "row11-groupBy-not-a-string" =
           ''gen-scope.resolve: groupBy on the answer at "b" returned a int, not a string, the answer's competition key'';
         "row11-groupBy-not-callable" =
-          "gen-scope.resolve: groupBy is a string, not a function returning a string, the answer's competition key";
+          (genGraph.key "gen-scope").notA "resolve" "groupBy"
+            "a function returning a string, the answer's competition key"
+            "";
         "row12-from-not-a-node-id" = (genGraph.key "gen-scope").notAnIdentifier "resolve" 1;
         "row13-edge-attribute-not-a-list" =
           ''gen-scope.resolve: node "a", letter 'e': the edge attribute is a string, not a list of node ids'';
