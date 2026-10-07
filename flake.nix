@@ -36,6 +36,9 @@
     # through an intermediary: a mint reached through a second library is a mint whose identity
     # depends on that library's pin.
     gen-identity.url = "github:sini/gen-identity";
+    # The mark readers (`hasMark`, `markOf`) a kind value is read through, from the library that
+    # authors the `__mint` tagged sum. gen-algebra declares no inputs, so this adds a leaf.
+    gen-algebra.url = "github:sini/gen-algebra";
   };
 
   outputs =
@@ -43,6 +46,7 @@
       gen-prelude,
       gen-graph,
       gen-identity,
+      gen-algebra,
       ...
     }:
     {
@@ -57,6 +61,7 @@
         prelude = gen-prelude.lib;
         graph = gen-graph.lib;
         identity = gen-identity.lib;
+        algebra = gen-algebra.lib;
       };
     };
 }

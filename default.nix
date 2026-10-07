@@ -97,6 +97,7 @@ in
   prelude ? inputs.gen-prelude or (dep [ "gen-prelude" ]),
   graph ? inputs.gen-graph or (dep [ "gen-graph" ]),
   identity ? inputs.gen-identity or (dep [ "gen-identity" ]),
+  algebra ? inputs.gen-algebra or (dep [ "gen-algebra" ]),
 }:
 # THE BODY IS EAGER, AND THAT IS WHAT MAKES THE ENTRY CELL TOTAL RATHER THAN PARTIAL. `forced` forces
 # every wired dependency to WHNF before `./lib` sees it, so a default that cannot resolve is loud AT
@@ -110,6 +111,7 @@ let
       prelude
       graph
       identity
+      algebra
       ;
   };
   forced = builtins.deepSeq (builtins.mapAttrs (_: builtins.typeOf) deps) null;

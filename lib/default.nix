@@ -11,6 +11,7 @@
   prelude,
   graph,
   identity,
+  algebra,
 }:
 let
   # The key former under THIS library's name, applied once: every module that keys by a node id takes
@@ -79,7 +80,7 @@ let
   interface = import ./interface.nix { inherit prelude; };
   inherit
     (import ./require-scope.nix {
-      inherit prelude;
+      inherit prelude algebra;
       inherit (cascadeModule) kindSetDefect;
     })
     requireScope
@@ -138,7 +139,7 @@ let
   # names it nowhere: a kind's resource fold arrives as a FIELD on the kind, so the vocabulary
   # reaches the run as the author's data rather than as an import of this module.
   folds = import ./folds.nix { inherit prelude; };
-  cascadeModule = import ./cascade.nix { inherit prelude; };
+  cascadeModule = import ./cascade.nix { inherit prelude algebra; };
   # The registry door's predicate is the doors' and not the consumer's: it leaves before the merge.
   cascade = builtins.removeAttrs cascadeModule [ "kindSetDefect" ];
   # The cold fold over a validated schedule, which takes the demand fixpoint from the module next

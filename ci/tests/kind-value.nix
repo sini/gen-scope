@@ -15,6 +15,11 @@ let
     __mint.minted = mark;
   };
   hostA = valueOf "host" "host:a";
+  # The shape a gen-schema kind with an option default has: a mark beside a sealed component.
+  sealedHost = hostA // {
+    __sealed."open.options.port.default" = 22;
+  };
+  sealedReg = S.mkKinds [ (S.mkKind { kindValue = sealedHost; } "host") ];
   leafV = valueOf "leaf" "leaf:l";
 
   scopeWith =
@@ -142,6 +147,22 @@ in
     test-C2-a-node-carried-value-in-a-scope-declaring-none-is-admitted = {
       expr = handBuilt bareReg { kindValue = hostA; };
       expected = [ "a" ];
+    };
+    # den-hoag-dg8d1: a kind value beside sealed components is admitted and compared by its MARK
+    # (gen-algebra's `hasMark`/`markOf`), where `identityOf` answers the compared arm for it. Both
+    # doors read it: `mkKinds` admission and the eval door's node-against-registry comparison, whose
+    # live arm is a node carrying a different kind's value.
+    test-dg8d1-a-sealed-kind-value-is-admitted-and-compared-by-its-mark = {
+      expr = {
+        declared = (scopeWith sealedReg).nodes.a.type;
+        coherent = handBuilt sealedReg { kindValue = sealedHost; };
+        contradicting = (builtins.tryEval (handBuilt sealedReg { kindValue = leafV; })).success;
+      };
+      expected = {
+        declared = "host";
+        coherent = [ "a" ];
+        contradicting = false;
+      };
     };
     # c14: a spawned child carries its PRODUCED kind's value, stamped with its `type`.
     test-c14-a-spawned-child-carries-its-kinds-value = {

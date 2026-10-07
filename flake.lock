@@ -1,5 +1,20 @@
 {
   "nodes": {
+    "gen-algebra": {
+      "locked": {
+        "lastModified": 1791356366,
+        "narHash": "sha256-1o1lAOaUFktt53FDiNXXmboBpMYu2bLOD068g+RIWTQ=",
+        "owner": "sini",
+        "repo": "gen-algebra",
+        "rev": "f1d208b109be8b127b91bd9c8ce2bfee441612a4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sini",
+        "repo": "gen-algebra",
+        "type": "github"
+      }
+    },
     "gen-graph": {
       "inputs": {
         "gen-prelude": "gen-prelude"
@@ -65,6 +80,7 @@
     },
     "root": {
       "inputs": {
+        "gen-algebra": "gen-algebra",
         "gen-graph": "gen-graph",
         "gen-identity": "gen-identity",
         "gen-prelude": "gen-prelude_2"

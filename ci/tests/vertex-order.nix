@@ -8,6 +8,7 @@
   genScope,
   genPreludeLib,
   genGraph,
+  genAlgebra,
   ...
 }:
 let
@@ -236,7 +237,14 @@ let
   o10RequireScope =
     (import (libDir + "/require-scope.nix") {
       prelude = genPreludeLib;
-      inherit (import (libDir + "/cascade.nix") { prelude = genPreludeLib; }) kindSetDefect;
+      algebra = genAlgebra;
+      inherit
+        (import (libDir + "/cascade.nix") {
+          prelude = genPreludeLib;
+          algebra = genAlgebra;
+        })
+        kindSetDefect
+        ;
     }).requireScope;
   o10RequireDeclaredDependencies =
     (import (libDir + "/require-declared-dependencies.nix") { graph = genGraph; })

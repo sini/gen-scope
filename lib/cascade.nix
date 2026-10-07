@@ -262,7 +262,7 @@
 # rule out. The difference has no proxy in it, so the two ways a registry can be wrong — a maximum
 # that does not cover the measure, and a measure that is not the relation's — are both reported and
 # neither is silent.
-{ prelude }:
+{ prelude, algebra }:
 let
   door = import ./door.nix { inherit prelude; };
   inherit (builtins)
@@ -311,12 +311,13 @@ let
 
   # ── THE KIND VALUE A KIND CARRIES (den-hoag-l0y) ──
   # A kind's canonical declaration is a gen-schema kind value, passed IN as a value: this library
-  # takes no gen-schema input, so it mints nothing and reads only the tagged sum gen-schema stamps.
-  # The predicate is gen-select's `kind-mark.nix`, copied rather than imported, for the reason that
-  # file gives: the seam's test is each library's own business. It reads `__mint ? minted` and stops,
-  # so it forces the mark record and never the digest. A name is a reference and a hand-written
-  # `{ kind = ...; }` carries no mint, so each is refused by name rather than admitted as a kind.
-  isKindValue = v: isAttrs v && v ? kind && v ? __mint && v.__mint ? minted;
+  # takes no gen-schema input, so it mints nothing and reads only the tagged sum gen-schema stamps,
+  # through gen-algebra's mark readers: `hasMark` decides (it forces the mark record and never the
+  # digest) and `markOf` demands, never `__mint.minted` raw. Not `identityOf`: a kind with an option
+  # default carries a non-empty `__sealed`, and `identityOf` answers the compared arm for it while
+  # its mark still answers. A name is a reference and a hand-written `{ kind = ...; }` carries no
+  # mint, so each is refused by name rather than admitted as a kind.
+  isKindValue = v: isAttrs v && v ? kind && algebra.hasMark v;
   kindValueDefect =
     v:
     if v == null || isKindValue v then
@@ -641,7 +642,7 @@ let
     && attrNames a.spawns == attrNames b.spawns
     && attrNames a.nta == attrNames b.nta
     && markOf a.kindValue == markOf b.kindValue;
-  markOf = v: if v == null then null else v.__mint.minted;
+  markOf = v: if v == null then null else algebra.markOf v;
 
   # ADMISSION FIRST, THE REASON ONLY ON A REFUSAL. `kindSetAdmitted` decides the set
   # `kindSetDefect'` accepts, conjunct for conjunct and in its order — every entry a kind, every

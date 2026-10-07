@@ -17,6 +17,7 @@
   genScope,
   genGraph,
   genPreludeLib,
+  genAlgebra,
   lib,
   ...
 }:
@@ -854,7 +855,10 @@ let
   # ── (g) THE COLLISION SET ──
   # `kindSetDefect` is the module's internal export, removed before the surface merge.
   cascadeNames = builtins.attrNames (
-    removeAttrs (import ../../lib/cascade.nix { prelude = genPreludeLib; }) [ "kindSetDefect" ]
+    removeAttrs (import ../../lib/cascade.nix {
+      prelude = genPreludeLib;
+      algebra = genAlgebra;
+    }) [ "kindSetDefect" ]
   );
   incumbentNames = builtins.filter (n: !(builtins.elem n cascadeNames)) (builtins.attrNames genScope);
   collidesWith = names: builtins.filter (n: builtins.elem n incumbentNames) names;
