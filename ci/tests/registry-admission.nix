@@ -126,6 +126,38 @@ let
     };
   };
 
+  # ── C5's `nta` analogue — the same split on the `nta` channel. `top` spawns a `mid` node, and
+  # that spawned node hosts `nta.n`; the two `mid` records share the key set the door compares and
+  # differ only in the builder, `-x` naming group `x` and `-y` group `y`. The spawned host's
+  # children come from the builder of the record it follows, so a per-kind reading staged under the
+  # name `mid` would take `y`. A minted child is a `mid` node too and grows nothing.
+  ntaMidDecl =
+    group:
+    mkKind {
+      nta.n = _self: id: if genScope.decodeNta id != null then { } else { ${group}.k = [ ]; };
+    } "mid";
+  ntaTopKinds = mkKinds [
+    (ntaMidDecl "x")
+    (mkKind {
+      below = [ "mid" ];
+      spawns.mid = spawnOf "m";
+    } "top")
+  ];
+  ntaOtherMid = mkKinds [ (ntaMidDecl "y") ];
+  ntaBuilderSplit = ntaTopKinds // {
+    kinds = ntaTopKinds.kinds // {
+      inherit (ntaOtherMid.kinds) mid;
+    };
+  };
+  ntaChildOf =
+    group:
+    genScope.mintNtaId {
+      host = "root-m";
+      name = "n";
+      inherit group;
+      key = "k";
+    };
+
   # ── C4 — a minted host updated with `//`. The gate's literal edit adds a spawn key alone; the
   # second also extends `below`, which is the edit that passes the door's per-entry type check and
   # reaches the evaluator, where the key has no resolved record to stamp.
@@ -283,6 +315,40 @@ in
         "root"
         "root-m"
         "root-m-x"
+      ];
+    };
+    # The `nta` analogue: the spawned `mid` host's `nta` children are its followed record's (`x`),
+    # and the record its host resolved is not the one the registry files under `mid`.
+    test-C5-a-spawned-nta-host-grows-through-the-record-it-follows = {
+      expr = {
+        nodes = builtins.sort builtins.lessThan (runEval (buildScope ntaBuilderSplit "top"));
+        split = ntaBuilderSplit.kinds.mid == ntaTopKinds.kinds.mid;
+      };
+      expected = {
+        nodes = builtins.sort builtins.lessThan [
+          "root"
+          "root-m"
+          (ntaChildOf "x")
+        ];
+        split = false;
+      };
+    };
+    # A REGISTERED node's kind is its registry entry, whatever record it carries under `_kind`: the
+    # stamp is the spawn and `nta` channels' answer for the nodes they mint, and a hand-built scope
+    # is admitted with any field on a registered record (copied off an evaluated node, say), so a
+    # stamp-first read would re-kind it and drop the spawn its registry entry declares.
+    test-a-registered-node-carrying-a-kind-stamp-is-kinded-by-its-registry-entry = {
+      expr = runEval (
+        handBuilt okKinds "host"
+        // {
+          nodes.root = (handBuilt okKinds "host").nodes.root // {
+            _kind = okKinds.kinds.item;
+          };
+        }
+      );
+      expected = [
+        "root"
+        "root-i"
       ];
     };
     test-C5-the-stamped-kind-is-the-spawn-keys-record = {

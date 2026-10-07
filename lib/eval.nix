@@ -483,20 +483,18 @@ let
     kinds: nodes: ev: id:
     kindOfNode kinds nodes id (ev.node id);
 
-  # The same read on a record already in hand.
+  # The same read on a record already in hand. `type` is read in place rather than let-bound: the
+  # read runs once per host, and a binding is an allocation per host.
   kindOfNode =
     kinds: nodes: id: n:
-    let
-      t = n.type or null;
-    in
-    if t == null then
+    if (n.type or null) == null then
       null
     else if !(nodes ? ${id}) then
       n.${kindField}
-    else if kinds.kinds ? ${t} then
-      kinds.kinds.${t}
+    else if kinds.kinds ? ${n.type} then
+      kinds.kinds.${n.type}
     else
-      throw "gen-scope: node '${id}' carries kind '${toString t}', which the supplied registry does not carry. A node's kind is a name in a registered vocabulary — register it with `mkKinds`, or build the scope through `buildRoots`, which refuses an unregistered kind at the door.";
+      throw "gen-scope: node '${id}' carries kind '${toString n.type}', which the supplied registry does not carry. A node's kind is a name in a registered vocabulary — register it with `mkKinds`, or build the scope through `buildRoots`, which refuses an unregistered kind at the door.";
 
   # ── THE SELECTION CHANNEL ──
   # `children` names WHICH of the scope's nodes stand below this one. It does not make them. A
@@ -701,39 +699,38 @@ let
       else
         null;
 
+  # ★ WHAT A HOST PAYS, AND WHAT IT DOES NOT. A host owes its product: its record, its kind, the
+  # table its seeds read and one map per NTA name. Everything else here is decided by the KIND or by
+  # the failure, so it is bound once, over `ntaFrom`'s lambda, as functions of the host's
+  # coordinates (`host` the kind record, `hostKind` its `type`, `hostAttr`, `id`), never re-closed
+  # per host: a `let`-bound closure is an allocation each time its scope is entered, and a host's
+  # scope is entered once per node. The kind decisions read the record the host FOLLOWS — the one
+  # `kindOfNode` answers (`nta`, `kindValue`) — and never a registry entry filed under its name
+  # (`kindOfNode`'s "WHY RECORDS AND NOT NAMES"). `registered` is the evaluation's own decision:
+  # the scope's node set when some registered id could be a minted one (every minted id carries the
+  # prefix), `null` when none can, so no key collides and the collision check mints nothing per
+  # child.
   ntaFrom =
-    kinds: nodes:
     let
-      # Whether any registered id could be a minted one at all (every minted id carries the prefix).
-      # With none, no key collides, and the collision check mints nothing per child.
-      ntaShaped = builtins.any (n: builtins.substring 0 4 n == ntaIdPrefix) (builtins.attrNames nodes);
-    in
-    declared: ev: id:
-    let
-      # The host is resolved ONCE and its kind and `type` are read off that one record: a reader
-      # that resolves by identifier pays a resolution per call, and two per level compound into
-      # 2^depth down a nested chain.
-      hostNode = ev.node id;
-      host = kindOfNode kinds nodes id hostNode;
-      hostKind = hostNode.type or null;
-      ntas = if host == null then { } else host.nta;
-      at = name: "gen-scope.nta: kind '${hostKind}' NTA '${name}' on host '${id}'";
-      # The host attributes a seed may address, each demanded once per host: every element of every
-      # child's seed reads one, and a demand per element re-ran `get`'s checks per child.
-      hostAttr = builtins.mapAttrs (a: _: ev.get id a) declared;
+      at =
+        hostKind: id: name:
+        "gen-scope.nta: kind '${hostKind}' NTA '${name}' on host '${id}'";
 
       # A seed element's place in a refusal, rendered only when one fires.
       here =
-        name: group: key: i:
-        "${at name}, child '${group}'/'${key}', seed element ${toString i}";
+        hostKind: id: name: group: key: i:
+        "${at hostKind id name}, child '${group}'/'${key}', seed element ${toString i}";
       notAnAddress =
-        name: group: key: i:
-        throw "${here name group key i}: a seed element is not an address { attr : string; def : int >= 0; at : [ name | index >= 0 ]; }";
+        hostKind: id: name: group: key: i:
+        throw "${
+          here hostKind id name group key i
+        }: a seed element is not an address { attr : string; def : int >= 0; at : [ name | index >= 0 ]; }";
 
       # The record's shape is checked before its fields are bound: the pattern then never meets a
       # record it would refuse in Nix's own words, and binds each field without a selection per read.
+      # `hostAttr` carries exactly the evaluation's declared names, so membership is read off it.
       readAddress =
-        name: group: key: i: a:
+        hostAttr: hostKind: id: name: group: key: i: a:
         if
           builtins.isAttrs a
           &&
@@ -758,52 +755,64 @@ let
                 && builtins.all isStep at
               )
             then
-              notAnAddress name group key i
+              notAnAddress hostKind id name group key i
             else if at == [ ] then
-              throw "${here name group key i}: an address with an empty path re-addresses a whole definition, which is not a strict sub-value of it. Name at least one step inside the definition."
-            else if !(declared ? ${attr}) then
-              throw "${here name group key i}: address does not resolve: the evaluation declares no attribute '${attr}' to carry the host's definitions"
+              throw "${
+                here hostKind id name group key i
+              }: an address with an empty path re-addresses a whole definition, which is not a strict sub-value of it. Name at least one step inside the definition."
+            else if !(hostAttr ? ${attr}) then
+              throw "${
+                here hostKind id name group key i
+              }: address does not resolve: the evaluation declares no attribute '${attr}' to carry the host's definitions"
             else
               let
                 defs = hostAttr.${attr};
                 r = walkAddress a (builtins.elemAt defs def) at;
               in
               if !builtins.isList defs then
-                throw "${here name group key i}: address does not resolve: '${attr}' on the host is a ${builtins.typeOf defs}, not a list of definitions"
+                throw "${
+                  here hostKind id name group key i
+                }: address does not resolve: '${attr}' on the host is a ${builtins.typeOf defs}, not a list of definitions"
               else if def >= builtins.length defs then
-                throw "${here name group key i}: address does not resolve: '${attr}' on the host holds ${toString (builtins.length defs)} definition(s), and the address names definition ${toString def}"
+                throw "${
+                  here hostKind id name group key i
+                }: address does not resolve: '${attr}' on the host holds ${toString (builtins.length defs)} definition(s), and the address names definition ${toString def}"
               else if r == null then
-                throw "${here name group key i}: address does not resolve: the path ${builtins.toJSON at} is absent from definition ${toString def} of '${attr}'"
+                throw "${
+                  here hostKind id name group key i
+                }: address does not resolve: the path ${builtins.toJSON at} is absent from definition ${toString def} of '${attr}'"
               else
                 r
           )
             a
         else
-          notAnAddress name group key i;
+          notAnAddress hostKind id name group key i;
 
       seedOf =
-        name: group: key: seed:
+        hostAttr: hostKind: id: name: group: key: seed:
         if !builtins.isList seed then
-          throw "${at name}, child '${group}'/'${key}': a seed is a list of addresses into the host's evaluated definitions, and this builder returned a ${builtins.typeOf seed}. A builder points into its host's definitions and never supplies its child's definitions as a value, which is what makes a constant seed inexpressible."
+          throw "${at hostKind id name}, child '${group}'/'${key}': a seed is a list of addresses into the host's evaluated definitions, and this builder returned a ${builtins.typeOf seed}. A builder points into its host's definitions and never supplies its child's definitions as a value, which is what makes a constant seed inexpressible."
         else
-          prelude.imap0 (readAddress name group key) seed;
+          prelude.imap0 (readAddress hostAttr hostKind id name group key) seed;
 
       groupOf =
-        name: group: members:
-        let
-          # Checked on the group's own KEYS, eager the moment the group is forced: a minted id that
-          # is a registered node's is one `resolveNode` answers from its roots-first arm, so a check
-          # inside the lazy per-record thunk would never fire for exactly the case it exists for.
-          colliding =
-            if ntaShaped then
-              builtins.filter (key: nodes ? ${mintNtaId id name group key}) (builtins.attrNames members)
-            else
-              [ ];
-        in
+        registered: host: hostKind: hostAttr: id: name: group: members:
         if !builtins.isAttrs members then
-          throw "${at name}: the builder's group '${group}' is a ${builtins.typeOf members} rather than an attribute set of seeds keyed by child key"
-        else if colliding != [ ] then
-          throw "${at name}: group '${group}' key '${builtins.head colliding}' mints the identifier '${
+          throw "${at hostKind id name}: the builder's group '${group}' is a ${builtins.typeOf members} rather than an attribute set of seeds keyed by child key"
+        # Checked on the group's own KEYS, eager the moment the group is forced: a minted id that
+        # is a registered node's is one `resolveNode` answers from its roots-first arm, so a check
+        # inside the lazy per-record thunk would never fire for exactly the case it exists for. The
+        # colliding keys are listed only once one is found, so the healthy path binds nothing.
+        else if
+          registered != null
+          && builtins.any (key: registered ? ${mintNtaId id name group key}) (builtins.attrNames members)
+        then
+          let
+            colliding = builtins.filter (key: registered ? ${mintNtaId id name group key}) (
+              builtins.attrNames members
+            );
+          in
+          throw "${at hostKind id name}: group '${group}' key '${builtins.head colliding}' mints the identifier '${
             mintNtaId id name group (builtins.head colliding)
           }', which is already a registered node's. A registered id is answered from the scope's roots, so this child would be discarded silently. Register the node under another id."
         # The host kind's value (`kindValue`, den-hoag-l0y) is stamped only when that kind declares
@@ -818,7 +827,7 @@ let
             parent = id;
             type = hostKind;
             ${kindField} = host;
-            decls.seed = seedOf name group key seed;
+            decls.seed = seedOf hostAttr hostKind id name group key seed;
           }) members
         else
           builtins.mapAttrs (key: seed: {
@@ -827,20 +836,43 @@ let
             type = hostKind;
             ${kindField} = host;
             inherit (host) kindValue;
-            decls.seed = seedOf name group key seed;
+            decls.seed = seedOf hostAttr hostKind id name group key seed;
           }) members;
 
       productOf =
-        name:
+        registered: ev: id: host: hostKind: hostAttr: name: builder:
         let
-          raw = ntas.${name} ev id;
+          raw = builder ev id;
         in
         if !builtins.isAttrs raw then
-          throw "${at name}: the builder returned a ${builtins.typeOf raw} rather than an attribute set of groups { <group> = { <key> = <seed>; }; }"
+          throw "${at hostKind id name}: the builder returned a ${builtins.typeOf raw} rather than an attribute set of groups { <group> = { <key> = <seed>; }; }"
         else
-          builtins.mapAttrs (groupOf name) raw;
+          builtins.mapAttrs (groupOf registered host hostKind hostAttr id name) raw;
     in
-    builtins.mapAttrs (name: _: productOf name) ntas;
+    kinds: nodes:
+    let
+      registered =
+        if builtins.any (n: builtins.substring 0 4 n == ntaIdPrefix) (builtins.attrNames nodes) then
+          nodes
+        else
+          null;
+    in
+    declared: ev: id:
+    let
+      # The host is resolved ONCE and its kind and `type` are read off that one record: a reader
+      # that resolves by identifier pays a resolution per call, and two per level compound into
+      # 2^depth down a nested chain.
+      hostNode = ev.node id;
+      host = kindOfNode kinds nodes id hostNode;
+      hostKind = hostNode.type or null;
+      # The host attributes a seed may address, each demanded once per host: every element of every
+      # child's seed reads one, and a demand per element re-ran `get`'s checks per child.
+      hostAttr = builtins.mapAttrs (a: _: ev.get id a) declared;
+    in
+    if host == null then
+      { }
+    else
+      builtins.mapAttrs (productOf registered ev id host hostKind hostAttr) host.nta;
 
   # The `nta` arm both evaluators' `node` take BEFORE any `parseParent` arm: the decoded host's
   # memoized product, one group's key set forced and nothing else. `null` when the id is not an
@@ -1191,7 +1223,10 @@ let
                     builtins.mapAttrs (
                       group:
                       builtins.mapAttrs (
-                        key: childNode:
+                        # The child's id is bound once, by the pattern, and shared by its reader
+                        # and its memo: a selection in argument position is an allocation per use.
+                        key:
+                        childNode@{ id, ... }:
                         let
                           own = self // {
                             # The host's equation at this child's coordinates (Söderberg & Hedin 2013
@@ -1200,14 +1235,13 @@ let
                               a:
                               hostVals.${a}.${name}.${group}.${key}
                                 or (hostAtMiss runAttributes isQuotientAttr nodeId name group key a);
-                            getNta = getNtaAt own childNode.id;
-                            node = tid: if tid == childNode.id then wrapped else self.node tid;
+                            getNta = getNtaAt own id;
+                            node = tid: if tid == id then wrapped else self.node tid;
                             get =
-                              tid: a:
-                              if tid == childNode.id && !(quotientAttrs.${a} or true) then wrapped._eval.${a} else self.get tid a;
+                              tid: a: if tid == id && !(quotientAttrs.${a} or true) then wrapped._eval.${a} else self.get tid a;
                           };
                           wrapped = childNode // {
-                            _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
+                            _eval = builtins.mapAttrs (evalAttr own id) runAttributes;
                           };
                         in
                         wrapped
