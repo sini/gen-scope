@@ -322,9 +322,9 @@ let
   # These two pure functions ship it, as an opt-in the CALLER applies before building `parentGraph` —
   # `buildRoots` itself is untouched, because a pre-multiplied id already resolves correctly today
   # (each minted id carries exactly one `P` edge, so the partial-function constraint is never
-  # violated in the first place). Co-located here because the recommending error string lives here,
-  # and `mergeSurface` (lib/merge-surface.nix) flattens every module's exports automatically, so no
-  # new wiring seam is needed to reach the top-level surface.
+  # violated in the first place). Co-located here because the recommending error string lives here;
+  # each reaches the top-level surface through its name in `lib/default.nix`'s `inherit
+  # (modules.buildRoots)` clause, which the suite holds equal to this module's exports.
   #
   # Neither function calls `hashIdentity` or reaches `mint.nix`: an `@`-suffixed id is an
   # IDENTIFIER (ADR-0016 ruling 5's "taken by declaration"), never routed through the one minting
