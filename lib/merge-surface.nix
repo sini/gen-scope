@@ -1,5 +1,5 @@
-# THE REFUSING MERGE — the assembly's fold over the modules, which throws on a name contributed
-# twice instead of resolving it by position.
+# THE REFUSING MERGE — the fold over the module record, which throws on a name contributed twice
+# instead of resolving it by position.
 #
 # A `//` chain is last-wins and silent: a module free to choose its own export names and an assembly
 # free to merge them in a written order are each correct alone, and compose into a shadowed export
@@ -7,11 +7,13 @@
 # leaves out, so the property holds for every module in the set rather than for the ones whose author
 # remembered a cell.
 #
-# THE PRICE, so it is weighed rather than discovered: one pass over the merged names per library
-# evaluation, paid at assembly and never per call.
+# WHERE IT RUNS: in the suite (`ci/tests/merge-surface.nix`), over the record `lib/modules.nix`
+# returns, and not at load (den-hoag-9lg69). `lib/default.nix` publishes a literal of
+# `inherit (modules.<m>)` clauses, lazy per name, and the suite holds that literal equal to this
+# fold's result. Folding at load forced all nineteen modules for every caller, demanded or not, and
+# no caller input can reach the refusal: the module name sets read none of the library's formals.
 #
-# This file is the assembly's helper and is NOT one of the merged modules — nothing here reaches the
-# library's surface.
+# This file is NOT one of the merged modules — nothing here reaches the library's surface.
 { prelude }:
 modules:
 let
