@@ -117,7 +117,7 @@ let
         (astToSelector aliases expr.right)
       ]
     else if expr.op == "OR" then
-      sel.any [
+      sel.anyOf [
         (astToSelector aliases expr.left)
         (astToSelector aliases expr.right)
       ]

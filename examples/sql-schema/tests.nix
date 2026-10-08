@@ -689,6 +689,19 @@ in
         expected = [ "api-1" ];
       };
 
+      # OR compiles to gen-select's disjunction (`sel.anyOf`)
+      test-where-or = {
+        expr =
+          let
+            rows = query "SELECT hostname FROM servers WHERE hostname = 'api-1' OR hostname = 'db-1'";
+          in
+          builtins.sort builtins.lessThan (map (r: r.hostname) rows);
+        expected = [
+          "api-1"
+          "db-1"
+        ];
+      };
+
       test-single-join = {
         expr =
           let
