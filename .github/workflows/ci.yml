@@ -12,4 +12,4 @@ jobs:
   # gen-harness rev locked in ci/flake.lock, so one harness identity governs the run; `relock`
   # rewrites it when that lock moves.
   evaluators:
-    uses: sini/gen-harness/.github/workflows/evaluators.yml@79e1194de545446cad4802264c744b4f196114e4
+    uses: sini/gen-harness/.github/workflows/evaluators.yml@be916b07d018686ffcb1f0221d116263c10f5b87
