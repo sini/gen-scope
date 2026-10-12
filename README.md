@@ -31,7 +31,7 @@ And it carries a fourth concern, **the demand cascade**, which resolves a multis
   - [evalWarm](#evalwarm)
   - [The structural partition](#the-structural-partition)
   - [Read sets: derived, never declared](#read-sets-derived-never-declared)
-  - [buildNodes](#buildnodes)
+  - [buildRoots](#buildroots)
   - [Algebraic Graph Construction](#algebraic-graph-construction)
   - [Attribute Combinators](#attribute-combinators)
   - [Structural Queries](#structural-queries)
@@ -125,7 +125,7 @@ Nix attrset VALUES are lazy but KEYS are eager. Function application is never me
 | Term             | Definition                                                                                                                |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Nodes            | Minimal descriptors: `{ id, type, parent, decls }`                                                                        |
-| Roots            | Entry-point nodes (from `buildNodes` or hand-written)                                                                     |
+| Roots            | Entry-point nodes (from `buildRoots` or hand-written)                                                                     |
 | Children         | The nodes the `children` attribute SELECTS from the scope's own node set — a selection, never a mint                      |
 | Derived Children | Nodes GROWN by `derived-children`, declared as `spawns.<produced-kind>` on the host kind (builder reads `self.node` only) |
 | Attributes       | Computed values on nodes — demand-driven, memoized via `_eval`                                                            |
@@ -291,7 +291,7 @@ no authority for the check to consult there.
 `allNodes` is an attrset, and an attrset is a set: `builtins.attrNames` on it answers in bytewise codepoint order, and the order the walk found the nodes in is not recoverable from that value. `allNodeIds` is the same node set with that order kept:
 
 - **root order, then pre-order depth-first** through `children` / `derived-children`, so a subtree is contiguous and a parent precedes its descendants;
-- **root and sibling tie-break — bytewise codepoint order,** which is `attrNames`' order and not dictionary order: `attrNames { z; A; a; _b; "1"; }` is `[ "1" "A" "_b" "a" "z" ]`, uppercase before underscore before lowercase. This is **not** because an attrset "carries no order". The algebraic graph layer carries a declaration-ordered vertex *list* (`lib/graph.nix` — `overlay` and `connect` concatenate), and `lib/build-nodes.nix` collapses it through `listToAttrs` and back out through `attrNames`, the same construction `allNodeIds` exists to stop doing, so `eval` is handed `roots` already set-shaped. The codepoint tie-break is that collapse's residue; recovering the declared order is a change to the constructor, not to this walk. On a flat graph — every node a root with no children, which is what `buildNodes` alone produces — the walk order therefore *is* the codepoint order;
+- **root and sibling tie-break — bytewise codepoint order,** which is `attrNames`' order and not dictionary order: `attrNames { z; A; a; _b; "1"; }` is `[ "1" "A" "_b" "a" "z" ]`, uppercase before underscore before lowercase. This is **not** because an attrset "carries no order". The algebraic graph layer carries a declaration-ordered vertex *list* (`lib/graph.nix` — `overlay` and `connect` concatenate), and `lib/build-nodes.nix` collapses it through `listToAttrs` and back out through `attrNames`, the same construction `allNodeIds` exists to stop doing, so `eval` is handed `roots` already set-shaped. The codepoint tie-break is that collapse's residue; recovering the declared order is a change to the constructor, not to this walk. On a flat graph — every node a root with no children, which is what `buildRoots` alone produces — the walk order therefore *is* the codepoint order;
 - **`derived-children` interleave:** a derived node does **not** follow its `children` siblings. `_walkFrom` descends `children // derived` as one attrset, so a derived id sorts *into* the sibling run under the same codepoint rule, and nothing in the list marks it as derived. Measured on a root with children `b`, `z` and derived child `aa`: `allNodeIds` is `[ "r" "aa" "b" "z" ]`;
 - **repeats dropped first-occurrence-wins**, the same rule `listToAttrs` applies to `allNodes`, so `sort lessThan result.allNodeIds == attrNames result.allNodes`. A node reached both as a root and as another root's child is the ordinary case, so the walk really does repeat.
 
