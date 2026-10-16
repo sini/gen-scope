@@ -188,12 +188,12 @@ let
               # about 2^(k+1)); deriving on the fly pays every visit. A state here is a lazy record, so a
               # transition is derived the first time a walk reads it and is read thereafter: the automaton
               # that exists is the part some walk reached, and no state is built that a walk did not visit.
-              # A successor whose key is already on the derivation path is that path's state (`seen`), so a
-              # starred term's self-loop is one state, not one per visit.
+              # A successor with its own state's key is that state, so a starred term's self-loop is one
+              # state, not one per visit.
               start =
                 let
                   node =
-                    seen: r:
+                    r:
                     let
                       self = {
                         live = filter (x: x.k != emptyKey) (
@@ -205,7 +205,7 @@ let
                             in
                             {
                               inherit l d k;
-                              s = if k == r.k then self else seen.${k} or (node (seen // { ${r.k} = self; }) d);
+                              s = if k == r.k then self else node d;
                             }
                           ) alphabet
                         );
@@ -213,7 +213,7 @@ let
                     in
                     self;
                 in
-                node { } term;
+                node term;
             }
         )
       );
