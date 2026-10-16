@@ -1992,9 +1992,10 @@ in
     # THE AUTOMATON IS UNFOLDED ON DEMAND (den-hoag-9z993; gen-demo
     # `derivative-automaton-built-on-demand`). `(a|b)* a (a|b)^20` has about 2^21 derivative
     # states and this walk visits 22, so the answer is a value only while states are built as the
-    # walk reads them. ★ THE RED IS A TIME-OUT, NOT A VALUE: an eager or depth-unbounded
-    # construction answers the same `[ "n21" ]` after building the automaton, which does not
-    # finish, so this cell catches it as a hung run. A per-visit re-derivation passes it, as the
+    # walk reads them. ★ THE RED IS NOT A VALUE: an eager or depth-unbounded construction would
+    # answer the same `[ "n21" ]` after building the automaton, which does not finish, so this
+    # cell catches it as a hung run (a time-out) or as the evaluator's call-depth limit, whichever
+    # the construction reaches first. A per-visit re-derivation passes it, as the
     # walk before the automaton did; that cost is the benches' (`resolve-visible-fanout`).
     test-the-derivative-automaton-is-built-on-demand =
       let
