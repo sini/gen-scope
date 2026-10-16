@@ -390,7 +390,9 @@ let
 
       edgeList =
         id: l: v:
-        if isList v then
+        if isList v && builtins.all isString v then
+          v
+        else if isList v then
           map (
             t:
             if isString t then
@@ -460,27 +462,35 @@ let
       # withheld by the marks at its AUTHORED source. `steps` are `{ to; target; }`: where the walk
       # goes, and the authored edge's target.
       classify =
-        src: x: steps:
+        src: ms: x: steps:
         let
-          blockers = filter (m: !(admitsLetter src x.l m)) (marksAt src);
+          blockers = if ms == [ ] then [ ] else filter (m: !(admitsLetter src x.l m)) ms;
         in
-        {
-          label = x.l;
-          blocked = blockers != [ ];
-        }
-        // (
+        (
           if blockers == [ ] then
             {
+              label = x.l;
+              blocked = false;
+              next = map (s: {
+                key = keyOf s.to x.k;
+                node = s.to;
+                st = x.d;
+                inherit (x) s;
+                x = expand s.to x.s;
+              }) steps;
               admitted = map (s: {
                 label = x.l;
                 target = s.to;
                 st = x.d;
-                inherit (x) k;
+                inherit (x) k s;
               }) steps;
               withheld = [ ];
             }
           else
             {
+              label = x.l;
+              blocked = true;
+              next = [ ];
               admitted = [ ];
               withheld = map (s: {
                 from = src;
@@ -491,26 +501,15 @@ let
             }
         );
       expand =
-        id: st:
+        id: s:
         let
-          live = filter (x: x.k != emptyKey) (
-            map (
-              l:
-              let
-                d = regex.deriv l st;
-              in
-              {
-                inherit l d;
-                k = regex.stateKey d;
-              }
-            ) alphabet
-          );
+          live = s.live;
           perLetter = concatMap (
             x:
             if inbound then
               map (
                 s:
-                classify s x [
+                classify s (marksAt s) x [
                   {
                     to = s;
                     target = id;
@@ -519,7 +518,7 @@ let
               ) (sourcesOf id x.l)
             else
               [
-                (classify id x (
+                (classify id here x (
                   map (t: {
                     to = t;
                     target = t;
@@ -530,9 +529,11 @@ let
           # The `parent` classifications at this node: at most one outbound, one per converse source
           # inbound. The node's parent edge is admitted when any of them is (D9 then walks its chain).
           parentRead = filter (p: p.label == parentLetter) perLetter;
+          here = marksAt id;
         in
         if live == [ ] then
           {
+            next = [ ];
             admitted = [ ];
             withheld = [ ];
             readsParent = false;
@@ -540,6 +541,7 @@ let
           }
         else
           {
+            next = concatMap (p: p.next) perLetter;
             admitted = concatMap (p: p.admitted) perLetter;
             withheld = concatMap (p: p.withheld) perLetter;
             readsParent = parentRead != [ ];
@@ -547,6 +549,48 @@ let
           };
 
       k0 = regex.stateKey st0;
+      # THE ON-DEMAND UNFOLDING OF THE DERIVATIVE AUTOMATON, STATES IDENTIFIED ONLY AT A SELF-LOOP.
+      # A state is a term with its live letters: each letter of the alphabet, in order, whose
+      # derivative is not the empty language, carrying the successor state. Brzozowski 1964 builds
+      # the automaton by deriving every state on every letter, and Owens, Reppy & Turon 2009 §3.3
+      # name the trade: "If, instead of computing the derivatives on the fly, we precompute the
+      # derivative for each symbol in Σ, we can construct a DFA". Precomputing pays every state of
+      # the automaton, which is exponential in the term ((a|b)* a (a|b)^k has about 2^(k+1));
+      # deriving on the fly pays every visit. A state here is a lazy record, so a transition is
+      # derived the first time a walk reads it and is read thereafter: what exists is the part of
+      # the unfolding from the start that some walk reached, and no state is built that a walk did
+      # not visit. A successor with its own state's key is that state, so a starred term's self-loop
+      # is one state, not one per visit. That is the ONLY identity test. ORT's construction "only
+      # introduces a new state when no equivalent state is present" (§4.1), and this one does not,
+      # so a class reached along two derivation paths is two records, and each turn of a longer
+      # cycle such as (a b)* is a fresh one. The walk is unaffected, because it keys a visit by
+      # `regex.stateKey`, which is canonical. A global test has no lazy form in a pure evaluator
+      # short of enumerating every state (the exponential table above), and an ancestor map on each
+      # path copies per new state, which is quadratic on a long acyclic derivation.
+      start =
+        let
+          node =
+            r:
+            let
+              state = {
+                live = filter (x: x.k != emptyKey) (
+                  map (
+                    l:
+                    let
+                      d = regex.deriv l r;
+                      k = regex.stateKey d;
+                    in
+                    {
+                      inherit l d k;
+                      s = if k == r.k then state else node d;
+                    }
+                  ) alphabet
+                );
+              };
+            in
+            state;
+        in
+        node st0;
       keyOf =
         n: k:
         toJSON [
@@ -561,17 +605,11 @@ let
             key = keyOf from k0;
             node = from;
             st = st0;
-            x = expand from st0;
+            s = start;
+            x = expand from start;
           }
         ];
-        operator =
-          item:
-          map (e: {
-            key = keyOf e.target e.k;
-            node = e.target;
-            inherit (e) st;
-            x = expand e.target e.st;
-          }) item.x.admitted;
+        operator = item: item.x.next;
       };
 
       # THE ACYCLIC-PATH LAW: DFS with per-path seen scopes, the start included (gen-graph
@@ -585,9 +623,9 @@ let
       #
       # `visited` maps each scope on the path to its depth.
       go =
-        visited: depth: path: ix: via: id: st: k:
+        visited: depth: path: ix: via: id: st: k: s:
         let
-          x = expand id st;
+          x = expand id s;
         in
         {
           node = id;
@@ -618,11 +656,11 @@ let
                     to = e.target;
                   }
                 ]
-              ) (ix ++ [ i ]) e.label e.target e.st e.k
+              ) (ix ++ [ i ]) e.label e.target e.st e.k e.s
             ) (length fresh);
         };
       flatten = t: [ t ] ++ concatMap flatten t.kids;
-      tree = go { ${attrKey "resolve" from} = 0; } 0 [ ] [ ] null from st0 k0;
+      tree = go { ${attrKey "resolve" from} = 0; } 0 [ ] [ ] null from st0 k0 start;
 
       visits = if mode == "reachable" then closure else flatten tree;
 
@@ -669,13 +707,16 @@ let
       );
       parentCheck =
         reads:
-        let
-          cyclic = filter (v: reads v.x && !(rooted ? ${attrKey "resolve" v.node})) visits;
-        in
-        if cyclic == [ ] then
+        if !(elem parentLetter alphabet) then
           true
         else
-          refuse "resolve" "node ${renderId (head cyclic).node} is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk";
+          let
+            cyclic = filter (v: reads v.x && !(rooted ? ${attrKey "resolve" v.node})) visits;
+          in
+          if cyclic == [ ] then
+            true
+          else
+            refuse "resolve" "node ${renderId (head cyclic).node} is on a parent cycle: containment is a tree, and a parent chain that returns to itself is malformed data, not a scope to walk";
       admittedChecked = builtins.seq (parentCheck (x: x.admitsParent));
       withheldChecked = builtins.seq (parentCheck (x: x.readsParent));
 

@@ -33,12 +33,12 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 anchor='nix-instantiate (Nix) 2.34.8'
-anchor_source=6c5d6c0265ee9d0a
+anchor_source=1a7ff5662f30be87
 # arm -> "d1 d2 visits(d2)-visits(d1) bound(thunks over that difference)"
 declare -A cell=(
-  [fanout]="3 5 1280 150246"
-  [neron]="100 400 1500 195300"
-  [chain]="400 1600 1200 271200"
+  [fanout]="3 5 1280 138726"
+  [neron]="100 400 1500 147000"
+  [chain]="400 1600 1200 260400"
 )
 declare -A want=(
   [fanout,3]=16 [fanout,5]=256

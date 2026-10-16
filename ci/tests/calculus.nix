@@ -1988,5 +1988,62 @@ in
         ];
       };
     };
+
+    # THE AUTOMATON IS UNFOLDED ON DEMAND (den-hoag-9z993; gen-demo
+    # `derivative-automaton-built-on-demand`). `(a|b)* a (a|b)^20` has about 2^21 derivative
+    # states and this walk visits 22, so the answer is a value only while states are built as the
+    # walk reads them. ★ THE RED IS A TIME-OUT, NOT A VALUE: an eager or depth-unbounded
+    # construction answers the same `[ "n21" ]` after building the automaton, which does not
+    # finish, so this cell catches it as a hung run. A per-visit re-derivation passes it, as the
+    # walk before the automaton did; that cost is the benches' (`resolve-visible-fanout`).
+    test-the-derivative-automaton-is-built-on-demand =
+      let
+        n = j: "n${toString j}";
+        g = lift {
+          nodes = [ "r" ] ++ builtins.genList (j: n (j + 1)) 21;
+          edges = {
+            a.r = [ (n 1) ];
+            b = builtins.listToAttrs (
+              builtins.genList (j: {
+                name = n (j + 1);
+                value = [ (n (j + 2)) ];
+              }) 20
+            );
+          };
+        };
+      in
+      {
+        expr = nodesOf (
+          run "reachable" [ "a" "b" ] (
+            "(a|b)*a" + builtins.concatStringsSep "" (builtins.genList (_: "(a|b)") 20)
+          ) g "r"
+        );
+        expected = [ "n21" ];
+      };
+    # A cycle longer than a self-loop unfolds, one record per turn, and the walk still stops at
+    # the ⟨node, state⟩ it has seen: `(a b)*` returns to its own key after two letters.
+    test-a-longer-derivative-cycle-is-walked-to-its-fixpoint =
+      let
+        g = lift {
+          nodes = [
+            "x"
+            "y"
+          ];
+          edges = {
+            a.x = [ "y" ];
+            b.y = [ "x" ];
+          };
+        };
+      in
+      {
+        expr = {
+          loop = nodesOf (run "reachable" [ "a" "b" ] "(a b)*" g "x");
+          loopA = nodesOf (run "reachable" [ "a" "b" ] "(a b)* a" g "x");
+        };
+        expected = {
+          loop = [ "x" ];
+          loopA = [ "y" ];
+        };
+      };
   };
 }
