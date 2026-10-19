@@ -689,7 +689,7 @@ let
   # but a registry filing two different kinds under one name gives a reader looking a spawned
   # node's kind up by name a different kind from the one the evaluator follows, and the caller's
   # declared expansion silently does not happen. So it is refused by name. Two kinds are compared on
-  # `name`, `below`, `depth`, the key sets of `spawns` and `nta`, and their kind values' MARKS;
+  # `name`, `below`, `depth`, the key sets of `spawns` and `nta`, the on-demand `nta` names, and their kind values' MARKS;
   # builders are functions and are not compared, so two kinds differing only in a builder's body are
   # one kind to this door. The kind values are decided by `sameKindValue` (the mark, then the sealed
   # subjects at an equal mark), so two kinds whose values differ only at a sealed component are
@@ -778,7 +778,7 @@ let
       else if absent != [ ] then
         "holds kind '${(head absent).host}', whose resolved `below` carries kind '${(head absent).name}', which the registry does not"
       else if split != [ ] then
-        "files under '${(head split).name}' a kind that differs from the kind '${(head split).name}' that entry '${(head split).host}' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
+        "files under '${(head split).name}' a kind that differs from the kind '${(head split).name}' that entry '${(head split).host}' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
       else
         null;
 

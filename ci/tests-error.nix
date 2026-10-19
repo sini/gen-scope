@@ -3094,7 +3094,7 @@ in
         "gen-scope.${entry}: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it; ${detail}. Mint the kinds with `mkKinds` over their declarations and pass the result.";
 
       declarationDetail = ''holds entries that are not minted kinds: ["`k` is a kind declaration built by `mkKind`, not a kind `mkKinds` minted: pass the declarations through `mkKinds`"]'';
-      mergeDetail = "files under 'k' a kind that differs from the kind 'k' that entry 'item' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value). Two different kinds share one name — a merge of registries built from different declarations";
+      mergeDetail = "files under 'k' a kind that differs from the kind 'k' that entry 'item' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations";
     in
     {
       # G4 — the EVALUATOR, on a hand-built registry of declarations: a TYPE refusal naming it.
@@ -3404,7 +3404,7 @@ in
         expectedError = {
           type = "ThrownError";
           msg = exactly (
-            registryRefusal "files under 'host' a kind that differs from the kind 'host' that entry 'leaf' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
+            registryRefusal "files under 'host' a kind that differs from the kind 'host' that entry 'leaf' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
           );
         };
       };

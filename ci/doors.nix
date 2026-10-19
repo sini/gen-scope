@@ -131,6 +131,7 @@ in
       "fold"
       "kindValue"
       "nta"
+      "ntaOnDemand"
       "resolve"
       "spawns"
     ];
