@@ -423,6 +423,7 @@ let
       resolve ? null,
       spawns ? { },
       nta ? { },
+      ntaOnDemand ? [ ],
       dedupKey ? null,
       fold ? null,
       kindValue ? null,
@@ -461,6 +462,10 @@ let
       ntaNames = if isAttrs nta then attrNames nta else [ ];
       circularNta = filter (k: isCircularDecl nta.${k}) ntaNames;
       unbuildableNta = filter (k: !(callable nta.${k})) ntaNames;
+      # The NTAs whose children are reached on demand and never enumerated (`lib/eval.nix`,
+      # `ntaEnumerated`): each must be one this kind declares.
+      undeclaredOnDemand =
+        if isList ntaOnDemand then filter (k: !(isString k) || !(elem k ntaNames)) ntaOnDemand else [ ];
     in
     if !isString name then
       throw "gen-scope.mkKind: `name` must be a string"
@@ -484,6 +489,10 @@ let
       throw "gen-scope.mkKind: nta: kind '${name}' declares NTA(s) ${toJSON circularNta} whose builder is a circular declaration. An `nta` builder computes the NODE SET, and a node set that is a fixed point of its own iterate is the per-step growth the spawn-read restriction refuses. A child's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function."
     else if unbuildableNta != [ ] then
       throw "gen-scope.mkKind: nta: kind '${name}' declares NTA(s) ${toJSON unbuildableNta} whose builder cannot be applied"
+    else if !isList ntaOnDemand then
+      throw "gen-scope.mkKind: nta: kind '${name}' declares an `ntaOnDemand` that is a ${typeOf ntaOnDemand} rather than a list of its NTA names"
+    else if undeclaredOnDemand != [ ] then
+      throw "gen-scope.mkKind: nta: kind '${name}' declares ${toJSON undeclaredOnDemand} on demand in `ntaOnDemand`, which its `nta` does not declare. An on-demand NTA is one of the kind's own NTAs whose children are never enumerated; name one of ${toJSON ntaNames}."
     else if hasDedup && !hasFold then
       throw "gen-scope.mkKind: kind '${name}' declares `dedupKey` without `fold` (a fold is required to merge grouped fragments)"
     else if hasFold && !hasDedup then
@@ -497,6 +506,7 @@ let
           resolve
           spawns
           nta
+          ntaOnDemand
           dedupKey
           fold
           kindValue
@@ -696,6 +706,7 @@ let
     && a.depth == b.depth
     && attrNames a.spawns == attrNames b.spawns
     && attrNames a.nta == attrNames b.nta
+    && (a.ntaOnDemand or [ ]) == (b.ntaOnDemand or [ ])
     &&
       sameKindValue
         "gen-scope: the kind registry files under '${a.name}' a kind whose value is not the one entry '${host}' resolved in its `below`: file the one kind value under both (`mkKinds` shares it); two constructions of one kind are two kinds"

@@ -412,6 +412,7 @@ let
     {
       attributes,
       requireChildrenAttribute,
+      onDemand,
     }:
     ev: id:
     let
@@ -426,7 +427,7 @@ let
       # and resolution hand out ONE record per child, carrying ONE memo.
       nta =
         if attributes ? ${ntaChannel} then
-          structural.flattenChildren ntaChannel (ev.get id ntaChannel)
+          structural.flattenChildren ntaChannel (ntaEnumerated onDemand ev id)
         else
           { };
       base = children // derived;
@@ -672,6 +673,35 @@ let
   # re-entry guard is the deferred target; the debug evaluator's shadow stack refuses the same cycle
   # by name today.
   ntaChannel = "nta-children";
+
+  # ── THE ENUMERATED VIEW OF THE `nta` CHANNEL ──
+  # A kind may declare some of its NTAs ON DEMAND (`mkKind { ntaOnDemand = [ <name> ]; }`). Their
+  # children are nodes of the one graph like any other (ADR-0012): minted from the host's
+  # coordinates, stamped with its kind, reached by `getNta` and by identifier through the host's
+  # product (`ntaTarget`). What they are not is ENUMERATED: the node set a walk materializes, a
+  # node's child records and the structural projection are this view, the product without the
+  # on-demand families. It is for a family whose children are unbounded and lazy, the reference
+  # fold's own regress (gen-merge's evaluation's own type, den-hoag-8qenh): every enumeration is
+  # total because it never descends one, and a demand descends exactly as far as it reads.
+  # `onDemand` is `null` where no registered kind declares one, so such an evaluation pays nothing.
+  ntaOnDemandOf =
+    kinds: nodes:
+    if
+      kinds == null || !(builtins.any (k: (k.ntaOnDemand or [ ]) != [ ]) (builtins.attrValues kinds.kinds))
+    then
+      null
+    else
+      ev: id:
+      let
+        k = kindOf kinds nodes ev id;
+      in
+      if k == null then [ ] else k.ntaOnDemand or [ ];
+  ntaEnumerated =
+    onDemand: ev: id:
+    if onDemand == null then
+      ev.get id ntaChannel
+    else
+      builtins.removeAttrs (ev.get id ntaChannel) (onDemand ev id);
 
   # One step of an address path: an attribute name, or a list index ≥ 0.
   isStep = k: builtins.isString k || (builtins.isInt k && k >= 0);
@@ -1078,13 +1108,16 @@ let
 
       # The two arms of the binding above, taken once each so the divergence the five collapsed
       # copies carried has exactly two names instead of five inline spellings.
+      onDemand = ntaOnDemandOf (checked.kinds or null) checked.nodes;
       childRecordsStrict = childRecordsOf {
         attributes = runAttributes;
         requireChildrenAttribute = true;
+        inherit onDemand;
       };
       childRecordsLenient = childRecordsOf {
         attributes = runAttributes;
         requireChildrenAttribute = false;
+        inherit onDemand;
       };
     in
     let
@@ -2112,11 +2145,12 @@ let
                           n._eval.${a}
                         else
                           self.get tid a;
+                      node = tid: if tid == id then n else self.node tid;
                     };
                     all = childRecordsLenient rd id;
                     ntaKids =
                       if runAttributes ? ${ntaChannel} then
-                        structural.flattenChildren ntaChannel (rd.get id ntaChannel)
+                        structural.flattenChildren ntaChannel (ntaEnumerated onDemand rd id)
                       else
                         { };
                   in
@@ -2266,7 +2300,13 @@ let
               let
                 structuralNamesAll = builtins.filter structural.projected (builtins.attrNames runAttributes);
               in
-              id: prelude.genAttrs structuralNamesAll (name: structural.flattenChildren name (self.get id name));
+              id:
+              prelude.genAttrs structuralNamesAll (
+                name:
+                structural.flattenChildren name (
+                  if name == ntaChannel then ntaEnumerated onDemand self id else self.get id name
+                )
+              );
 
             # THE SAME PARTITION AS A RELATION — `id -> [id]`, which is the arity the record above is
             # not. The projection itself is gen-graph's: it is edge vocabulary, it belongs beside the
@@ -2356,6 +2396,7 @@ let
       childRecordsStrict = childRecordsOf {
         attributes = runAttributes;
         requireChildrenAttribute = true;
+        onDemand = ntaOnDemandOf (checked.kinds or null) checked.nodes;
       };
       mkSelf =
         visited: traceList:
