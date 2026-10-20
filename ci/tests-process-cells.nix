@@ -567,6 +567,39 @@ let
     in
     ev.get "h" "sum";
 
+  # den-hoag-jlmmr — the spawn channel's walk cost per child. A host spawns `n` leaf children as an
+  # attribute set, and the program walks `allNodeIds` and reads one attribute per node: the walk the
+  # child order rides on, and every leaf's two empty child channels. The value is n + 1 + (n + 1).
+  walkCost =
+    n:
+    let
+      kids = builtins.listToAttrs (
+        builtins.genList (i: {
+          name = "c${toString i}";
+          value = { };
+        }) n
+      );
+      ev =
+        evalLib.eval { }
+          {
+            children = _: _: { };
+            v = _: _: 1;
+          }
+          (buildRoots {
+            kinds = mkKinds [
+              (mkKind { } "leaf")
+              (mkKind {
+                below = [ "leaf" ];
+                spawns.leaf = _: id: if id == "h" then kids else { };
+              } "host")
+            ];
+            parentGraph = ag.vertex "h";
+            decls.h = { };
+            types.h = "host";
+          });
+    in
+    builtins.length ev.allNodeIds + builtins.foldl' (a: i: a + ev.get i "v") 0 ev.allNodeIds;
+
   # U2.0-g — a same-kind `nta` chain of depth `n`, one empty-seed child per node, bounded by a
   # `depth` read through `getHostAt`. `what` picks the read: every id (`allNodeIds`), or the
   # deepest node's `depth` by its identifier. The verdict is the evaluator's own function-call
@@ -703,6 +736,10 @@ else if arm == "child-cost-100" then
   childCost 100
 else if arm == "child-cost-400" then
   childCost 400
+else if arm == "walk-cost-100" then
+  walkCost 100
+else if arm == "walk-cost-400" then
+  walkCost 400
 else if arm == "claim-group-100" then
   claimGroup 100
 else if arm == "claim-group-400" then

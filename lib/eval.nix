@@ -431,20 +431,26 @@ let
         else
           { };
       base = children.nodes // derived.nodes;
-      baseOrder = children.nodeOrder ++ derived.nodeOrder;
       crossing = builtins.filter (k: base ? ${k}) (builtins.attrNames nta);
     in
+    # A half with no children answers the other half's record, so a leaf builds no merged record
+    # (`tests-process`, `walk-cost-400`). `children` is tested first, as `base` reads it first.
     if nta == { } then
-      {
-        nodes = base;
-        nodeOrder = baseOrder;
-      }
+      if children.nodeOrder == [ ] then
+        derived
+      else if derived.nodeOrder == [ ] then
+        children
+      else
+        {
+          nodes = base;
+          nodeOrder = children.nodeOrder ++ derived.nodeOrder;
+        }
     else if crossing != [ ] then
       throw "gen-scope.nta: node '${id}' carries an `nta` child '${builtins.head crossing}' under a key its `children` or `derived-children` also carries. The three halves compose into one child map, and a shared key would discard one record silently. An `nta` identifier is minted by the substrate, so the other half chose it: choose a key that is not an `nta` identifier."
     else
       {
         nodes = base // nta;
-        nodeOrder = baseOrder ++ builtins.attrNames nta;
+        nodeOrder = children.nodeOrder ++ derived.nodeOrder ++ builtins.attrNames nta;
       };
 
   # ── A ONE-LEVEL CHILD CHANNEL'S VALUE: ONE PRODUCER VALUE, TWO PROJECTIONS ──
@@ -474,7 +480,9 @@ let
   };
   childSetOf =
     who: v:
-    if builtins.isAttrs v then
+    if v == { } then
+      noChildren
+    else if builtins.isAttrs v then
       {
         nodes = v;
         nodeOrder = builtins.attrNames v;
@@ -1374,7 +1382,7 @@ let
                 else if attrClass.${attrName} != 3 then
                   (
                     if structural.childDepth attrName == 1 then
-                      raw // { nodes = builtins.mapAttrs (_: wrapChild) raw.nodes; }
+                      if raw.nodeOrder == [ ] then raw else raw // { nodes = builtins.mapAttrs (_: wrapChild) raw.nodes; }
                     else
                       mapAtDepth (structural.childDepth attrName) wrapChild raw
                   )

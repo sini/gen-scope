@@ -201,6 +201,8 @@ let
     probe =
       self: id:
       if id == "r" then builtins.attrNames (self.getNta "sub" "g" "k1" "derived-children") else null;
+    # The `nta` child's own reader: its `get` on its own child channel, on the production accessor.
+    own = self: id: if id == kid then builtins.attrNames (self.get id "derived-children") else null;
     # The arm an open round runs: `probe`, demanded from inside a declared-circular step, runs on
     # the round's accessor, whose `getNta` applies the child's attribute rather than reading `_eval`.
     probeInRound =
@@ -392,12 +394,13 @@ in
     };
 
     # ── C1: no published value route hands out the internal record ──
-    # `getNta` on an `nta` child's child channel answers the map, in both of its arms; its order is
-    # the query surface's.
+    # `getNta` on an `nta` child's child channel answers the map, in both of its arms, and so does the
+    # child's own `get`; its order is the query surface's.
     test-getNta-on-a-child-channel-answers-the-map = {
       expr = {
         closed = ntaEv.get "r" "probe";
         inRound = ntaEv.get "r" "probeInRound";
+        own = ntaEv.get kid "own";
         order = childrenIds ntaEv kid;
       };
       expected = {
@@ -406,6 +409,10 @@ in
           "c:z"
         ];
         inRound = [
+          "c:a"
+          "c:z"
+        ];
+        own = [
           "c:a"
           "c:z"
         ];

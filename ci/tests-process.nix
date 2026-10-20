@@ -251,6 +251,16 @@
           statOf child-cost-400 nrThunks
           [ "$val" = "800" ] || die child-cost-400 "expected value 800, got '$val'"
           [ $((stat - t100)) -le $((36 * 300)) ] || die child-cost-400 "the nta channel costs $((stat - t100)) thunks over 300 children, above 36 per child"
+          # den-hoag-jlmmr — the spawn channel's walk cost per child, the same difference over an
+          # `allNodeIds` walk with one read per node: at most 139, measured 139 on upstream Nix,
+          # Determinate and Lix alike, where 4b3870f read 146 (the order's record built for every
+          # leaf's empty channels). The value is the hand-derived 2n + 2.
+          statOf walk-cost-100 nrThunks
+          [ "$val" = "202" ] || die walk-cost-100 "expected value 202, got '$val'"
+          w100=$stat
+          statOf walk-cost-400 nrThunks
+          [ "$val" = "802" ] || die walk-cost-400 "expected value 802, got '$val'"
+          [ $((stat - w100)) -le $((139 * 300)) ] || die walk-cost-400 "the walk costs $((stat - w100)) thunks over 300 children, above 139 per child"
 
           # den-hoag-hm8t1 — a dedup group's per-key combination is linear in the group: one
           # group of n claims, each writing its own key, at n = 100, 400, 1600. Linear growth makes
@@ -265,8 +275,8 @@
           [ $((cg1600 - cg400)) -lt $((5 * (cg400 - cg100))) ] || die claim-group-1600 "function calls grow faster than linear in the group: $cg100 / $cg400 / $cg1600"
 
           # 0/0 is a false pass: the runner must have executed every cell above.
-          [ "$ran" = "34" ] || die runner "expected 34 evaluations, ran $ran"
-          echo "tests-process: 34 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
+          [ "$ran" = "36" ] || die runner "expected 36 evaluations, ran $ran"
+          echo "tests-process: 36 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
         ''
         + ''
           cat "$out"

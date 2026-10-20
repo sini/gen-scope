@@ -3678,6 +3678,11 @@ in
         expr = (debug.getTraced X "x").trace;
         expectedError = refusedId "self.getTraced";
       };
+      # The child-channel record's reader, which the structural queries reach on `evalDebug`.
+      test-evalDebug-childrenIds-refuses-a-record-at-self-get = {
+        expr = S.childrenIds debug X;
+        expectedError = get;
+      };
       test-evalWarm-node-refuses-a-record = {
         expr = warm.node X;
         expectedError = node;
