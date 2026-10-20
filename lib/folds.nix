@@ -40,7 +40,8 @@
 #
 # ── EVERY FOLD REFUSES ITS PRECONDITION BY NAME ──
 # A fold's fragments are values a caller chose, and each fold below is defined only over some of
-# them: `same` needs its fragments to be comparable, `mergeAttrs` and `byKey` need attribute sets.
+# them: `same` and `set` need their fragments to be comparable, `mergeAttrs`, `mergeAttrsDeep` and
+# `byKey` need attribute sets.
 # The alternative to refusing by name is not a milder failure, it is a WORSE one — an evaluator type
 # error, or a `toJSON` that cannot render what it was asked to. Neither is a value: `tryEval` does
 # not hold either, so what surfaces terminates the evaluation and carries no fold, no key and no
@@ -57,25 +58,36 @@
 let
   inherit (builtins)
     attrNames
+    attrValues
     isAttrs
     isFunction
     isList
     isPath
     isString
+    seq
     toJSON
     typeOf
+    unsafeDiscardStringContext
+    zipAttrsWith
     ;
   inherit (prelude)
+    absorb
     all
+    any
     concatMap
+    elem
     filter
     foldl'
+    groupBy
     head
     imap0
+    indexOf
     length
     listToAttrs
     map
     nameValuePair
+    sort
+    tail
     unique
     ;
 
@@ -144,6 +156,8 @@ let
       {
         what = "a path";
         because = "reporting a conflict over it would either abort on a path that is not there or copy the caller's path into the store, and a message explaining a refusal may do neither";
+        # The ground at a fold that never reports a conflict (`set`): the second of the two below.
+        plain = "a path in a fragment is not plain data, and the construction this library names for that class makes such a fragment inexpressible, so it is refused where it sits rather than deduplicated";
       }
     else
       null;
@@ -319,18 +333,31 @@ let
     key: vs:
     let
       kd = keyDefect key;
-      site = hazardSite vs;
     in
     if kd != null then
       refuseKey "same" kd
     else if vs == [ ] then
       throw "gen-scope.folds.same: empty fragment list for key '${key}'"
-    else if site != null then
-      throw "gen-scope.folds.same: key '${key}' has a fragment carrying ${site.what}, at fragment-list position ${site.w} — ${site.because}"
+    else
+      agree "same" (
+        site: "key '${key}' has a fragment carrying ${site.what}, at fragment-list position ${site.w}"
+      ) key vs;
+
+  # `agree fold position key vs` — `same`'s precondition and comparison, under the name of the fold
+  # that invoked it and with that fold's wording of WHERE the value sits (`position site`). One
+  # construction, so the deep merge's leaves are compared exactly as `same` compares, and refused
+  # in the deep merge's own name. `vs` is non-empty.
+  agree =
+    fold: position: key: vs:
+    let
+      site = hazardSite vs;
+    in
+    if site != null then
+      throw "gen-scope.folds.${fold}: ${position site} — ${site.because}"
     else if all (v: v == head vs) vs then
       head vs
     else
-      throw "gen-scope.folds.same: conflicting values for key '${key}': ${toJSON vs}";
+      throw "gen-scope.folds.${fold}: conflicting values for key '${key}': ${toJSON vs}";
 
   # Exactly one contributor; a second is a loud error. The default combine of a wiring splice, where
   # two authors of one key have no merge rule between them.
@@ -356,6 +383,89 @@ let
       kd = keyDefect key;
     in
     if kd != null then refuseKey "list" kd else vs;
+
+  # ── `set`: FIRST-OCCURRENCE DEDUP UNDER `==`, AND THE DEDUP IS A QUOTIENT (`key: [v]: [v]`) ──
+  # The declared dedup the ORDER AND ARITY rule above leaves to a fold that says so: the result is
+  # the sub-list of `vs` holding each `==` class once, at its first occurrence, in pinned order. It
+  # is idempotent (`set k (set k vs ++ vs) == set k vs`), and a singleton is returned as it is,
+  # once the key and the scan have admitted it.
+  #
+  # Dedup is an `==` decision, so `same`'s precondition is this fold's too, with the same function
+  # ground. A path takes the plain-data ground instead: this fold never reports a conflict, so the
+  # reporting hazard `same` cites is not its reason.
+  #
+  # ★ A COLLAPSE IS A QUOTIENT (den-hoag-kunjm): `==` is blind to string context, so the kept
+  # element carries its twins' store-context edges through gen-prelude's `absorb`, and a non-string
+  # collapse that would lose one is refused by name. The scan above has walked every element, which
+  # is the precondition `absorb`'s edge walk owes its totality to.
+  #
+  # COST. String twins are found through the text-keyed table (`groupBy` over the context-free
+  # text, `combines.setUnion`'s construction), linear in `vs` but for the first-occurrence sort.
+  # Non-strings have no total key, so each is compared against the representatives found so far,
+  # in ONE pass that also groups its twins: O(n·u) `==` for n elements in u classes, the cost of
+  # `unique`'s own fold. `==` is not a function call, so the call count is blind to it, and the
+  # list cells the pass appends grow as n·u too; the process plane pins both counters.
+  set =
+    key: vs:
+    let
+      kd = keyDefect key;
+      site = hazardSite vs;
+    in
+    if kd != null then
+      refuseKey "set" kd
+    else if site != null then
+      throw "gen-scope.folds.set: key '${key}' has a fragment carrying ${site.what}, at fragment-list position ${site.w} — ${site.plain or site.because}"
+    else if length vs < 2 then
+      vs
+    else
+      let
+        tagged = imap0 (i: v: { inherit i v; }) vs;
+        byText = groupBy (t: unsafeDiscardStringContext t.v) (filter (t: isString t.v) tagged);
+        # Each field forced at every step, so no field accumulates a thunk chain as long as `vs`.
+        strictly = r: seq r.reps (seq r.firsts (seq r.twins r));
+        others =
+          foldl'
+            (
+              acc: t:
+              if isString t.v then
+                acc
+              else if !(elem t.v acc.reps) then
+                strictly {
+                  reps = acc.reps ++ [ t.v ];
+                  firsts = acc.firsts ++ [ t ];
+                  inherit (acc) twins;
+                }
+              else
+                strictly {
+                  inherit (acc) reps firsts;
+                  twins = acc.twins ++ [
+                    {
+                      r = indexOf acc.reps t.v;
+                      inherit (t) v;
+                    }
+                  ];
+                }
+            )
+            (strictly {
+              reps = [ ];
+              firsts = [ ];
+              twins = [ ];
+            })
+            tagged;
+        twinsAt = groupBy (t: toString t.r) others.twins;
+        kept = sort (a: b: a.i < b.i) (
+          map (g: head g // { twins = map (t: t.v) (tail g); }) (attrValues byText)
+          ++ imap0 (r: t: t // { twins = map (x: x.v) (twinsAt.${toString r} or [ ]); }) others.firsts
+        );
+      in
+      map (
+        t:
+        absorb {
+          fn = "gen-scope.folds.set";
+          subject = "the fold at key '${key}'";
+          at = " at fragment-list position [${toString t.i}]";
+        } t.v t.twins
+      ) kept;
 
   # Shallow merge of attribute-set fragments; disjoint sub-keys required, because two fragments
   # writing one sub-key have no merge rule between them and picking a winner here would decide it
@@ -393,7 +503,7 @@ let
   #
   # ONE declared level of nesting, which is the stock answer to "a shared resource with a per-
   # claimant sub-entry". Deeper nesting is another `byKey` in the spec, written by the caller who
-  # knows the shape.
+  # knows the shape; where the key set is data rather than a declaration, it is `mergeAttrsDeep`.
   byKey =
     spec: key: vs:
     let
@@ -421,6 +531,77 @@ let
     # `shaped` is read in the condition rather than bound and ignored: a precondition nothing forces
     # is a precondition that fires only for the callers who happen to look at the right field.
     if shaped then listToAttrs (map (k: nameValuePair k (foldKey k)) allKeys) else { };
+
+  # ── `mergeAttrsDeep`: THE JOIN OF COMPATIBLE PARTIAL MAPS (`key: [attrs]: attrs`) ──
+  # Every fragment is a partial map from attribute paths to leaves, and the result is their union,
+  # defined exactly where no two fragments disagree at a leaf. A NODE is an attribute set that is
+  # neither compared by path (the derivation predicate above) nor `_type`-tagged: `_type` is the
+  # module system's tag for an opaque value, dispatched on before any attribute merge and never
+  # merged field by field, so a tagged set is a LEAF (den-hoag-izo7a OQ-2).
+  #
+  # Per key, in one pass per level (`zipAttrsWith`, which hands each key its contributors in pinned
+  # order, linear in total keys):
+  #   one contributor   ⇒ returned as it is, UNFORCED: nothing is compared, so neither reader
+  #                       `same`'s precondition protects runs, and a whole system under
+  #                       `nixosConfigurations.<h>` is never walked;
+  #   all nodes         ⇒ the join one level down, at the diagnostic key `<key>.<k>`;
+  #   all leaves        ⇒ `same`'s comparison in this fold's name, and the kept leaf absorbs its
+  #                       twins' store-context edges (the quotient rule, as at `set`);
+  #   a node and a leaf ⇒ refused by name: a namespace and a value have no merge rule between them.
+  #
+  # LAWS: associative under any bracketing, and commutative UP TO `==`. Which twin is kept depends
+  # on order, and two twins can differ where `==` does not look (two derivations with one `outPath`
+  # and different `meta`): reversing the fragments then keeps the other one. The absorbed context
+  # does not depend on order. A conflict is symmetric, so a refusal does not either.
+  #
+  # Not `byKey` with a self-referential spec (it refuses undeclared keys, and fleet keys are data)
+  # and not a `foldl'` over `//`, which copies the accumulator once per fragment and is quadratic in
+  # the fleet. Not last-wins either: picking a winner silently is what `mergeAttrs` refuses.
+  isNode = v: isAttrs v && !comparedByPath v && !(v ? _type);
+
+  joinAt =
+    key: vs:
+    zipAttrsWith (
+      k: xs:
+      let
+        at = "${key}.${k}";
+        positionOf = p: head (filter (i: p (builtins.elemAt xs i)) (builtins.genList (i: i) (length xs)));
+      in
+      if length xs == 1 then
+        head xs
+      else if all isNode xs then
+        joinAt at xs
+      else if any isNode xs then
+        throw "gen-scope.folds.mergeAttrsDeep: the contributors at key '${at}' hold an attribute set at position [${toString (positionOf isNode)}] beside a leaf at position [${
+          toString (positionOf (x: !isNode x))
+        }]; a namespace and a value have no merge rule between them"
+      else
+        let
+          kept = agree "mergeAttrsDeep" (
+            site: "the value at position ${site.w} among the contributors at key '${at}' carries ${site.what}"
+          ) at xs;
+        in
+        seq kept (
+          absorb {
+            fn = "gen-scope.folds.mergeAttrsDeep";
+            subject = "the leaf at key '${at}'";
+            at = "";
+          } kept (tail xs)
+        )
+    ) vs;
+
+  mergeAttrsDeep =
+    key: vs:
+    let
+      kd = keyDefect key;
+      bad = nonAttrsSite vs;
+    in
+    if kd != null then
+      refuseKey "mergeAttrsDeep" kd
+    else if bad != null then
+      throw "gen-scope.folds.mergeAttrsDeep: key '${key}' has a fragment that is a ${typeOf bad.v} rather than an attribute set, at fragment-list position [${toString bad.i}]"
+    else
+      joinAt key vs;
 in
 {
   folds = {
@@ -428,7 +609,9 @@ in
       same
       one
       list
+      set
       mergeAttrs
+      mergeAttrsDeep
       byKey
       ;
   };

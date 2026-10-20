@@ -126,6 +126,53 @@
             statOf "$1" nrFunctionCalls
             calls=$stat
           }
+          # <arm>: one cell with the evaluator's statistics on, exit 0 required. Every count below is
+          # then read from that ONE stats file, so a cell's counters describe one evaluation.
+          statsRun() {
+            export NIX_SHOW_STATS=1 NIX_SHOW_STATS_PATH="$TMPDIR/stats"
+            rm -f "$TMPDIR/stats"
+            evalArm "$1" "$libSrc"
+            unset NIX_SHOW_STATS NIX_SHOW_STATS_PATH
+            [ "$rc" -eq 0 ] || die "$1" "expected exit 0, got $rc"
+            statArm=$1
+          }
+          # <key>: the top-level count `key`; <outer> <inner>: the count `inner` inside the stats
+          # object `outer` (`sets` `elements`, `list` `elements`), which `statOf`'s top-level read
+          # cannot reach. Zero matches or more than one is a broken instrument, and dies as one.
+          oneMatch() { # <what> <matches>
+            m=$(printf '%s\n' "$2" | grep -c . || true)
+            [ "$m" = 1 ] || die "$statArm" "the stats hold $m match(es) for $1, wanted exactly 1: cannot measure"
+          }
+          topStat() {
+            stat=$(tr -d ' \n' < "$TMPDIR/stats" | grep -o "\"$1\":[0-9]*" | cut -d: -f2 || true)
+            oneMatch "$1" "$stat"
+          }
+          nestedStat() {
+            obj=$(tr -d ' \n' < "$TMPDIR/stats" | grep -o "\"$1\":{[^{}]*}" || true)
+            oneMatch "$1" "$obj"
+            stat=$(printf '%s' "$obj" | grep -o "\"$2\":[0-9]*" | cut -d: -f2 || true)
+            oneMatch "$1.$2" "$stat"
+          }
+          # <prefix>: the arm at n = 100, 400, 1600, each answering its
+          # hand-derived value; leaves the three counts of each counter in c_<counter>_<n>.
+          sized() {
+            for n in 100 400 1600; do
+              statsRun "$1-$n"
+              [ "$val" = "$n" ] || die "$1-$n" "expected value $n, got '$val'"
+              topStat nrFunctionCalls
+              eval "c_calls_$n=$stat"
+              nestedStat sets elements
+              eval "c_sets_$n=$stat"
+              nestedStat list elements
+              eval "c_list_$n=$stat"
+            done
+          }
+          # <counter> <bound>: the counter's second difference over its first is under <bound>x.
+          # Linear growth reads 4x, quadratic 16x.
+          growsUnder() {
+            eval "a=\$c_$1_100 b=\$c_$1_400 c=\$c_$1_1600"
+            [ $((c - b)) -lt $(($2 * (b - a))) ]
+          }
           traceCount() { # <arm> <n>: the F1 probe fired exactly n times
             n=$(grep -c 'trace: F1-PROBE' "$TMPDIR/err" || true)
             [ "$n" = "$2" ] || die "$1" "expected $2 F1-PROBE firing(s), saw $n"
@@ -274,9 +321,39 @@
           done
           [ $((cg1600 - cg400)) -lt $((5 * (cg400 - cg100))) ] || die claim-group-1600 "function calls grow faster than linear in the group: $cg100 / $cg400 / $cg1600"
 
+          # den-hoag-izo7a — the two `==`-collapsing folds are linear in their input, on EVERY counter
+          # that can see the construction they reject, each rejected construction run beside them
+          # as the live control that the counter discriminates (`tests-process-cells.nix`).
+          # mergeAttrsDeep: a fleet of n hosts under three shared keys and one shared leaf. A
+          # `foldl'` over `//` copies the accumulator per fragment: quadratic in `sets.elements`,
+          # blind in calls. `byKey`'s per-key `filter` scans every fragment per key: quadratic in
+          # calls, blind in `sets.elements`. So the fold is held under 5x on BOTH.
+          sized deep-fold
+          growsUnder sets 5 || die deep-fold "sets.elements grow faster than linear in the fleet: $c_sets_100 / $c_sets_400 / $c_sets_1600"
+          growsUnder calls 5 || die deep-fold "function calls grow faster than linear in the fleet: $c_calls_100 / $c_calls_400 / $c_calls_1600"
+          sized deep-foldl
+          growsUnder sets 5 && die deep-foldl "the control's sets.elements read linear ($c_sets_100 / $c_sets_400 / $c_sets_1600): the counter does not discriminate"
+          sized deep-filter
+          growsUnder calls 5 && die deep-filter "the control's calls read linear ($c_calls_100 / $c_calls_400 / $c_calls_1600): the counter does not discriminate"
+          # set over strings: n classes of two, through the text-keyed table, under 5x in calls; a
+          # per-kept scan of the list for twins is the control.
+          sized set-fold
+          growsUnder calls 5 || die set-fold "function calls grow faster than linear in the list: $c_calls_100 / $c_calls_400 / $c_calls_1600"
+          sized set-scan
+          growsUnder calls 5 && die set-scan "the control's calls read linear ($c_calls_100 / $c_calls_400 / $c_calls_1600): the counter does not discriminate"
+          # set over non-strings: no total key exists, so the stated cost is O(n·u), `unique`'s own
+          # class: quadratic on n classes of two, in list cells and, through the twin's lookup of
+          # its representative, in calls. Held under 17x (sub-cubic) on both, and `unique` over the
+          # same list is run as the reference the stated class is read against.
+          sized set-attrs-fold
+          growsUnder list 17 || die set-attrs-fold "list.elements grow faster than the stated n·u: $c_list_100 / $c_list_400 / $c_list_1600"
+          growsUnder calls 17 || die set-attrs-fold "function calls grow faster than the stated n·u: $c_calls_100 / $c_calls_400 / $c_calls_1600"
+          sized set-attrs-unique
+          growsUnder list 5 && die set-attrs-unique "unique's list.elements read linear ($c_list_100 / $c_list_400 / $c_list_1600): the reference is not the quadratic class"
+
           # 0/0 is a false pass: the runner must have executed every cell above.
-          [ "$ran" = "36" ] || die runner "expected 36 evaluations, ran $ran"
-          echo "tests-process: 36 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
+          [ "$ran" = "57" ] || die runner "expected 57 evaluations, ran $ran"
+          echo "tests-process: 57 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
         ''
         + ''
           cat "$out"

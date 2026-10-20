@@ -1024,6 +1024,120 @@ in
       };
     };
 
+    # ── `set` AND `mergeAttrsDeep` (den-hoag-izo7a) ──
+    # `set`'s function refusal is `same`'s sentence under its own name; its PATH refusal carries the
+    # plain-data ground, because `set` never reports a conflict. The deep merge's leaf refusals name
+    # the deep merge, never `same`, with the position among the contributors at the full key.
+    test-set-names-itself-when-the-key-is-not-a-string = {
+      expr = folds.set 1 [ ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.set: `key` is a int rather than a string — every refusal this fold can raise names the key, so a key that cannot be rendered ends the evaluation in place of the refusal that was owed";
+      };
+    };
+    test-set-refuses-a-function-bearing-fragment-on-sames-ground = {
+      expr = folds.set "k" [ { f = _: 1; } ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.set: key 'k' has a fragment carrying a function, at fragment-list position [0].f — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+      };
+    };
+    test-set-refuses-a-path-on-the-plain-data-ground = {
+      expr = folds.set "k" [ { p = ./tests-error.nix; } ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.set: key 'k' has a fragment carrying a path, at fragment-list position [0].p — a path in a fragment is not plain data, and the construction this library names for that class makes such a fragment inexpressible, so it is refused where it sits rather than deduplicated";
+      };
+    };
+    test-set-refuses-a-non-string-collapse-that-would-lose-an-edge = {
+      expr =
+        let
+          a = builtins.toFile "izo7a-ctx-a" "a";
+        in
+        folds.set "k" [
+          [ (builtins.unsafeDiscardStringContext a) ]
+          [ a ]
+        ];
+      expectedError = {
+        type = "ThrownError";
+        msg =
+          "^"
+          + genPreludeLib.escapeRegex "gen-scope.folds.set: the fold at key 'k' collapses a non-string datum at fragment-list position [0] with 1 `==`-equal twin(s) whose store dependencies it does not carry ("
+          + ".*-izo7a-ctx-a"
+          + genPreludeLib.escapeRegex "); a collapse keeps its twins' dependency edges, and only a string can carry the union"
+          + "$";
+      };
+    };
+    test-mergeAttrsDeep-names-itself-when-the-key-is-not-a-string = {
+      expr = folds.mergeAttrsDeep 1 [ ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.mergeAttrsDeep: `key` is a int rather than a string — every refusal this fold can raise names the key, so a key that cannot be rendered ends the evaluation in place of the refusal that was owed";
+      };
+    };
+    test-mergeAttrsDeep-refuses-a-non-attrs-fragment = {
+      expr = folds.mergeAttrsDeep "k" [
+        { }
+        1
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.mergeAttrsDeep: key 'k' has a fragment that is a int rather than an attribute set, at fragment-list position [1]";
+      };
+    };
+    test-mergeAttrsDeep-refuses-a-leaf-conflict-at-the-full-key = {
+      expr = folds.mergeAttrsDeep "k" [
+        { deploy.nodes.h1.hostname = "a"; }
+        { deploy.nodes.h1.hostname = "b"; }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.mergeAttrsDeep: conflicting values for key 'k.deploy.nodes.h1.hostname': [\"a\",\"b\"]";
+      };
+    };
+    # The position is among the contributors at the key, not in the fragment list: the first
+    # fragment does not contribute to `a`.
+    test-mergeAttrsDeep-refuses-a-function-leaf-among-the-contributors = {
+      expr = folds.mergeAttrsDeep "k" [
+        { b = 1; }
+        { a = _: 1; }
+        { a = _: 1; }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.mergeAttrsDeep: the value at position [0] among the contributors at key 'k.a' carries a function — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+      };
+    };
+    test-mergeAttrsDeep-refuses-a-namespace-beside-a-leaf = {
+      expr = folds.mergeAttrsDeep "k" [
+        { a.x = 1; }
+        { a = 2; }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.mergeAttrsDeep: the contributors at key 'k.a' hold an attribute set at position [0] beside a leaf at position [1]; a namespace and a value have no merge rule between them";
+      };
+    };
+    test-mergeAttrsDeep-refuses-a-leaf-collapse-that-would-lose-an-edge = {
+      expr =
+        let
+          a = builtins.toFile "izo7a-ctx-a" "a";
+        in
+        folds.mergeAttrsDeep "k" [
+          { x = [ (builtins.unsafeDiscardStringContext a) ]; }
+          { x = [ a ]; }
+        ];
+      expectedError = {
+        type = "ThrownError";
+        msg =
+          "^"
+          + genPreludeLib.escapeRegex "gen-scope.folds.mergeAttrsDeep: the leaf at key 'k.x' collapses a non-string datum with 1 `==`-equal twin(s) whose store dependencies it does not carry ("
+          + ".*-izo7a-ctx-a"
+          + genPreludeLib.escapeRegex "); a collapse keeps its twins' dependency edges, and only a string can carry the union"
+          + "$";
+      };
+    };
+
     # ── LIVE CONTROL: WHAT THE PRECONDITION REPLACED, IN THE SAME INVOCATION ──
     # ★ The same fragments through the comparison without its precondition. It fails as a
     # `TypeError` from the diagnostic's own `toJSON` — a different CLASS from every refusal above,

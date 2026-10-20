@@ -638,6 +638,98 @@ let
     in
     if what == "ids" then builtins.length ev.allNodeIds else ev.get deepest "depth";
 
+  # den-hoag-izo7a — the two `==`-collapsing folds' cost, beside the constructions their specs
+  # reject, built here (never in lib/) as the runner's live controls. Each value is `deepSeq`'d,
+  # so a counter reads the whole fold and never an unforced spine.
+  inherit (import "${libSrc}/folds.nix" { inherit prelude; }) folds;
+  forced = r: v: builtins.deepSeq r v;
+  # `n` fragments, each its own host under three shared keys, and one leaf every fragment writes
+  # equal (`same` and `absorb` over n contributors). The value is the hand-derived host count, n.
+  fleetOf =
+    n:
+    builtins.genList (
+      i:
+      let
+        h = "h${toString i}";
+      in
+      {
+        nixosConfigurations.${h} = i;
+        deploy.nodes.${h}.hostname = h;
+        colmena.${h} = i;
+        meta.domain = "example";
+      }
+    ) n;
+  deepRead = r: forced r (builtins.length (builtins.attrNames r.deploy.nodes));
+  # The rejected constructions. `foldl'` over a recursive `//`, which copies the accumulator once
+  # per fragment (Ren's shape); and `byKey`'s per-key `filter`, a scan of every fragment per key.
+  deepMerge2 =
+    a: b:
+    a
+    // builtins.mapAttrs (
+      k: v:
+      if !(a ? ${k}) then
+        v
+      else if builtins.isAttrs v && builtins.isAttrs a.${k} then
+        deepMerge2 a.${k} v
+      else if a.${k} == v then
+        v
+      else
+        throw "conflict at ${k}"
+    ) b;
+  deepFoldl = vs: builtins.foldl' deepMerge2 { } vs;
+  deepFilter =
+    key: vs:
+    let
+      ks = prelude.unique (builtins.concatMap builtins.attrNames vs);
+      step =
+        k:
+        let
+          xs = map (v: v.${k}) (builtins.filter (v: v ? ${k}) vs);
+        in
+        if builtins.length xs == 1 then
+          builtins.head xs
+        else if builtins.all builtins.isAttrs xs then
+          deepFilter "${key}.${k}" xs
+        else
+          folds.same "${key}.${k}" xs;
+    in
+    builtins.listToAttrs (
+      map (k: {
+        name = k;
+        value = step k;
+      }) ks
+    );
+  deepCost =
+    impl: n:
+    deepRead (
+      {
+        fold = folds.mergeAttrsDeep "k";
+        foldl = deepFoldl;
+        filter = deepFilter "k";
+      }
+      .${impl}
+        (fleetOf n)
+    );
+  # `n` distinct elements, each twice. Strings carry the text-keyed table; the rejected arm finds
+  # each kept string's twins by a scan of the whole list. The value is the hand-derived class count.
+  setCost =
+    impl: n:
+    let
+      vs = builtins.genList (i: "s${toString (builtins.div i 2)}") (2 * n);
+      scan = map (k: builtins.filter (v: v == k) vs) (prelude.unique vs);
+      r = if impl == "fold" then folds.set "k" vs else scan;
+    in
+    forced r (builtins.length r);
+  # Non-strings have no total key: `n` distinct attrsets, each twice, through the fold's one pass;
+  # the reference arm is `unique`'s own fold over the same list, the cost the pass is stated at.
+  setAttrsCost =
+    impl: n:
+    let
+      vs = builtins.genList (i: { v = builtins.div i 2; }) (2 * n);
+      r = if impl == "fold" then folds.set "k" vs else prelude.unique vs;
+    in
+    forced r (builtins.length r);
+
   # den-hoag-hm8t1 — one dedup group of `n` claims, each writing its own resource key: the
   # group's per-key combination over `n` keys and `n` contributors. The runner reads the
   # evaluator's function calls at three sizes and requires linear growth; a per-key scan of the
@@ -746,5 +838,47 @@ else if arm == "claim-group-400" then
   claimGroup 400
 else if arm == "claim-group-1600" then
   claimGroup 1600
+else if arm == "deep-fold-100" then
+  deepCost "fold" 100
+else if arm == "deep-fold-400" then
+  deepCost "fold" 400
+else if arm == "deep-fold-1600" then
+  deepCost "fold" 1600
+else if arm == "deep-foldl-100" then
+  deepCost "foldl" 100
+else if arm == "deep-foldl-400" then
+  deepCost "foldl" 400
+else if arm == "deep-foldl-1600" then
+  deepCost "foldl" 1600
+else if arm == "deep-filter-100" then
+  deepCost "filter" 100
+else if arm == "deep-filter-400" then
+  deepCost "filter" 400
+else if arm == "deep-filter-1600" then
+  deepCost "filter" 1600
+else if arm == "set-fold-100" then
+  setCost "fold" 100
+else if arm == "set-fold-400" then
+  setCost "fold" 400
+else if arm == "set-fold-1600" then
+  setCost "fold" 1600
+else if arm == "set-scan-100" then
+  setCost "scan" 100
+else if arm == "set-scan-400" then
+  setCost "scan" 400
+else if arm == "set-scan-1600" then
+  setCost "scan" 1600
+else if arm == "set-attrs-fold-100" then
+  setAttrsCost "fold" 100
+else if arm == "set-attrs-fold-400" then
+  setAttrsCost "fold" 400
+else if arm == "set-attrs-fold-1600" then
+  setAttrsCost "fold" 1600
+else if arm == "set-attrs-unique-100" then
+  setAttrsCost "unique" 100
+else if arm == "set-attrs-unique-400" then
+  setAttrsCost "unique" 400
+else if arm == "set-attrs-unique-1600" then
+  setAttrsCost "unique" 1600
 else
   throw "tests-process-cells: unknown arm '${arm}'"

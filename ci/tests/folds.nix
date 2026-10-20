@@ -37,6 +37,7 @@
 # reporting a property no construction could violate.
 {
   genScope,
+  genPreludeLib,
   ...
 }:
 let
@@ -509,6 +510,239 @@ in
       };
     };
   };
+
+  # ── `set` AND `mergeAttrsDeep` (den-hoag-izo7a) ──
+  # The two `==`-collapsing folds. Each collapse is a quotient (den-hoag-kunjm): the kept value
+  # carries its twins' store contexts, so the context cells count the paths the kept value carries,
+  # against `unique`'s own count on the same twins as the control. Every refusal's TEXT is pinned in
+  # `../tests-error.nix` `folds-refusals`; the cells here pin that each is reached.
+  flake.tests.folds-quotient =
+    let
+      # Two strings `==`-equal ("x") carrying different store contexts.
+      ca = "${builtins.substring 0 0 (toString (builtins.toFile "izo7a-ctx-a" "a"))}x";
+      cb = "${builtins.substring 0 0 (toString (builtins.toFile "izo7a-ctx-b" "b"))}x";
+      ctxN = s: builtins.length (builtins.attrNames (builtins.getContext s));
+      deep = folds.mergeAttrsDeep "k";
+      fleet = [
+        {
+          nixosConfigurations.h1 = "sys1";
+          deploy.nodes.h1.hostname = "a";
+          colmena.h1 = "c1";
+        }
+        {
+          nixosConfigurations.h2 = "sys2";
+          deploy.nodes.h2.hostname = "b";
+          colmena.h2 = "c2";
+        }
+        { deploy.nodes.h1.hostname = "a"; }
+      ];
+      at = builtins.elemAt fleet;
+      reversed = [
+        (at 2)
+        (at 1)
+        (at 0)
+      ];
+      mkIf = condition: content: {
+        _type = "if";
+        inherit condition content;
+      };
+    in
+    {
+      test-set-is-in-the-vocabulary = {
+        expr = folds ? set && folds ? mergeAttrsDeep;
+        expected = true;
+      };
+      test-set-keeps-first-occurrences-in-pinned-order = {
+        expr = folds.set "k" [
+          "b"
+          "a"
+          "b"
+          "c"
+          "a"
+        ];
+        expected = [
+          "b"
+          "a"
+          "c"
+        ];
+      };
+      test-set-dedups-non-strings-in-the-same-order = {
+        expr = folds.set "k" [
+          1
+          "a"
+          { x = 1; }
+          1
+          "a"
+          { x = 1; }
+          [ 2 ]
+        ];
+        expected = [
+          1
+          "a"
+          { x = 1; }
+          [ 2 ]
+        ];
+      };
+      test-set-of-a-singleton-is-the-singleton = {
+        expr = folds.set "k" [ "a" ];
+        expected = [ "a" ];
+      };
+      test-set-is-idempotent = {
+        expr =
+          let
+            vs = [
+              "b"
+              1
+              "a"
+              1
+              { y = 2; }
+              "b"
+            ];
+          in
+          folds.set "k" (folds.set "k" vs ++ vs) == folds.set "k" vs;
+        expected = true;
+      };
+      test-set-carries-both-twins-contexts = {
+        expr = map ctxN (
+          folds.set "k" [
+            ca
+            cb
+          ]
+        );
+        expected = [ 2 ];
+      };
+      # The control: `unique` on the same twins keeps one context, so the count above is the fold's.
+      test-control-unique-keeps-one-context = {
+        expr = map ctxN (
+          genPreludeLib.unique [
+            ca
+            cb
+          ]
+        );
+        expected = [ 1 ];
+      };
+      test-mergeAttrs-refuses-the-fleet = {
+        expr = didThrow (folds.mergeAttrs "k" fleet);
+        expected = true;
+      };
+      test-mergeAttrsDeep-joins-the-fleet = {
+        expr = deep fleet;
+        expected = {
+          colmena = {
+            h1 = "c1";
+            h2 = "c2";
+          };
+          deploy.nodes = {
+            h1.hostname = "a";
+            h2.hostname = "b";
+          };
+          nixosConfigurations = {
+            h1 = "sys1";
+            h2 = "sys2";
+          };
+        };
+      };
+      test-mergeAttrsDeep-leaves-a-one-sided-subtree-unforced = {
+        expr = builtins.attrNames (deep [
+          { a.x = throw "never forced"; }
+          { b = 1; }
+        ]);
+        expected = [
+          "a"
+          "b"
+        ];
+      };
+      test-mergeAttrsDeep-leaf-carries-both-twins-contexts = {
+        expr =
+          ctxN
+            (deep [
+              { a = ca; }
+              { a = cb; }
+            ]).a;
+        expected = 2;
+      };
+      test-mergeAttrsDeep-is-bracketing-and-order-invariant = {
+        expr =
+          deep [
+            (deep [
+              (at 0)
+              (at 1)
+            ])
+            (at 2)
+          ] == deep fleet
+          && deep reversed == deep fleet;
+        expected = true;
+      };
+      # A `_type`-tagged set is a LEAF (den-hoag-izo7a OQ-2): two equal ones collapse as leaves, and
+      # one beside an untagged namespace sharing a field name is refused, never read as a namespace.
+      test-mergeAttrsDeep-collapses-equal-tagged-leaves = {
+        expr = deep [
+          { a = mkIf true { x = 1; }; }
+          { a = mkIf true { x = 1; }; }
+        ];
+        expected = {
+          a = mkIf true { x = 1; };
+        };
+      };
+      test-mergeAttrsDeep-refuses-a-tagged-leaf-beside-a-namespace = {
+        expr = didThrow (deep [
+          { a = mkIf true { x = 1; }; }
+          { a.content.y = 2; }
+        ]);
+        expected = true;
+      };
+      test-mergeAttrsDeep-refuses-two-unequal-tagged-leaves = {
+        expr = didThrow (deep [
+          { a = mkIf true { x = 1; }; }
+          { a = mkIf false { y = 2; }; }
+        ]);
+        expected = true;
+      };
+      test-refusals-are-reached = {
+        expr = map didThrow [
+          (folds.set 1 [ ])
+          (folds.set "k" [ { f = _: 1; } ])
+          (folds.set "k" [ { p = ./folds.nix; } ])
+          (folds.set "k" [
+            [ (builtins.unsafeDiscardStringContext ca) ]
+            [ ca ]
+          ])
+          (folds.mergeAttrsDeep 1 [ ])
+          (deep [
+            { }
+            1
+          ])
+          (deep [
+            { deploy.nodes.h1.hostname = "a"; }
+            { deploy.nodes.h1.hostname = "b"; }
+          ])
+          (deep [
+            { a = _: 1; }
+            { a = _: 1; }
+          ])
+          (deep [
+            { a.x = 1; }
+            { a = 2; }
+          ])
+          (deep [
+            { a = [ (builtins.unsafeDiscardStringContext ca) ]; }
+            { a = [ ca ]; }
+          ])
+        ];
+        expected = [
+          true
+          true
+          true
+          true
+          true
+          true
+          true
+          true
+          true
+          true
+        ];
+      };
+    };
 
   # ── STRATUM-LOCAL AGGREGATION: THE FOLD RUNS ON A CLOSED FACT SET ──
   flake.tests.stratum-aggregation = {

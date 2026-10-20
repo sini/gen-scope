@@ -75,6 +75,19 @@ let
         acc // v
     ) { } vs;
 
+  # The deep merge's join with its leaves compared by `same`'s comparison WITHOUT its precondition.
+  unguardedDeep =
+    key: vs:
+    builtins.zipAttrsWith (
+      k: xs:
+      if builtins.length xs == 1 then
+        head xs
+      else if all builtins.isAttrs xs then
+        unguardedDeep "${key}.${k}" xs
+      else
+        unguardedSame "${key}.${k}" xs
+    ) vs;
+
   # The fold as it stands with its FRAGMENTS decided and its KEY not: the shape a door takes when
   # it checks one argument and not the other. Its refusal is real and named, and it never arrives,
   # because assembling the message coerces the key first.
@@ -249,6 +262,25 @@ let
       ]
     );
     unguarded-key-empty-wrapped = didThrow (unguardedKeySame 42 [ ]);
+
+    # ── `set` AND `mergeAttrsDeep` (den-hoag-izo7a): `same`'s precondition at both ──
+    # The deep merge's leaves: refused by name, where the unguarded join ends on the diagnostic.
+    deep-guarded-wrapped = didThrow (
+      folds.mergeAttrsDeep "k" [
+        { x = fnA; }
+        { x = fnB; }
+      ]
+    );
+    unguarded-deep-wrapped = didThrow (
+      unguardedDeep "k" [
+        { x = fnA; }
+        { x = fnB; }
+      ]
+    );
+    # `set` reports no conflict, so the unguarded dedup ends nothing: it ANSWERS, by value sharing.
+    # One slot listed twice dedups to one; the guarded fold refuses the question instead.
+    set-guarded-shared = didThrow (folds.set "k" shared);
+    unguarded-set-shared = builtins.length (prelude.unique shared);
 
     mergeattrs-wrapped = didThrow (
       folds.mergeAttrs "k" [
