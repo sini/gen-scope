@@ -418,10 +418,10 @@ let
     let
       children =
         if requireChildrenAttribute || attributes ? ${selectionChannel} then
-          ev.get id selectionChannel
+          ev._childSet id selectionChannel
         else
           throw "gen-scope: cannot descend from '${id}': this evaluation declares no `${selectionChannel}` attribute, so there is no containment relation to walk and a materialization would answer the entry points alone — a partial tree with nothing marking it partial. A node that genuinely has no children is a declared `${selectionChannel}` answering `{ }`, which is a different answer and stays available. Declare `${selectionChannel}`, or read the node set through `scope.nodeOrder`, which needs no descent.";
-      derived = if attributes ? ${spawnChannel} then ev.get id spawnChannel else { };
+      derived = if attributes ? ${spawnChannel} then ev._childSet id spawnChannel else noChildren;
       # The `nta` half, flattened from its three-level carriage to the one-level map this binding
       # returns (`structural.flattenChildren`). The records are the carriage's own, so enumeration
       # and resolution hand out ONE record per child, carrying ONE memo.
@@ -430,15 +430,96 @@ let
           structural.flattenChildren ntaChannel (ntaEnumerated onDemand ev id)
         else
           { };
-      base = children // derived;
+      base = children.nodes // derived.nodes;
+      baseOrder = children.nodeOrder ++ derived.nodeOrder;
       crossing = builtins.filter (k: base ? ${k}) (builtins.attrNames nta);
     in
     if nta == { } then
-      base
+      {
+        nodes = base;
+        nodeOrder = baseOrder;
+      }
     else if crossing != [ ] then
       throw "gen-scope.nta: node '${id}' carries an `nta` child '${builtins.head crossing}' under a key its `children` or `derived-children` also carries. The three halves compose into one child map, and a shared key would discard one record silently. An `nta` identifier is minted by the substrate, so the other half chose it: choose a key that is not an `nta` identifier."
     else
-      base // nta;
+      {
+        nodes = base // nta;
+        nodeOrder = baseOrder ++ builtins.attrNames nta;
+      };
+
+  # ── A ONE-LEVEL CHILD CHANNEL'S VALUE: ONE PRODUCER VALUE, TWO PROJECTIONS ──
+  # A spawn builder or a `children` body returns a list of `{ name; value; }` (`listToAttrs`' own
+  # input shape), whose production order is the list's, or an attribute set keyed by child id,
+  # whose order is its names'. The channel normalizes it once into the record `buildRoots` returns
+  # for roots, `{ nodes; nodeOrder; }`: both fields derive from the one value, so they cannot
+  # disagree. Normalizing reads names, never values, so the keys-eager, values-lazy strictness
+  # `childRecordsOf` states is untouched. A name written twice is two records for one identity and
+  # is refused by name; so is a list entry that is not a pair, and a value that is neither shape,
+  # which Nix would otherwise abort on anonymously and uncatchably.
+  #
+  # ★ THE RECORD IS THE MEMO CELL'S, AND `published` IS ITS ONE PROJECTION. The record is what an
+  # attribute's memo holds, so the builder runs once whichever projection is read. Every route that
+  # hands a child channel's value out of a memo cell (`get` on each reader, `getNta`, `evalDebug`'s
+  # `get`, `getTraced` and `getNta`) answers `published`, the identity-keyed map, exactly today's
+  # value for an attribute-set producer. Only `_childSet`, which `childRecordsOf` reads, receives
+  # the record, and the order leaves through the query surface (`_childOrder`, `allNodeIds`), as
+  # `allNodes` (a set) sits beside `allNodeIds` (ordered).
+  published = a: v: if structural.childDepth a == 1 then v.nodes else v;
+  noChildren = {
+    nodes = { };
+    nodeOrder = [ ];
+  };
+  childSetOf =
+    who: v:
+    if builtins.isAttrs v then
+      {
+        nodes = v;
+        nodeOrder = builtins.attrNames v;
+      }
+    else if builtins.isList v then
+      let
+        n = builtins.length v;
+        positions = builtins.genList (i: i) n;
+        isPair =
+          e:
+          builtins.isAttrs e
+          &&
+            builtins.attrNames e == [
+              "name"
+              "value"
+            ]
+          && builtins.isString e.name;
+        malformed = builtins.filter (i: !(isPair (builtins.elemAt v i))) positions;
+        names = map (e: e.name) v;
+        nodes = builtins.listToAttrs v;
+        # `listToAttrs` keeps a name's first entry, so this maps each name to its first position.
+        firstAt = builtins.listToAttrs (
+          map (i: {
+            name = builtins.elemAt names i;
+            value = i;
+          }) positions
+        );
+        repeated = builtins.filter (i: firstAt.${builtins.elemAt names i} != i) positions;
+      in
+      if malformed != [ ] then
+        throw "gen-scope: ${who} returned a list whose entry ${toString (builtins.head malformed)} is ${
+          let
+            e = builtins.elemAt v (builtins.head malformed);
+          in
+          if builtins.isAttrs e then
+            "an attribute set with the fields ${builtins.toJSON (builtins.attrNames e)}"
+          else
+            "a ${builtins.typeOf e}"
+        }. A list of children is a list of `{ name = <child id>; value = <record>; }` pairs, in production order; write each child as one."
+      else if builtins.length (builtins.attrNames nodes) != n then
+        throw "gen-scope: ${who} returned the child '${builtins.elemAt names (builtins.head repeated)}' twice. A child's key is its identity, so two entries under one key are two records for one node. Return each child once."
+      else
+        {
+          inherit nodes;
+          nodeOrder = names;
+        }
+    else
+      throw "gen-scope: ${who} returned a ${builtins.typeOf v}. A child channel answers a list of `{ name = <child id>; value = <record>; }` pairs, whose order is the list's, or an attribute set keyed by child id, whose order is its names'.";
 
   # ── THE SPAWN CHANNEL ──
   # This attribute is the one that grows the NODE SET, and it is where the domain half of
@@ -534,8 +615,8 @@ let
   selectAmong =
     nodes: declared: ev: id:
     let
-      records = declared ev id;
-      unregistered = builtins.filter (childId: !(nodes ? ${childId})) (builtins.attrNames records);
+      records = childSetOf "the `${selectionChannel}` body of node '${id}'" (declared ev id);
+      unregistered = builtins.filter (childId: !(nodes ? ${childId})) records.nodeOrder;
     in
     if unregistered == [ ] then
       records
@@ -566,13 +647,13 @@ let
             if isCircularDecl builder then
               throw "gen-scope: kind '${hostKind}' declares spawn '${produced}' whose builder is a circular declaration. A spawn builder computes the NODE SET, and wrapping it in `circular` makes that set a fixed point of its own iterate — the per-step growth the spawn-read restriction refuses. A spawned node's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function."
             else
-              builder (spawnHandle ev) id;
+              childSetOf "kind '${hostKind}' spawn '${produced}'" (builder (spawnHandle ev) id);
           # Checked against `raw`'s own KEYS — eager, and forced as WHNF the moment `stamped` is —
           # rather than inside the `mapAttrs` value below: a key colliding with an ALREADY-REGISTERED
           # node is a key `resolveNode` never re-derives past its roots-first short-circuit, so a
           # check living in that lazy per-record thunk would never be demanded and never fire for
           # exactly the case it exists to catch.
-          collidingWithRegistered = builtins.filter (childId: nodes ? ${childId}) (builtins.attrNames raw);
+          collidingWithRegistered = builtins.filter (childId: nodes ? ${childId}) raw.nodeOrder;
           # The fields the substrate stamps, built once per produced kind and shared by its children.
           # The kind's value (`kindValue`, den-hoag-l0y) is stamped only when the kind declares one,
           # decided here and never per child.
@@ -587,37 +668,43 @@ let
           if collidingWithRegistered != [ ] then
             throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${builtins.head collidingWithRegistered}', which is already a registered node's id. A spawned key mints an identity nothing declared; colliding with a key the scope already carries discards whichever record materializes second, silently. Choose a key no registered node already carries."
           else
-            builtins.mapAttrs (
-              childId: record:
-              if record ? type then
-                throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
-              else if record ? kindValue then
-                throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `kindValue`. A spawn does not choose its child's kind value any more than its kind: the value is the one the produced kind declares (`mkKind { kindValue = …; }`), stamped by the substrate with its `type` — a value chosen while the spawn fires is one no kind declared. Drop the field."
-              else if (record.parent or id) != id then
-                throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
-              # The key IS the identity: collisions are settled on `raw`'s keys, and the evaluator
-              # reads `id` off the record, so a second copy that disagrees is an identity nothing
-              # checked. Stamped from the key like `parent` from the host.
-              else if (record.id or childId) != childId then
-                throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `id` is ${
-                  if builtins.isString record.id then "'${record.id}'" else "a ${builtins.typeOf record.id}"
-                } rather than its key '${childId}'. A spawned child's identity is the key its builder returned it under: the substrate settles collisions on that key and stamps `id` from it, so a builder asserting a different id is naming a node the key set never registered. Drop the field."
-              else
-                record // stamp // { id = childId; }
-            ) raw
+            raw
+            // {
+              nodes = builtins.mapAttrs (
+                childId: record:
+                if record ? type then
+                  throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
+                else if record ? kindValue then
+                  throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `kindValue`. A spawn does not choose its child's kind value any more than its kind: the value is the one the produced kind declares (`mkKind { kindValue = …; }`), stamped by the substrate with its `type` — a value chosen while the spawn fires is one no kind declared. Drop the field."
+                else if (record.parent or id) != id then
+                  throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
+                # The key IS the identity: collisions are settled on `raw`'s keys, and the evaluator
+                # reads `id` off the record, so a second copy that disagrees is an identity nothing
+                # checked. Stamped from the key like `parent` from the host.
+                else if (record.id or childId) != childId then
+                  throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `id` is ${
+                    if builtins.isString record.id then "'${record.id}'" else "a ${builtins.typeOf record.id}"
+                  } rather than its key '${childId}'. A spawned child's identity is the key its builder returned it under: the substrate settles collisions on that key and stamps `id` from it, so a builder asserting a different id is naming a node the key set never registered. Drop the field."
+                else
+                  record // stamp // { id = childId; }
+              ) raw.nodes;
+            }
         );
     in
     prelude.foldl' (
       acc: produced:
       let
         next = stamped produced;
-        collidingWithSibling = builtins.filter (childId: acc ? ${childId}) (builtins.attrNames next);
+        collidingWithSibling = builtins.filter (childId: acc.nodes ? ${childId}) next.nodeOrder;
       in
       if collidingWithSibling != [ ] then
         throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${builtins.head collidingWithSibling}', which an earlier spawn on this same host already produced. Two spawns sharing a key on one host silently overwrite one another. Choose a key none of this host's own spawns already produced."
       else
-        acc // next
-    ) { } (builtins.attrNames spawns);
+        {
+          nodes = acc.nodes // next.nodes;
+          nodeOrder = acc.nodeOrder ++ next.nodeOrder;
+        }
+    ) noChildren (if host == null then [ ] else builtins.filter (k: spawns ? ${k}) host.below);
 
   # ── THE `nta` CHANNEL — Vogt, Swierstra & Kuiper 1989 Def. 3.14's recursive form, beside `spawns` ──
   #
@@ -1268,7 +1355,16 @@ let
                             node = tid: if tid == childNode.id then wrapped else self.node tid;
                             get =
                               tid: a:
-                              if tid == childNode.id && !(quotientAttrs.${a} or true) then wrapped._eval.${a} else self.get tid a;
+                              if tid == childNode.id && !(quotientAttrs.${a} or true) then
+                                published a wrapped._eval.${a}
+                              else
+                                self.get tid a;
+                            _childSet =
+                              tid: a:
+                              if tid == childNode.id && !(quotientAttrs.${a} or true) then
+                                wrapped._eval.${a}
+                              else
+                                self._childSet tid a;
                           };
                           wrapped = childNode // {
                             _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
@@ -1279,7 +1375,12 @@ let
                     )
                   ) raw
                 else if attrClass.${attrName} != 3 then
-                  mapAtDepth (structural.childDepth attrName) wrapChild raw
+                  (
+                    if structural.childDepth attrName == 1 then
+                      raw // { nodes = builtins.mapAttrs (_: wrapChild) raw.nodes; }
+                    else
+                      mapAtDepth (structural.childDepth attrName) wrapChild raw
+                  )
                 else
                   raw
               else if !round.open && decision.isClean nodeId && builtins.elem attrName (servedAt nodeId) then
@@ -1321,8 +1422,10 @@ let
               in
               name: group: key: attrName:
               if !round.open && !(quotientAttrs.${attrName} or true) then
-                product.${name}.${group}.${key}._eval.${attrName}
-                  or (ntaMember "`getNta`" product host name group key)._eval.${attrName}
+                published attrName (
+                  product.${name}.${group}.${key}._eval.${attrName}
+                    or (ntaMember "`getNta`" product host name group key)._eval.${attrName}
+                )
               else
                 let
                   child = ntaMember "`getNta`" product host name group key;
@@ -1336,7 +1439,7 @@ let
                     throw "gen-scope.nta: `getNta`: '${attrName}' on NTA '${name}' group '${group}' key '${key}' of host '${host}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getNta` reads raw values only (in self.get)"
                   )
                 else
-                  evalAttr null child.id attrName runAttributes.${attrName};
+                  published attrName (evalAttr null child.id attrName runAttributes.${attrName});
 
             # The ONE site at which a member of `runAttributes` is applied, and the total
             # classification over declaration shapes: a function is an ordinary attribute, a
@@ -2024,7 +2127,7 @@ let
                   throw "gen-scope: node '${id}' not reachable (parent: ${parentId}) — '${parentId}' does not resolve either: its `parseParent` chain reaches no root. A parent naming a node the scope cannot ground is the same user error as a parent that does not carry the child, and it is refused the same way."
                 else
                   let
-                    all = childRecordsStrict self parentId;
+                    all = (childRecordsStrict self parentId).nodes;
                   in
                   if all ? ${id} then
                     all.${id}
@@ -2041,7 +2144,7 @@ let
                 walkChildren =
                   parentId:
                   let
-                    all = childRecordsStrict self parentId;
+                    all = (childRecordsStrict self parentId).nodes;
                   in
                   if all ? ${id} then
                     all.${id}
@@ -2109,7 +2212,10 @@ let
               if isQuotientAttr attrName then
                 builtins.seq (identifier "self.get" id) (throw (rawOnQuotient id attrName))
               else
-                demand "self.get" id attrName;
+                published attrName (demand "self.get" id attrName);
+            # The record behind a child channel, for `childRecordsOf` only. It is `get`'s demand, and
+            # its refusals name `self.get`, the entry a caller wrote.
+            _childSet = id: attrName: demand "self.get" id attrName;
             getRepresentative =
               id: attrName:
               if (runAttributes ? ${attrName}) && !(isQuotientAttr attrName) then
@@ -2143,9 +2249,15 @@ let
                       get =
                         tid: a:
                         if tid == id && !round.open && n ? _eval && runAttributes ? ${a} && !(isQuotientAttr a) then
-                          n._eval.${a}
+                          published a n._eval.${a}
                         else
                           self.get tid a;
+                      _childSet =
+                        tid: a:
+                        if tid == id && !round.open && n ? _eval && runAttributes ? ${a} then
+                          n._eval.${a}
+                        else
+                          self._childSet tid a;
                       node = tid: if tid == id then n else self.node tid;
                     };
                     all = childRecordsLenient rd id;
@@ -2161,7 +2273,7 @@ let
                       value = n;
                     }
                   ]
-                  ++ prelude.concatMap (cid: walkAt cid (ntaKids.${cid} or (self.node cid))) (builtins.attrNames all);
+                  ++ prelude.concatMap (cid: walkAt cid (ntaKids.${cid} or (self.node cid))) all.nodeOrder;
               in
               id: walkAt id (self.node id);
 
@@ -2173,7 +2285,8 @@ let
             # they could spell it. The demanding (strict) arm: every caller asks ONE id for its
             # records, so the `children` half is exactly the guarded `get` and the refusal axis
             # does not move.
-            _childRecords = childRecordsStrict self;
+            _childRecords = id: (childRecordsStrict self id).nodes;
+            _childOrder = id: (childRecordsStrict self id).nodeOrder;
 
             # Full tree materialization. Forces all children attributes recursively.
             # O(n) — each node computed once. Use for gen-graph global ops, diagrams.
@@ -2195,25 +2308,21 @@ let
             #
             # Two tie-breaks, declared because a declared order is the whole point:
             #
-            # 1. SIBLING ties break on `attrNames`, which is BYTEWISE CODEPOINT order, not
-            #    dictionary order — `attrNames { z; A; a; _b; "1"; }` is
-            #    `[ "1" "A" "_b" "a" "z" ]`, uppercase before underscore before lowercase. This
-            #    is NOT because an attrset "carries no order": `childRecordsOf` merges the
-            #    `children` and `derived-children` halves into ONE attrset and `_walkFrom`
-            #    descends that attrset's `attrNames`, so the codepoint rule is THAT merge's
-            #    residue. ROOTS are not tie-broken at all — this walk enters at
-            #    `checked.nodeOrder`, the declaration-ordered vertex list `buildRoots` returns
-            #    beside the node set (`lib/graph.nix` carries vertices as a LIST, where
-            #    `overlay` and `connect` concatenate, and `lib/build-nodes.nix` keeps that order
-            #    rather than leaving it to be `attrNames`' residue), so the top level is in
-            #    DECLARATION order and a flat scope answers exactly as it was written.
-            #    Recovering a declared SIBLING order would take a list-shaped child channel — a
-            #    change to the `children` attribute's shape, not to this walk.
+            # 1. SIBLINGS follow their PRODUCTION ORDER: each child channel carries the order its
+            #    producer wrote (`childSetOf`: a list's order, or an attribute set's names in
+            #    bytewise codepoint order, `[ "1" "A" "_b" "a" "z" ]`), and `_walkFrom` descends
+            #    `childRecordsOf`'s `nodeOrder`. ROOTS follow `checked.nodeOrder`, the
+            #    declaration-ordered vertex list `buildRoots` returns beside the node set
+            #    (`lib/graph.nix` carries vertices as a LIST, and `lib/build-nodes.nix` keeps that
+            #    order rather than leaving it to be `attrNames`' residue), so a flat scope answers
+            #    exactly as it was written and so does a builder that returns a list.
             #
-            # 2. A `derived-children` node INTERLEAVES with its `children` siblings rather than
-            #    following them: `_walkFrom` descends what `childRecordsOf` returns, and that is the
-            #    two halves merged into ONE attrset, so a derived id sorts into the sibling run under
-            #    the same codepoint rule and nothing in this list marks it as derived.
+            # 2. A node's producers compose IN BLOCKS, never interleaved by id: the `children` half
+            #    (selected, registered nodes), then each spawn kind in the host kind's `below` order
+            #    (the declared, ordered right-hand side of its production), then the enumerated
+            #    `nta` children in their flattened map's order. Declared nodes precede derived
+            #    ones as strata do; `nta` last is a stated convention, since `nta` adds no `below`
+            #    entry for `below` to place it by.
             #
             # Repeats are dropped FIRST-OCCURRENCE-WINS, the same rule `listToAttrs` applies to
             # `allNodes`, so `allNodeIds` is exactly `attrNames allNodes` as a set. A node
@@ -2447,7 +2556,8 @@ let
               else
                 fn s id;
 
-          getTraced =
+          # The read path and the memo cell's value; `getTraced` publishes it, `_childSet` keeps it.
+          tracedCell =
             callerId: attrName:
             let
               id = identifier "self.getTraced" callerId;
@@ -2469,6 +2579,15 @@ let
                     applyTraced id at attrName traceEntry path;
               }
             );
+          getTraced =
+            callerId: attrName:
+            let
+              t = tracedCell callerId attrName;
+            in
+            builtins.seq t {
+              inherit (t) trace;
+              value = published attrName t.value;
+            };
           # `getNta`, on this evaluator's reader. There is no co-located cache here to answer
           # from — a fresh accessor per read is what records the trace — so the attribute is
           # APPLIED directly on the record `ntaMember` already resolved, through `applyTraced`,
@@ -2489,14 +2608,16 @@ let
             else if isQuotientAttr attrName then
               throw "gen-scope.nta: `getNta`: '${attrName}' on NTA '${name}' group '${group}' key '${key}' of host '${host}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getNta` reads raw values only (in self.get)"
             else
-              applyTraced child.id {
-                inherit
-                  host
-                  name
-                  group
-                  key
-                  ;
-              } attrName traceEntry path;
+              published attrName (
+                applyTraced child.id {
+                  inherit
+                    host
+                    name
+                    group
+                    key
+                    ;
+                } attrName traceEntry path
+              );
           # `getHostAt`, on this evaluator's reader: the host's attribute at the coordinates the entry
           # path holds (`debugGetNta`'s, or the `ntaCoords` decode the by-id read already performs,
           # `null` for an id that is not an `nta` child's). Checked before `s.get`, as `debugGetNta`
@@ -2581,7 +2702,7 @@ let
               if parentId == null then
                 throw "gen-scope: node '${id}' not reachable"
               else
-                (childRecordsStrict s parentId).${id} or (throw "gen-scope: node '${id}' not reachable")
+                (childRecordsStrict s parentId).nodes.${id} or (throw "gen-scope: node '${id}' not reachable")
             else
               throw "gen-scope: evalDebug requires parseParent for non-root nodes";
 
@@ -2591,6 +2712,7 @@ let
             builtins.seq (identifier "self.get" id) (
               if isQuotientAttr attrName then throw (rawOnQuotient id attrName) else (getTraced id attrName).value
             );
+          _childSet = id: attrName: builtins.seq (identifier "self.get" id) (tracedCell id attrName).value;
           getRepresentative =
             id: attrName:
             builtins.seq (identifier "self.getRepresentative" id) (
@@ -2605,7 +2727,8 @@ let
           # built the way `node` above builds one — from `mkSelf visited traceList`, never from a
           # captured outer accessor — so the reads it makes land in the trace rather than
           # bypassing the recording this evaluator exists for.
-          _childRecords = id: childRecordsStrict (mkSelf visited traceList) id;
+          _childRecords = id: (childRecordsStrict (mkSelf visited traceList) id).nodes;
+          _childOrder = id: (childRecordsStrict (mkSelf visited traceList) id).nodeOrder;
 
           allNodes = throw "gen-scope: evalDebug does not support allNodes (use eval for materialization)";
 

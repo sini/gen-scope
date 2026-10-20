@@ -55,9 +55,109 @@ let
       decls.root = { };
       inherit kinds;
     };
+  # ── THE ORDER HOLDS ON THE ENUMERATED VIEW (den-hoag-jlmmr) ──
+  # A host spawning `leaf` children written `z:sp` then `a:sp`, with an enumerable `sub` (keys `k2`,
+  # `k1`) and a bounded `next`. Arm `od` declares `next` on demand; arm `en` does not. An on-demand
+  # family is never enumerated, so it carries no order, and the enumerated order is `en`'s with the
+  # `next` ids deleted.
+  orderKinds =
+    onDemand:
+    genScope.mkKinds [
+      (mkKind { } "leaf")
+      (mkKind (
+        {
+          below = [ "leaf" ];
+          spawns.leaf =
+            _: id:
+            if id == "r" then
+              [
+                {
+                  name = "z:sp";
+                  value = { };
+                }
+                {
+                  name = "a:sp";
+                  value = { };
+                }
+              ]
+            else
+              [ ];
+          nta = {
+            sub =
+              _: id:
+              if id == "r" then
+                {
+                  g = {
+                    k2 = [ ];
+                    k1 = [ ];
+                  };
+                }
+              else
+                { };
+            next = _: id: if id == "r" then { g.k = [ ]; } else { };
+          };
+        }
+        // (if onDemand then { ntaOnDemand = [ "next" ]; } else { })
+      ) "host")
+    ];
+  orderRun =
+    onDemand:
+    genScope.eval { }
+      {
+        children = _: _: { };
+        imports = _: _: [ ];
+        defs = _: _: [ ];
+      }
+      (
+        genScope.buildRoots {
+          kinds = orderKinds onDemand;
+          parentGraph = genScope.vertex "r";
+          importGraph = genScope.empty;
+          decls.r = { };
+          types.r = "host";
+        }
+      );
+  orderOd = orderRun true;
+  orderEn = orderRun false;
+  odOrder = [
+    "z:sp"
+    "a:sp"
+    "nta:1:r3:sub1:g2:k1"
+    "nta:1:r3:sub1:g2:k2"
+  ];
 in
 {
   flake.tests.nta-on-demand = {
+    test-the-enumerated-view-keeps-the-production-order = {
+      expr = {
+        od = genScope.childrenIds orderOd "r";
+        en = genScope.childrenIds orderEn "r";
+        odAll = orderOd.allNodeIds;
+      };
+      expected = {
+        od = odOrder;
+        en = odOrder ++ [ "nta:1:r4:next1:g1:k" ];
+        odAll = [ "r" ] ++ odOrder;
+      };
+    };
+    test-the-enumerated-order-is-the-full-order-with-the-on-demand-ids-deleted = {
+      expr = {
+        children =
+          genScope.childrenIds orderOd "r"
+          == builtins.filter (i: !(isNext i)) (genScope.childrenIds orderEn "r");
+        allNodeIds = orderOd.allNodeIds == builtins.filter (i: !(isNext i)) orderEn.allNodeIds;
+        odNext = builtins.length (builtins.filter isNext orderOd.allNodeIds);
+        enNext = builtins.length (builtins.filter isNext orderEn.allNodeIds);
+        nextIsANode = (orderOd.node (nextOf "r")).type;
+      };
+      expected = {
+        children = true;
+        allNodeIds = true;
+        odNext = 0;
+        enNext = 1;
+        nextIsANode = "host";
+      };
+    };
     test-the-enumeration-holds-the-enumerable-family-only = {
       expr = builtins.length ev.allNodeIds;
       expected = 3;

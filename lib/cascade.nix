@@ -469,6 +469,11 @@ let
       # `ntaOnDemand` is a SET of family names, written as a list. A repeat is refused rather than
       # dropped, so the declaration a reader sees is the one the evaluator reads.
       repeatedOnDemand = unique (filter (k: length (filter (j: j == k) ntaOnDemand) > 1) ntaOnDemand);
+      # `below` is the ordered right-hand side of the kind's production: its spawn kinds compose a
+      # host's children in this order (`lib/eval.nix`, `spawnFrom`), so a name written twice would
+      # place one kind at two positions. Refused rather than deduplicated, as `ntaOnDemand` is.
+      repeatedBelow =
+        if isList below then unique (filter (k: length (filter (j: j == k) below) > 1) below) else [ ];
     in
     if !isString name then
       throw "gen-scope.mkKind: `name` must be a string"
@@ -478,6 +483,8 @@ let
       throw "gen-scope.mkKind: kind '${name}' declares a `below` that is a ${typeOf below} rather than a list"
     else if !(all isString below) then
       throw "gen-scope.mkKind: kind '${name}' declares a `below` holding a name that is not a string"
+    else if repeatedBelow != [ ] then
+      throw "gen-scope.mkKind: kind '${name}' declares ${toJSON repeatedBelow} more than once in `below`. `below` is the ordered list of the kinds this kind produces, and a host's spawned children compose in its order, so a kind is at one position or not listed; name each once."
     else if resolve != null && !(callable resolve) then
       throw "gen-scope.mkKind: kind '${name}' declares a `resolve` that cannot be applied (it is a ${typeOf resolve})"
     else if !isAttrs spawns then
@@ -579,6 +586,8 @@ let
       "carries a `below` that is not a list"
     else if k.below != [ ] && !(all isString k.below) then
       "carries a `below` holding a name that is not a string"
+    else if any (j: length (filter (x: x == j) k.below) > 1) k.below then
+      "carries a `below` naming a kind more than once"
     else if !(k ? resolve) then
       "carries no `resolve` field"
     else if !(k ? spawns) then

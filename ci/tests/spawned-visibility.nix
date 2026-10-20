@@ -67,11 +67,12 @@ in
     };
 
     # ── the spawned node appears in structural queries ──
+    # In blocks: the selected `husk`, then the spawn's children in its builder's (name) order.
     test-childrenIds-includes-spawned = {
       expr = childrenIds result "millstone";
       expected = [
-        "groat"
         "husk"
+        "groat"
         "winnow"
       ];
     };
@@ -111,8 +112,8 @@ in
     test-siblings-spawned-child-gains-other-spawned = {
       expr = siblings result "winnow";
       expected = [
-        "groat"
         "husk"
+        "groat"
       ];
     };
 
@@ -155,8 +156,8 @@ in
           "winnow"
         ];
         childrenIds = [
-          "groat"
           "husk"
+          "groat"
           "winnow"
         ];
         siblings = [

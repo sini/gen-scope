@@ -270,15 +270,12 @@ let
         else if traverse == relations.imports then
           oneHop "collectionAttr" relations.imports self id
         else if traverse == "children" then
-          builtins.attrNames (self._childRecords id)
+          self._childOrder id
         else if traverse == "siblings" then
           let
             p = (self.node id).parent;
           in
-          if p == null then
-            [ ]
-          else
-            builtins.filter (cid: cid != id) (builtins.attrNames (self._childRecords p))
+          if p == null then [ ] else builtins.filter (cid: cid != id) (self._childOrder p)
         # The two multi-step traversals are resolutions (den-hoag-4or0a), so each reads the marks, D9
         # and the text-keyed id exactly as `resolve` does; a withheld edge drops its scopes silently.
         else if traverse == "ancestors" then

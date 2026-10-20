@@ -438,8 +438,8 @@ let
       # `attribute` 93), and Sloane §7 is Conclusion and Future Work.
       #
       # Where the tree settles no order, the tie-break is `allNodeIds`' and is declared there:
-      # SIBLING ties break on `attrNames` (bytewise codepoint), ROOTS follow `scope.nodeOrder`, the
-      # declared vertex order. The answer is neither sorted nor deduplicated: a node on two
+      # SIBLINGS follow their production order, ROOTS follow `scope.nodeOrder`, the declared vertex
+      # order. The answer is neither sorted nor deduplicated: a node on two
       # acyclic reverse paths answers twice, as a diamond does outbound.
       converse = builtins.listToAttrs (
         map (l: {

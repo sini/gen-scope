@@ -636,6 +636,37 @@ in
         msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `below` holding a name that is not a string"]'';
       };
     };
+    # `below` is the ordered list of what a kind produces, and a host's spawn kinds compose in its
+    # order, so a kind named twice in it is refused by name at `mkKind` and at the `mkKinds` door.
+    test-a-below-naming-a-kind-twice-is-refused-by-name = {
+      expr = mkKind {
+        below = [
+          "member"
+          "agent"
+          "member"
+        ];
+      } "host";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKind: kind 'host' declares ["member"] more than once in `below`. `below` is the ordered list of the kinds this kind produces, and a host's spawned children compose in its order, so a kind is at one position or not listed; name each once.'';
+      };
+    };
+    test-a-hand-built-below-naming-a-kind-twice-is-refused-at-the-door = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind-declaration";
+          name = "l";
+          below = [
+            "m"
+            "m"
+          ];
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `below` naming a kind more than once"]'';
+      };
+    };
     # The other two missing-field arms. WHICH field is absent is the coordinate the caller acts
     # on, and the three arms are interchangeable without it: a registry is a list, and a message
     # naming the entry but not the field leaves the caller bisecting a record they already wrote.
@@ -2734,6 +2765,114 @@ in
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope: the `_eval` cache for 'plain' on 'c' is not readable inside an open circular round — a round's memo lives on the round's own accessor, and a value cached here would be an approximation wearing a final value's clothes. Read through `self.get`, which serves the round's current level.";
+        };
+      };
+    };
+
+  # ── A CHILD CHANNEL'S VALUE, REFUSED BY NAME ──
+  # A builder or a `children` body answers a list of `{ name; value; }` or an attribute set
+  # (`lib/eval.nix`, `childSetOf`). A list naming one child twice, a list entry that is not a pair,
+  # and a value of neither shape each reached Nix as the anonymous, uncatchable `expected a set but
+  # found a list`; each is refused here naming the channel that received it. The clean arms are
+  # `tests/child-order.nix`.
+  config.flake.testsError.child-order-refusals =
+    let
+      hostWith =
+        builder:
+        mkKinds [
+          (mkKind { } "member")
+          (mkKind {
+            below = [ "member" ];
+            spawns.member = builder;
+          } "host")
+        ];
+      scopeOf =
+        kinds:
+        genScope.buildRoots {
+          inherit kinds;
+          parentGraph = genScope.edge {
+            from = "s:a";
+            to = "h";
+          };
+          importGraph = genScope.empty;
+          decls = {
+            h = { };
+            "s:a" = { };
+          };
+          types = {
+            h = "host";
+            "s:a" = "member";
+          };
+        };
+      parseParent = id: if id == "h" || id == "s:a" then null else "h";
+      evOf =
+        children: builder:
+        genScope.eval { inherit parseParent; } {
+          imports = _: _: [ ];
+          inherit children;
+        } (scopeOf (hostWith builder));
+      none = _: _: { };
+      spawning = evOf none;
+      pair = name: {
+        inherit name;
+        value = { };
+      };
+    in
+    {
+      test-a-list-builder-writing-a-child-twice-is-refused-by-name = {
+        expr = genScope.childrenIds (spawning (
+          _: id:
+          if id == "h" then
+            [
+              (pair "u:x")
+              (pair "u:y")
+              (pair "u:x")
+            ]
+          else
+            [ ]
+        )) "h";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: kind 'host' spawn 'member' returned the child 'u:x' twice. A child's key is its identity, so two entries under one key are two records for one node. Return each child once.";
+        };
+      };
+      test-a-list-selection-naming-a-child-twice-is-refused-by-name = {
+        expr = genScope.childrenIds (evOf (
+          _: id:
+          if id == "h" then
+            [
+              (pair "s:a")
+              (pair "s:a")
+            ]
+          else
+            [ ]
+        ) none) "h";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: the `children` body of node 'h' returned the child 's:a' twice. A child's key is its identity, so two entries under one key are two records for one node. Return each child once.";
+        };
+      };
+      test-a-list-entry-that-is-not-a-pair-is-refused-by-position = {
+        expr = genScope.childrenIds (spawning (
+          _: id:
+          if id == "h" then
+            [
+              (pair "u:a")
+              { name = "u:b"; }
+            ]
+          else
+            [ ]
+        )) "h";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope: kind 'host' spawn 'member' returned a list whose entry 1 is an attribute set with the fields ["name"]. A list of children is a list of `{ name = <child id>; value = <record>; }` pairs, in production order; write each child as one.'';
+        };
+      };
+      test-a-value-of-neither-shape-is-refused-by-its-type = {
+        expr = genScope.childrenIds (spawning (_: _: "u:a")) "h";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: kind 'host' spawn 'member' returned a string. A child channel answers a list of `{ name = <child id>; value = <record>; }` pairs, whose order is the list's, or an attribute set keyed by child id, whose order is its names'.";
         };
       };
     };

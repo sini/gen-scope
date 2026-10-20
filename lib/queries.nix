@@ -21,7 +21,7 @@ let
 
   children = self: id: self._childRecords id;
 
-  childrenIds = self: id: builtins.attrNames (self._childRecords id);
+  childrenIds = self: id: self._childOrder id;
 
   ancestors =
     self: id:
@@ -45,10 +45,7 @@ let
     let
       p = (self.node id).parent;
     in
-    if p == null then
-      [ ]
-    else
-      builtins.filter (cid: cid != id) (builtins.attrNames (self._childRecords p));
+    if p == null then [ ] else builtins.filter (cid: cid != id) (self._childOrder p);
 
   descendants =
     self: id:
@@ -56,7 +53,7 @@ let
       go =
         visited: nid:
         let
-          cids = builtins.attrNames (self._childRecords nid);
+          cids = self._childOrder nid;
         in
         prelude.concatMap (
           cid: if visited ? ${cid} then [ ] else [ cid ] ++ go (visited // { ${cid} = true; }) cid
@@ -94,7 +91,7 @@ let
         go =
           visited: nid:
           let
-            cids = builtins.attrNames (self._childRecords nid);
+            cids = self._childOrder nid;
           in
           builtins.any (
             cid:
