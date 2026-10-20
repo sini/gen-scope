@@ -2222,6 +2222,25 @@ in
     };
   };
 
+  # ── A CIRCULAR ATTRIBUTE ON AN ON-DEMAND `nta` CHILD (den-hoag-8qenh K1) ──
+  # A shared round's universe is the ENUMERATED node set × the eligible circular names, and an
+  # on-demand child is outside the enumeration by construction, so a demand on one is refused by name
+  # rather than iterated over a universe that does not hold it. The same attribute converges on the
+  # root, which is enumerated (`tests/nta-on-demand.nix`, the clean path).
+  config.flake.testsError.nta-on-demand-refusals =
+    let
+      od = import ./tests/_fixtures/nta-on-demand.nix { inherit genScope; };
+    in
+    {
+      test-a-circular-attribute-on-an-on-demand-child-is-outside-the-rounds-universe = {
+        expr = od.ev.get (od.nextOf "r") "counter";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: circular instance 'nta:1:r4:next1:g1:k.counter' is not in the round's universe — its node is outside the evaluated node set the universe is derived from";
+        };
+      };
+    };
+
   # ── THE SHARED ROUND'S REFUSALS — the corpus's refusing fixtures, each by its own text
   # (plus the first-transition family at the end, which states its own provenance) ──
   # The fixtures and their provenance live in `tests/_fixtures/scc-corpus.nix`; the expected

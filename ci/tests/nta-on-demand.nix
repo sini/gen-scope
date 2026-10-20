@@ -1,55 +1,17 @@
 # AN ON-DEMAND `nta` (`mkKind { ntaOnDemand = [ <name> ]; }`, den-hoag-8qenh OQ6 (c′)): its children are nodes of
-# the one evaluation, reached by identifier and by `getNta`, and absent from every enumerating read. The `lazy`
-# kind grows `next` from EVERY node, without end, as gen-merge's evaluation's own type does, and `sub` from its
-# data, so an enumeration is total only because `next` is never descended. `eager` is the control: the same
-# `next`, declared enumerable and grown from the root only, is in the node set.
+# the one evaluation, reached by identifier and by `getNta`, and absent from every enumerating read. The kinds
+# and the graph are `_fixtures/nta-on-demand.nix`, shared with the circular refusal in `../tests-error.nix`.
 { genScope, ... }:
 let
-  fx = import ./_fixtures/nta.nix { inherit genScope; };
-  inherit (genScope) mkKind mkKinds mintNtaId;
-  inherit (builtins) head isAttrs;
-  addr = def: at: {
-    attr = "defs";
-    inherit def at;
-  };
-  sub =
-    self: id:
-    let
-      d = self.get id "defs";
-    in
-    {
-      g = if d != [ ] && isAttrs (head d) && head d ? s then { k = [ (addr 0 [ "s" ]) ]; } else { };
-    };
-  lazy = mkKind {
-    nta = {
-      inherit sub;
-      next = _: _: { g.k = [ ]; };
-    };
-    ntaOnDemand = [ "next" ];
-  } "lazy";
-  eager = mkKind {
-    nta = {
-      inherit sub;
-      next = _: id: if id == "r" then { g.k = [ ]; } else { };
-    };
-  } "eager";
-  attributes = fx.attributes // {
-    nextDefs = self: id: self.getNta "next" "g" "k" "defs";
-  };
-  run =
-    kind:
-    genScope.eval { } attributes (
-      fx.scopeOf (mkKinds [ kind ]) (fx.root kind.name { defs = [ { s.s = { }; } ]; })
-    );
-  ev = run lazy;
-  nextOf =
-    host:
-    mintNtaId {
-      inherit host;
-      name = "next";
-      group = "g";
-      key = "k";
-    };
+  od = import ./_fixtures/nta-on-demand.nix { inherit genScope; };
+  inherit (genScope) mkKind;
+  inherit (od)
+    sub
+    eager
+    run
+    nextOf
+    ev
+    ;
   # fifty `next` hops below the root, by identifier
   deep = builtins.foldl' (h: _: nextOf h) "r" (builtins.genList (i: i) 50);
   isNext = i: builtins.match ".*4:next1:g.*" i != null;
@@ -89,6 +51,12 @@ in
     test-control-an-enumerable-family-is-enumerated = {
       expr = builtins.length (builtins.filter isNext (run eager).allNodeIds);
       expected = 1;
+    };
+    # the circular refusal's clean path: a round over an enumerated node converges (the refusal on a
+    # `next` child is `tests-error.nix`'s `nta-on-demand-refusals`)
+    test-control-a-circular-attribute-converges-on-an-enumerated-node = {
+      expr = ev.get "r" "counter";
+      expected = 3;
     };
     test-a-kind-names-only-its-own-ntas-on-demand = {
       expr =

@@ -687,7 +687,8 @@ let
   ntaOnDemandOf =
     kinds: nodes:
     if
-      kinds == null || !(builtins.any (k: (k.ntaOnDemand or [ ]) != [ ]) (builtins.attrValues kinds.kinds))
+      kinds == null
+      || !(builtins.any (k: (k.ntaOnDemand or [ ]) != [ ]) (builtins.attrValues kinds.kinds))
     then
       null
     else
