@@ -401,10 +401,12 @@ let
   #
   # COST. String twins are found through the text-keyed table (`groupBy` over the context-free
   # text, `combines.setUnion`'s construction), linear in `vs` but for the first-occurrence sort.
-  # Non-strings have no total key, so each is compared against the representatives found so far,
-  # in ONE pass that also groups its twins: O(n·u) `==` for n elements in u classes, the cost of
-  # `unique`'s own fold. `==` is not a function call, so the call count is blind to it, and the
-  # list cells the pass appends grow as n·u too; the process plane pins both counters.
+  # Non-strings have no total key, so each is compared against the representatives found so far
+  # (one pass, appending only at a new class), and each twin then finds its representative's index
+  # by a scan, grouped in ONE `groupBy` by that index: O(n·u) `==` and calls for n elements in u
+  # classes, the cost of `unique`'s own fold, and list cells O(u² + n). No list is copied per twin,
+  # so one class of n is linear. The process plane pins the pairs case (u = n/2) on calls and list
+  # cells, and the one-class case (u = 1) on list cells.
   set =
     key: vs:
     let
@@ -422,7 +424,7 @@ let
         tagged = imap0 (i: v: { inherit i v; }) vs;
         byText = groupBy (t: unsafeDiscardStringContext t.v) (filter (t: isString t.v) tagged);
         # Each field forced at every step, so no field accumulates a thunk chain as long as `vs`.
-        strictly = r: seq r.reps (seq r.firsts (seq r.twins r));
+        strictly = r: seq r.reps (seq r.firsts r);
         others =
           foldl'
             (
@@ -433,26 +435,21 @@ let
                 strictly {
                   reps = acc.reps ++ [ t.v ];
                   firsts = acc.firsts ++ [ t ];
-                  inherit (acc) twins;
                 }
               else
-                strictly {
-                  inherit (acc) reps firsts;
-                  twins = acc.twins ++ [
-                    {
-                      r = indexOf acc.reps t.v;
-                      inherit (t) v;
-                    }
-                  ];
-                }
+                acc
             )
             (strictly {
               reps = [ ];
               firsts = [ ];
-              twins = [ ];
             })
             tagged;
-        twinsAt = groupBy (t: toString t.r) others.twins;
+        # The twins, grouped in ONE pass by their representative's index: a twin is a non-string
+        # that is not a first occurrence.
+        firstAt = listToAttrs (map (t: nameValuePair (toString t.i) null) others.firsts);
+        twinsAt = groupBy (t: toString (indexOf others.reps t.v)) (
+          filter (t: !isString t.v && !(firstAt ? ${toString t.i})) tagged
+        );
         kept = sort (a: b: a.i < b.i) (
           map (g: head g // { twins = map (t: t.v) (tail g); }) (attrValues byText)
           ++ imap0 (r: t: t // { twins = map (x: x.v) (twinsAt.${toString r} or [ ]); }) others.firsts

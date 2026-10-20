@@ -350,10 +350,14 @@
           growsUnder calls 17 || die set-attrs-fold "function calls grow faster than the stated n·u: $c_calls_100 / $c_calls_400 / $c_calls_1600"
           sized set-attrs-unique
           growsUnder list 5 && die set-attrs-unique "unique's list.elements read linear ($c_list_100 / $c_list_400 / $c_list_1600): the reference is not the quadratic class"
+          # u = 1: n copies of one attrset, every one but the first a twin. Grouping the twins is
+          # linear in them: under 5x in list cells, where a twin list copied per twin read 15.5x.
+          sized set-one-fold
+          growsUnder list 5 || die set-one-fold "list.elements grow faster than linear in the twins: $c_list_100 / $c_list_400 / $c_list_1600"
 
           # 0/0 is a false pass: the runner must have executed every cell above.
-          [ "$ran" = "57" ] || die runner "expected 57 evaluations, ran $ran"
-          echo "tests-process: 57 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
+          [ "$ran" = "60" ] || die runner "expected 60 evaluations, ran $ran"
+          echo "tests-process: 60 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
         ''
         + ''
           cat "$out"

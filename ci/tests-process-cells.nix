@@ -722,6 +722,16 @@ let
     forced r (builtins.length r);
   # Non-strings have no total key: `n` distinct attrsets, each twice, through the fold's one pass;
   # the reference arm is `unique`'s own fold over the same list, the cost the pass is stated at.
+  # `n` copies of ONE attrset (u = 1): every element after the first is a twin, so a construction
+  # that copies its twin list per twin is quadratic here where the pairs fixture (u = n/2) cannot
+  # see it. The value is the hand-derived twin count, n - 1 + 1 = n (the kept element's twins plus
+  # itself).
+  setOneCost =
+    n:
+    let
+      r = folds.set "k" (builtins.genList (_: { v = 1; }) n);
+    in
+    forced r (n - 1 + builtins.length r);
   setAttrsCost =
     impl: n:
     let
@@ -880,5 +890,11 @@ else if arm == "set-attrs-unique-400" then
   setAttrsCost "unique" 400
 else if arm == "set-attrs-unique-1600" then
   setAttrsCost "unique" 1600
+else if arm == "set-one-fold-100" then
+  setOneCost 100
+else if arm == "set-one-fold-400" then
+  setOneCost 400
+else if arm == "set-one-fold-1600" then
+  setOneCost 1600
 else
   throw "tests-process-cells: unknown arm '${arm}'"
