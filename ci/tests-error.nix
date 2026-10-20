@@ -2239,6 +2239,20 @@ in
           msg = exactly "gen-scope: circular instance 'nta:1:r4:next1:g1:k.counter' is not in the round's universe — its node is outside the evaluated node set the universe is derived from";
         };
       };
+      # `ntaOnDemand` is a set, so a repeat is refused by name rather than dropped (den-hoag-bs7q7).
+      test-a-family-named-twice-on-demand-is-refused-by-name = {
+        expr = genScope.mkKind {
+          nta.sub = od.sub;
+          ntaOnDemand = [
+            "sub"
+            "sub"
+          ];
+        } "twice";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.mkKind: nta: kind 'twice' declares [\"sub\"] more than once in `ntaOnDemand`. `ntaOnDemand` is the set of the kind's NTAs whose children are never enumerated, so a family is in it or not; name each once.";
+        };
+      };
     };
 
   # ── THE SHARED ROUND'S REFUSALS — the corpus's refusing fixtures, each by its own text

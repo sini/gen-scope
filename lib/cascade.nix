@@ -466,6 +466,9 @@ let
       # `ntaEnumerated`): each must be one this kind declares.
       undeclaredOnDemand =
         if isList ntaOnDemand then filter (k: !(isString k) || !(elem k ntaNames)) ntaOnDemand else [ ];
+      # `ntaOnDemand` is a SET of family names, written as a list. A repeat is refused rather than
+      # dropped, so the declaration a reader sees is the one the evaluator reads.
+      repeatedOnDemand = unique (filter (k: length (filter (j: j == k) ntaOnDemand) > 1) ntaOnDemand);
     in
     if !isString name then
       throw "gen-scope.mkKind: `name` must be a string"
@@ -493,6 +496,8 @@ let
       throw "gen-scope.mkKind: nta: kind '${name}' declares an `ntaOnDemand` that is a ${typeOf ntaOnDemand} rather than a list of its NTA names"
     else if undeclaredOnDemand != [ ] then
       throw "gen-scope.mkKind: nta: kind '${name}' declares ${toJSON undeclaredOnDemand} on demand in `ntaOnDemand`, which its `nta` does not declare. An on-demand NTA is one of the kind's own NTAs whose children are never enumerated; name one of ${toJSON ntaNames}."
+    else if repeatedOnDemand != [ ] then
+      throw "gen-scope.mkKind: nta: kind '${name}' declares ${toJSON repeatedOnDemand} more than once in `ntaOnDemand`. `ntaOnDemand` is the set of the kind's NTAs whose children are never enumerated, so a family is in it or not; name each once."
     else if hasDedup && !hasFold then
       throw "gen-scope.mkKind: kind '${name}' declares `dedupKey` without `fold` (a fold is required to merge grouped fragments)"
     else if hasFold && !hasDedup then
@@ -689,7 +694,8 @@ let
   # but a registry filing two different kinds under one name gives a reader looking a spawned
   # node's kind up by name a different kind from the one the evaluator follows, and the caller's
   # declared expansion silently does not happen. So it is refused by name. Two kinds are compared on
-  # `name`, `below`, `depth`, the key sets of `spawns` and `nta`, the on-demand `nta` names, and their kind values' MARKS;
+  # `name`, `below`, `depth`, the key sets of `spawns` and `nta`, the SET of on-demand `nta` names (in any
+  # order, as declared), and their kind values' MARKS;
   # builders are functions and are not compared, so two kinds differing only in a builder's body are
   # one kind to this door. The kind values are decided by `sameKindValue` (the mark, then the sealed
   # subjects at an equal mark), so two kinds whose values differ only at a sealed component are
@@ -699,6 +705,7 @@ let
   # crossing (every `eval` and `buildRoots` handed a registry) and never per node.
   #
   # Internal: `default.nix` binds it into the two doors and keeps it off the published surface.
+  sameSet = xs: ys: all (x: elem x ys) xs && all (y: elem y xs) ys;
   sameKind =
     host: a: b:
     a.name == b.name
@@ -706,7 +713,7 @@ let
     && a.depth == b.depth
     && attrNames a.spawns == attrNames b.spawns
     && attrNames a.nta == attrNames b.nta
-    && (a.ntaOnDemand or [ ]) == (b.ntaOnDemand or [ ])
+    && sameSet (a.ntaOnDemand or [ ]) (b.ntaOnDemand or [ ])
     &&
       sameKindValue
         "gen-scope: the kind registry files under '${a.name}' a kind whose value is not the one entry '${host}' resolved in its `below`: file the one kind value under both (`mkKinds` shares it); two constructions of one kind are two kinds"

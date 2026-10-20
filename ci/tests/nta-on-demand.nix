@@ -15,6 +15,46 @@ let
   # fifty `next` hops below the root, by identifier
   deep = builtins.foldl' (h: _: nextOf h) "r" (builtins.genList (i: i) 50);
   isNext = i: builtins.match ".*4:next1:g.*" i != null;
+  # `ntaOnDemand` is a set (den-hoag-bs7q7): two registries mint one `host` whose on-demand families
+  # are declared in the order given, and `leaf` from the second is merged into the first, so the
+  # registry door compares the first's `host` with the one the second's `leaf` resolved.
+  hostDecl =
+    order:
+    mkKind {
+      nta = {
+        a = _: _: { };
+        b = _: _: { };
+      };
+      ntaOnDemand = order;
+    } "host";
+  regOf =
+    order:
+    genScope.mkKinds [
+      (hostDecl order)
+      (mkKind { below = [ "host" ]; } "leaf")
+    ];
+  mergedWith =
+    order:
+    let
+      base = regOf [
+        "a"
+        "b"
+      ];
+    in
+    base
+    // {
+      kinds = base.kinds // {
+        inherit ((regOf order).kinds) leaf;
+      };
+    };
+  buildWith =
+    kinds:
+    genScope.buildRoots {
+      parentGraph = genScope.vertex "root";
+      types.root = "leaf";
+      decls.root = { };
+      inherit kinds;
+    };
 in
 {
   flake.tests.nta-on-demand = {
@@ -65,6 +105,49 @@ in
             nta.sub = sub;
             ntaOnDemand = [ "next" ];
           } "bad"
+        )).success;
+      expected = false;
+    };
+    # The families in another order are the same set, so the merge is one kind, and each record
+    # carries the order it was declared in.
+    test-the-same-families-in-two-orders-are-one-kind = {
+      expr =
+        let
+          built = buildWith (mergedWith [
+            "b"
+            "a"
+          ]);
+        in
+        {
+          filed = built.kinds.kinds.host.ntaOnDemand;
+          resolved = built.kinds.kinds.leaf.belowKinds.host.ntaOnDemand;
+        };
+      expected = {
+        filed = [
+          "a"
+          "b"
+        ];
+        resolved = [
+          "b"
+          "a"
+        ];
+      };
+    };
+    # the control: a different set is a different kind, refused at the door
+    test-control-a-different-on-demand-set-is-a-different-kind = {
+      expr = (builtins.tryEval (buildWith (mergedWith [ "a" ])).nodes).success;
+      expected = false;
+    };
+    test-a-family-named-twice-on-demand-is-refused-catchably = {
+      expr =
+        (builtins.tryEval (
+          mkKind {
+            nta.sub = sub;
+            ntaOnDemand = [
+              "sub"
+              "sub"
+            ];
+          } "twice"
         )).success;
       expected = false;
     };
