@@ -463,7 +463,10 @@ let
   # `get`, `getTraced` and `getNta`) answers `published`, the identity-keyed map, exactly today's
   # value for an attribute-set producer. Only `_childSet`, which `childRecordsOf` reads, receives
   # the record, and the order leaves through the query surface (`_childOrder`, `allNodeIds`), as
-  # `allNodes` (a set) sits beside `allNodeIds` (ordered).
+  # `allNodes` (a set) sits beside `allNodeIds` (ordered). On the production accessor's routes the
+  # projection is written in place on `attrClass` (class 2 is exactly a depth-1 channel): applying
+  # `published` there allocates a thunk for its argument on every read, which the `nta` channel's
+  # per-child budget (`tests-process`, `child-cost-400`) measured.
   published = a: v: if structural.childDepth a == 1 then v.nodes else v;
   noChildren = {
     nodes = { };
@@ -1356,15 +1359,9 @@ let
                             get =
                               tid: a:
                               if tid == childNode.id && !(quotientAttrs.${a} or true) then
-                                published a wrapped._eval.${a}
+                                if attrClass.${a} == 2 then wrapped._eval.${a}.nodes else wrapped._eval.${a}
                               else
                                 self.get tid a;
-                            _childSet =
-                              tid: a:
-                              if tid == childNode.id && !(quotientAttrs.${a} or true) then
-                                wrapped._eval.${a}
-                              else
-                                self._childSet tid a;
                           };
                           wrapped = childNode // {
                             _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
@@ -1422,10 +1419,12 @@ let
               in
               name: group: key: attrName:
               if !round.open && !(quotientAttrs.${attrName} or true) then
-                published attrName (
-                  product.${name}.${group}.${key}._eval.${attrName}
-                    or (ntaMember "`getNta`" product host name group key)._eval.${attrName}
-                )
+                if attrClass.${attrName} == 2 then
+                  (product.${name}.${group}.${key}._eval or (ntaMember "`getNta`" product host name group key)._eval)
+                  .${attrName}.nodes
+                else
+                  (product.${name}.${group}.${key}._eval or (ntaMember "`getNta`" product host name group key)._eval)
+                  .${attrName}
               else
                 let
                   child = ntaMember "`getNta`" product host name group key;
@@ -1438,8 +1437,10 @@ let
                   builtins.seq child (
                     throw "gen-scope.nta: `getNta`: '${attrName}' on NTA '${name}' group '${group}' key '${key}' of host '${host}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step; `getNta` reads raw values only (in self.get)"
                   )
+                else if attrClass.${attrName} == 2 then
+                  (evalAttr null child.id attrName runAttributes.${attrName}).nodes
                 else
-                  published attrName (evalAttr null child.id attrName runAttributes.${attrName});
+                  evalAttr null child.id attrName runAttributes.${attrName};
 
             # The ONE site at which a member of `runAttributes` is applied, and the total
             # classification over declaration shapes: a function is an ordinary attribute, a
@@ -2212,7 +2213,12 @@ let
               if isQuotientAttr attrName then
                 builtins.seq (identifier "self.get" id) (throw (rawOnQuotient id attrName))
               else
-                published attrName (demand "self.get" id attrName);
+              # The projection is written in place on the declaration's class, so a read allocates
+              # nothing for it.
+              if (attrClass.${attrName} or 0) == 2 then
+                (demand "self.get" id attrName).nodes
+              else
+                demand "self.get" id attrName;
             # The record behind a child channel, for `childRecordsOf` only. It is `get`'s demand, and
             # its refusals name `self.get`, the entry a caller wrote.
             _childSet = id: attrName: demand "self.get" id attrName;
@@ -2249,7 +2255,7 @@ let
                       get =
                         tid: a:
                         if tid == id && !round.open && n ? _eval && runAttributes ? ${a} && !(isQuotientAttr a) then
-                          published a n._eval.${a}
+                          if attrClass.${a} == 2 then n._eval.${a}.nodes else n._eval.${a}
                         else
                           self.get tid a;
                       _childSet =
