@@ -6,8 +6,8 @@
 # satisfies — and it is named for what it is rather than for the evaluation strategy that happens
 # to drive it.
 #
-# `mkKind` builds one kind DECLARATION and refuses a `dedupKey` without a `fold` and a `fold`
-# without a `dedupKey`: grouping and merging are only meaningful together, so the pairing is a
+# `mkKind` builds one kind DECLARATION and refuses a `dedupKey` without a `foldFragments` and a
+# `foldFragments` without a `dedupKey`: grouping and merging are only meaningful together, so the pairing is a
 # registration-time error rather than a resolution-time surprise. It also refuses a `spawns` entry
 # whose produced kind is outside the host's own `below` set. A declaration is not a kind. `mkKinds`
 # is the one producer of kind records: a left fold over an ORDERED list of declarations that
@@ -83,7 +83,7 @@
 # merely writes the token has asserted something about its own origin that nothing here can check.
 # So what the token does NOT establish is WHAT the three fields the constructor writes actually are
 # — whether `resolve` is a function of the right shape, whether `dedupKey` returns a string,
-# whether `fold` merges anything sensible. Those are questions about values, and the answers live
+# whether `foldFragments` merges anything sensible. Those are questions about values, and the answers live
 # where the values are applied.
 #
 # ★ THEIR PRESENCE IS A DIFFERENT QUESTION, AND THE REGISTRY DOES ANSWER IT. "Is the field there"
@@ -97,7 +97,7 @@
 # vouch for the fields' CONTENTS would be answering a question nobody asked.
 #
 # ★ AND THE ORDINARY DOOR ALREADY REQUIRES THE FIELDS TO BE PRESENT, so this costs a cooperative
-# caller nothing: `mkKind` writes `resolve`, `dedupKey` and `fold` as null when a kind declares
+# caller nothing: `mkKind` writes `resolve`, `dedupKey` and `foldFragments` as null when a kind declares
 # none of them, so no record it builds can fail a PRESENCE arm. What they reach is precisely the
 # forged record — the one case the marker was never able to speak for.
 #
@@ -128,7 +128,7 @@
 # Written down rather than left for the next construction to discover, because the next
 # construction is what builds on it.
 #
-# `resolve`, `dedupKey` and `fold` are PRESENT on anything that registers, and each is APPLICABLE —
+# `resolve`, `dedupKey` and `foldFragments` are PRESENT on anything that registers, and each is APPLICABLE —
 # a function, or an attribute set this evaluator applies. The pairing between the last two is a
 # registration-time error. What is NOT established is everything past the point of application, and
 # the boundary is drawn where a check stops being possible rather than where it stops being
@@ -425,13 +425,15 @@ let
       nta ? { },
       ntaOnDemand ? [ ],
       dedupKey ? null,
+      foldFragments ? null,
+      # RETIRED, kept as an option only so the door can name it: see `retiredFold`.
       fold ? null,
       kindValue ? null,
     }:
     let
       kvDefect = kindValueDefect kindValue;
       hasDedup = dedupKey != null;
-      hasFold = fold != null;
+      hasFold = foldFragments != null;
       # ── THE SPAWN DECLARATION, AND WHY ITS DESCENT IS DECIDED HERE ──
       # THEORY. Söderberg §7 (printed 320) states the finiteness technique as "ordering the
       # nonterminals (the node types), so that each new NTA has a lower order than its host", and in
@@ -477,6 +479,8 @@ let
     in
     if !isString name then
       throw "gen-scope.mkKind: `name` must be a string"
+    else if fold != null then
+      throw "gen-scope.mkKind: kind '${name}' ${retiredFold}"
     else if kvDefect != null then
       throw "gen-scope.mkKind: kind '${name}' ${kvDefect}"
     else if !isList below then
@@ -506,9 +510,9 @@ let
     else if repeatedOnDemand != [ ] then
       throw "gen-scope.mkKind: nta: kind '${name}' declares ${toJSON repeatedOnDemand} more than once in `ntaOnDemand`. `ntaOnDemand` is the set of the kind's NTAs whose children are never enumerated, so a family is in it or not; name each once."
     else if hasDedup && !hasFold then
-      throw "gen-scope.mkKind: kind '${name}' declares `dedupKey` without `fold` (a fold is required to merge grouped fragments)"
+      throw "gen-scope.mkKind: kind '${name}' declares `dedupKey` without `foldFragments` (a fold is required to merge grouped fragments)"
     else if hasFold && !hasDedup then
-      throw "gen-scope.mkKind: kind '${name}' declares `fold` without `dedupKey` (a fold has nothing to merge without grouping)"
+      throw "gen-scope.mkKind: kind '${name}' declares `foldFragments` without `dedupKey` (a fold has nothing to merge without grouping)"
     else
       {
         _type = declarationMarker;
@@ -520,10 +524,19 @@ let
           nta
           ntaOnDemand
           dedupKey
-          fold
+          foldFragments
           kindValue
           ;
       };
+
+  # ── THE RETIRED FIELD ──
+  # A tombstone rather than a silent reading. A kind's fold now receives contributor edges
+  # `[ { site; value; } ]` where it received bare values, and a fold written to the old contract does
+  # not fail on the new input: `_: vs: head vs` returns the first edge record as the resource, at
+  # rc 0. Keeping the field's name while changing what it is handed would leave every such kind
+  # running wrong, so the field is renamed and the old name is refused by name at the declaration,
+  # before any claim runs, at both doors a kind passes: `mkKind`'s options and the kind record's.
+  retiredFold = "declares `fold`, which is retired: a kind's fold now receives contributor edges `[ { site; value; } ]` rather than bare values, so a fold written to the old contract would read an edge as a value. Declare it as `foldFragments`, reading each fragment's `value`.";
 
   # The applicability approximation, bound where it lives rather than written a second time: the
   # circular carrier decides the same property of its `leq`, and two copies of a discipline agree
@@ -594,8 +607,10 @@ let
       "carries no `spawns` field"
     else if !(k ? dedupKey) then
       "carries no `dedupKey` field"
-    else if !(k ? fold) then
-      "carries no `fold` field"
+    else if k ? fold then
+      retiredFold
+    else if !(k ? foldFragments) then
+      "carries no `foldFragments` field"
     else if !(k ? kindValue) then
       "carries no `kindValue` field"
     else if kindValueDefect k.kindValue != null then
@@ -621,8 +636,8 @@ let
       "nta: carries an `nta` builder that cannot be applied"
     else if k.dedupKey != null && !(callable k.dedupKey) then
       "carries a `dedupKey` that is neither null nor applicable"
-    else if k.fold != null && !(callable k.fold) then
-      "carries a `fold` that is neither null nor applicable"
+    else if k.foldFragments != null && !(callable k.foldFragments) then
+      "carries a `foldFragments` that is neither null nor applicable"
     else
       null;
 
@@ -972,7 +987,7 @@ let
       # ── the registry's TYPE, which is this run's precondition ──
       # The same question the evaluator's door asks: every entry a minted kind, filed under its own
       # name, and coherent with every resolved `below` that reaches it. This run projects `below`,
-      # `resolve`, `dedupKey`, `fold` and `depth` off those entries at points where a missing one is
+      # `resolve`, `dedupKey`, `foldFragments` and `depth` off those entries at points where a missing one is
       # a type error rather than a refusal, and a type error is not a value — `tryEval` does not
       # contain it — so the type is decided before any of them is read.
       registryDefect = kindSetDefect kindSet;
@@ -1236,7 +1251,7 @@ let
         let
           insts = filter (r: r.kind == kn) resolved;
           kd = ks.${kn}.dedupKey;
-          kf = ks.${kn}.fold;
+          kf = ks.${kn}.foldFragments;
           # The dedup partition, or one singleton group per claim where a kind declares none.
           groups =
             if kd == null then
@@ -1264,21 +1279,25 @@ let
                   map (key: {
                     inherit key;
                     inherit (i) path;
+                    # The contributor edge's site: the claim's identity, rendered as this file renders it.
+                    site = "claim at path ${toJSON i.path}";
                     value = i.result.resources.${key};
                   }) (attrNames (i.result.resources or { }))
                 ) grp.insts
               );
-              keyEntry =
-                key:
-                let
-                  values = map (f: f.value) byKey.${key};
-                in
-                {
-                  inherit key;
-                  paths = map (f: f.path) byKey.${key};
-                  groupKey = grp.gkey;
-                  value = if kf == null then head values else kf key values;
-                };
+              keyEntry = key: {
+                inherit key;
+                paths = map (f: f.path) byKey.${key};
+                groupKey = grp.gkey;
+                # The kind's fold is handed the contributor edges, projected to the vocabulary's
+                # `{ site; value; }`: the same record a wiring splice hands it, so a fold reading a
+                # field of this run's own bookkeeping cannot work here and abort there.
+                value =
+                  if kf == null then
+                    (head byKey.${key}).value
+                  else
+                    kf key (map (f: { inherit (f) site value; }) byKey.${key});
+              };
             in
             map keyEntry (attrNames byKey);
           allEntries = concatLists (map foldGroup groups);

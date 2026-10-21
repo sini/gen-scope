@@ -471,7 +471,7 @@ let
   foldedKinds = mkKinds [
     (mkKind {
       dedupKey = _: "one-group";
-      fold = _: vs: builtins.concatStringsSep "+" vs;
+      foldFragments = _: es: builtins.concatStringsSep "+" (map (e: e.value) es);
       resolve = c: _: { resources.same = c.subject.id_hash; };
     } "dup")
   ];
@@ -488,7 +488,7 @@ let
   ];
 
   # ── FORGED KIND RECORDS: THE FIELDS THE RUN PROJECTS ──
-  # `resolve`, `dedupKey` and `fold` are read at five places in a run, each of them a projection
+  # `resolve`, `dedupKey` and `foldFragments` are read at five places in a run, each of them a projection
   # where no refusal can follow — a missing attribute is a type error, and `tryEval` does not hold
   # a type error. So `didThrow` reporting TRUE below is itself the evidence: it can only be true if
   # the failure is a named `throw`, which means the registry decided it while it was still data.
@@ -506,7 +506,7 @@ let
     // fields;
 
   # Every forged resolver PRODUCES a resource. Without that the fold path is never entered and the
-  # `fold` projection is never reached, so a probe over these would report a refusal it never
+  # `foldFragments` projection is never reached, so a probe over these would report a refusal it never
   # actually asked for.
   ghostResolve = _: _: { resources.ghostRes = "ran"; };
 
@@ -543,12 +543,12 @@ let
   noResolve = {
     spawns = { };
     dedupKey = null;
-    fold = null;
+    foldFragments = null;
   };
   noDedupKey = {
     resolve = ghostResolve;
     spawns = { };
-    fold = null;
+    foldFragments = null;
   };
   noFold = {
     resolve = ghostResolve;
@@ -560,7 +560,7 @@ let
     spawns = { };
     nta = { };
     dedupKey = null;
-    fold = null;
+    foldFragments = null;
     kindValue = null;
   };
   # The registry projects `spawns` off an entry exactly as it projects the others — a kind that
@@ -569,7 +569,7 @@ let
   noSpawns = {
     resolve = ghostResolve;
     dedupKey = null;
-    fold = null;
+    foldFragments = null;
   };
 
   # ── THE SECOND DOOR: A HAND-BUILT KIND-SET RECORD ──
@@ -580,7 +580,7 @@ let
   # ★ WHICH FIELDS A RUN ACTUALLY PROJECTS WAS ENUMERATED BY SUBSTITUTION, NOT BY READING THE
   # SOURCE: each field replaced in turn by a throw carrying its own name, so a form a scan has no
   # case for — `inherit (…)`, `getAttr`, a map over `attrValues` — fires exactly the same. Four
-  # fire: `below`, `resolve`, `dedupKey`, `fold`. `_type` and `name` do not.
+  # fire: `below`, `resolve`, `dedupKey`, `foldFragments`. `_type` and `name` do not.
   forgedEntry =
     fields:
     {
@@ -630,13 +630,13 @@ let
     below = [ ];
     spawns = { };
     dedupKey = null;
-    fold = null;
+    foldFragments = null;
   };
   entryNoDedupKey = {
     below = [ ];
     resolve = ghostResolve;
     spawns = { };
-    fold = null;
+    foldFragments = null;
   };
   entryNoFold = {
     below = [ ];
@@ -657,7 +657,7 @@ let
       ];
     };
     dedupKey = null;
-    fold = null;
+    foldFragments = null;
   };
   entryWellFormed = {
     below = [ ];
@@ -665,14 +665,14 @@ let
     spawns = { };
     nta = { };
     dedupKey = null;
-    fold = null;
+    foldFragments = null;
     kindValue = null;
   };
   entryNoSpawns = {
     below = [ ];
     resolve = ghostResolve;
     dedupKey = null;
-    fold = null;
+    foldFragments = null;
   };
 
   # ── PRESENT BUT NOT APPLICABLE ──
@@ -687,11 +687,11 @@ let
   };
   entryDedupKeyNotCallable = entryWellFormed // {
     dedupKey = 42;
-    fold = _: vs: builtins.head vs;
+    foldFragments = _: es: (builtins.head es).value;
   };
   entryFoldNotCallable = entryWellFormed // {
     dedupKey = _: "g";
-    fold = 42;
+    foldFragments = 42;
   };
   # `isFunction` alone would refuse this, and it APPLIES — measured. A check that refused it would
   # be wrong about its own domain, which is the same defect as admitting what does not work.
@@ -1675,7 +1675,7 @@ in
           (mkKinds [
             (mkKind {
               dedupKey = _: (x: x);
-              fold = _: vs: builtins.head vs;
+              foldFragments = _: es: (builtins.head es).value;
               resolve = _: _: { resources.ok = 1; };
             } "g")
           ])
@@ -1696,7 +1696,7 @@ in
           (mkKinds [
             (mkKind {
               dedupKey = _: 42;
-              fold = _: vs: builtins.head vs;
+              foldFragments = _: es: (builtins.head es).value;
               resolve = _: _: { resources.ok = 1; };
             } "g")
           ])
@@ -1715,7 +1715,7 @@ in
           (mkKinds [
             (mkKind {
               dedupKey = _: "k";
-              fold = _: vs: builtins.head vs;
+              foldFragments = _: es: (builtins.head es).value;
               resolve = _: _: { resources.ok = 1; };
             } "g")
           ])

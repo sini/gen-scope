@@ -166,13 +166,13 @@ in
         resolution = r;
         subject = k8s.apps.sonarr;
         combine =
-          key: vs:
+          key: es:
           if key == "env" || key == "persistence" then
-            folds.mergeAttrs key vs
+            folds.mergeAttrs key es
           else if key == "egress" then
-            folds.list key vs
+            folds.list key es
           else
-            folds.one key vs;
+            folds.one key es;
       };
       expected = {
         backendRef = {

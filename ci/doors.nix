@@ -129,6 +129,7 @@ in
       "below"
       "dedupKey"
       "fold"
+      "foldFragments"
       "kindValue"
       "nta"
       "ntaOnDemand"

@@ -31,7 +31,7 @@ trap 'rm -rf "$tmp"' EXIT
 # arm | expected rc | pattern the message or value must match (empty = unchecked)
 cells=(
   "guarded-wrapped|0|^true$"
-  "guarded-bare|1|gen-scope\.folds\.same: key 'k' has a fragment carrying a function, at fragment-list position \[0\]\.gen"
+  "guarded-bare|1|gen-scope\.folds\.same: key 'k' has the fragment from s0, at \.gen carrying a function"
   "unguarded-wrapped|1|cannot convert a function to JSON"
   "unguarded-bare|1|cannot convert a function to JSON"
   "guarded-shared|0|^true$"

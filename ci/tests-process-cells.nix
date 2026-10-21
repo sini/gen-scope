@@ -645,20 +645,27 @@ let
   forced = r: v: builtins.deepSeq r v;
   # `n` fragments, each its own host under three shared keys, and one leaf every fragment writes
   # equal (`same` and `absorb` over n contributors). The value is the hand-derived host count, n.
-  fleetOf =
+  # The fold takes contributor edges, so its arm is handed `fleetEdgesOf`, built by the same
+  # `genList` as the controls' bare `fleetOf` rather than by a projection over it: the cell prices
+  # the fold over edges, not a lift beside it.
+  hostAt =
+    i:
+    let
+      h = "h${toString i}";
+    in
+    {
+      nixosConfigurations.${h} = i;
+      deploy.nodes.${h}.hostname = h;
+      colmena.${h} = i;
+      meta.domain = "example";
+    };
+  fleetOf = n: builtins.genList hostAt n;
+  fleetEdgesOf =
     n:
-    builtins.genList (
-      i:
-      let
-        h = "h${toString i}";
-      in
-      {
-        nixosConfigurations.${h} = i;
-        deploy.nodes.${h}.hostname = h;
-        colmena.${h} = i;
-        meta.domain = "example";
-      }
-    ) n;
+    builtins.genList (i: {
+      site = "h${toString i}";
+      value = hostAt i;
+    }) n;
   deepRead = r: forced r (builtins.length (builtins.attrNames r.deploy.nodes));
   # The rejected constructions. `foldl'` over a recursive `//`, which copies the accumulator once
   # per fragment (Ren's shape); and `byKey`'s per-key `filter`, a scan of every fragment per key.
@@ -691,7 +698,12 @@ let
         else if builtins.all builtins.isAttrs xs then
           deepFilter "${key}.${k}" xs
         else
-          folds.same "${key}.${k}" xs;
+          folds.same "${key}.${k}" (
+            map (x: {
+              site = "-";
+              value = x;
+            }) xs
+          );
     in
     builtins.listToAttrs (
       map (k: {
@@ -702,22 +714,33 @@ let
   deepCost =
     impl: n:
     deepRead (
-      {
-        fold = folds.mergeAttrsDeep "k";
-        foldl = deepFoldl;
-        filter = deepFilter "k";
-      }
-      .${impl}
-        (fleetOf n)
+      if impl == "fold" then
+        folds.mergeAttrsDeep "k" (fleetEdgesOf n)
+      else
+        {
+          foldl = deepFoldl;
+          filter = deepFilter "k";
+        }
+        .${impl}
+          (fleetOf n)
     );
+  # `edgesOf at n` — `n` contributor edges sited `c0`, `c1`, …, each value `at i`, built by the same
+  # `genList` the bare-value control arms use.
+  edgesOf =
+    at: n:
+    builtins.genList (i: {
+      site = "c${toString i}";
+      value = at i;
+    }) n;
   # `n` distinct elements, each twice. Strings carry the text-keyed table; the rejected arm finds
   # each kept string's twins by a scan of the whole list. The value is the hand-derived class count.
   setCost =
     impl: n:
     let
-      vs = builtins.genList (i: "s${toString (builtins.div i 2)}") (2 * n);
+      at = i: "s${toString (builtins.div i 2)}";
+      vs = builtins.genList at (2 * n);
       scan = map (k: builtins.filter (v: v == k) vs) (prelude.unique vs);
-      r = if impl == "fold" then folds.set "k" vs else scan;
+      r = if impl == "fold" then folds.set "k" (edgesOf at (2 * n)) else scan;
     in
     forced r (builtins.length r);
   # Non-strings have no total key: `n` distinct attrsets, each twice, through the fold's one pass;
@@ -729,14 +752,18 @@ let
   setOneCost =
     n:
     let
-      r = folds.set "k" (builtins.genList (_: { v = 1; }) n);
+      r = folds.set "k" (edgesOf (_: { v = 1; }) n);
     in
     forced r (n - 1 + builtins.length r);
   setAttrsCost =
     impl: n:
     let
-      vs = builtins.genList (i: { v = builtins.div i 2; }) (2 * n);
-      r = if impl == "fold" then folds.set "k" vs else prelude.unique vs;
+      at = i: { v = builtins.div i 2; };
+      r =
+        if impl == "fold" then
+          folds.set "k" (edgesOf at (2 * n))
+        else
+          prelude.unique (builtins.genList at (2 * n));
     in
     forced r (builtins.length r);
 
@@ -752,7 +779,7 @@ let
           (mkKinds [
             (mkKind {
               dedupKey = _: "g";
-              fold = _: vs: vs;
+              foldFragments = _: es: map (e: e.value) es;
               resolve = c: _: { resources.${c.tag} = c.tag; };
             } "item")
           ])

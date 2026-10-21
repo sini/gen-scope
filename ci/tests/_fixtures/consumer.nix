@@ -40,7 +40,8 @@ rec {
 
   # One subject's wiring entries spliced into a single record, per top-level key: the values
   # contributed under a key — in the global schedule order the field publishes — handed to
-  # `combine`, whose `key: [v]: v` signature is the one a kind's resource fold already has. One
+  # `combine` as contributor edges, each sited by the claim that wired it, so its
+  # `key: [ { site; value; } ]: v` signature is the one a kind's resource fold already has. One
   # vocabulary serves both because both are the same operation: several fragments arriving under
   # one name with a declared rule for reconciling them.
   #
@@ -56,12 +57,22 @@ rec {
     }:
     let
       w = wiringOf resolution subject;
-      vals = map (e: e.wiring) (if w.registered then w.entries else [ ]);
-      allKeys = lib.unique (lib.concatMap builtins.attrNames vals);
+      ents = if w.registered then w.entries else [ ];
+      allKeys = lib.unique (lib.concatMap (e: builtins.attrNames e.wiring) ents);
+      edgesAt =
+        k:
+        lib.concatMap (
+          e:
+          if e.wiring ? ${k} then
+            [
+              {
+                site = "claim at path ${builtins.toJSON e.claim}";
+                value = e.wiring.${k};
+              }
+            ]
+          else
+            [ ]
+        ) ents;
     in
-    builtins.listToAttrs (
-      map (
-        k: lib.nameValuePair k (combine k (lib.concatMap (v: if v ? ${k} then [ v.${k} ] else [ ]) vals))
-      ) allKeys
-    );
+    builtins.listToAttrs (map (k: lib.nameValuePair k (combine k (edgesAt k))) allKeys);
 }

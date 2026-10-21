@@ -59,6 +59,32 @@ let
   # The message, pinned to the byte. `escapeRegex` is the prelude's own and its metacharacter set
   # is byte-identical to nixpkgs', so what is anchored below is the text as written above it.
   exactly = msg: "^" + genPreludeLib.escapeRegex msg + "$";
+  # The fold vocabulary takes contributor edges `[ { site; value; } ]`: a bare fragment list, sited
+  # `s0`, `s1`, … in list order.
+  sited =
+    vs:
+    builtins.genList (i: {
+      site = "s${toString i}";
+      value = builtins.elemAt vs i;
+    }) (builtins.length vs);
+  # A checker in gen-types' contract (`verify : value -> null | string`), written by shape: the fold
+  # vocabulary reads `verify` and nothing else, and gen-scope takes no gen-types input.
+  intChecker = {
+    verify =
+      v:
+      if builtins.isInt v then
+        null
+      else
+        "expected type 'int' but value ${builtins.toJSON v} is of type '${builtins.typeOf v}'";
+  };
+  endpointChecker = {
+    verify =
+      v:
+      if builtins.isInt (v.port or null) then
+        null
+      else
+        "in member 'port': expected type 'int' but value ${builtins.toJSON v.port} is of type '${builtins.typeOf v.port}'";
+  };
   # gen-prelude's refusal text, composed with this library's own literal door, field and accepted
   # set (den-hoag-7jltk): every assertion kept, none of gen-prelude's wording copied.
   inherit (genPreludeLib) refusals;
@@ -503,12 +529,47 @@ in
       } "k";
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.mkKind: kind 'k' declares `dedupKey` without `fold` (a fold is required to merge grouped fragments)";
+        msg = exactly "gen-scope.mkKind: kind 'k' declares `dedupKey` without `foldFragments` (a fold is required to merge grouped fragments)";
+      };
+    };
+    # ★ THE RETIRED FIELD (den-hoag-bluqd). A kind's fold receives contributor edges where it received
+    # bare values, and a fold written to the old contract does not fail on them: `_: vs: head vs`
+    # returns the first edge record, at rc 0. So the old field is refused by name at declaration,
+    # before any claim runs, and the contract travels under its new name.
+    test-a-kind-declaring-the-retired-fold-is-refused-at-declaration = {
+      expr = mkKind {
+        resolve = _: _: { };
+        dedupKey = _: "d";
+        fold = _: vs: builtins.head vs;
+      } "k";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.mkKind: kind 'k' declares `fold`, which is retired: a kind's fold now receives contributor edges `[ { site; value; } ]` rather than bare values, so a fold written to the old contract would read an edge as a value. Declare it as `foldFragments`, reading each fragment's `value`.";
+      };
+    };
+    # And at the kind-record door, for a record that carries the field without passing `mkKind`.
+    test-a-kind-record-carrying-the-retired-fold-is-refused = {
+      expr = mkKinds [
+        {
+          _type = "gen-scope/kind-declaration";
+          name = "l";
+          below = [ ];
+          resolve = _: _: { };
+          spawns = { };
+          dedupKey = null;
+          fold = null;
+          foldFragments = null;
+          kindValue = null;
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 declares `fold`, which is retired: a kind's fold now receives contributor edges `[ { site; value; } ]` rather than bare values, so a fold written to the old contract would read an edge as a value. Declare it as `foldFragments`, reading each fragment's `value`."]'';
       };
     };
 
     # ── THE REGISTRY NAMES THE ENTRY AND THE FIELD ──
-    # A run projects `resolve`, `dedupKey` and `fold` at points where no refusal can follow, so
+    # A run projects `resolve`, `dedupKey` and `foldFragments` at points where no refusal can follow, so
     # their absence is decided at registration. The message has to carry BOTH coordinates a caller
     # needs — which entry, and which field — because a registry is a list and "one of these is not
     # a kind" leaves the caller to bisect it.
@@ -519,7 +580,7 @@ in
           name = "ghost";
           below = [ ];
           dedupKey = null;
-          fold = null;
+          foldFragments = null;
         }
       ];
       expectedError = {
@@ -543,7 +604,7 @@ in
             depth = 0;
             belowKinds = { };
             dedupKey = null;
-            fold = null;
+            foldFragments = null;
           };
         };
       } [ ];
@@ -565,7 +626,7 @@ in
           resolve = 42;
           spawns = { };
           dedupKey = null;
-          fold = null;
+          foldFragments = null;
           kindValue = null;
         }
       ];
@@ -712,12 +773,12 @@ in
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries no `fold` field"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries no `foldFragments` field"]'';
       };
     };
     # ── THE APPLICABILITY ARMS, WHOSE RECORDS THE SUPPORTED CONSTRUCTOR ITSELF BUILDS ──
     # `mkKind` decides that `name` is a string, that `below` is a list of them, and that
-    # `dedupKey` and `fold` are declared TOGETHER. It says nothing about what any of the three
+    # `dedupKey` and `foldFragments` are declared TOGETHER. It says nothing about what any of the three
     # function-valued fields ARE, so a record carrying an integer where a resolver belongs is
     # built by the constructor and refused after it — which is as true of the `resolve` arm
     # pinned above as of these two. The fixtures below use `mkKind` rather than a forged record
@@ -727,7 +788,7 @@ in
         (mkKind {
           resolve = _: _: { };
           dedupKey = 42;
-          fold = _: _: { };
+          foldFragments = _: _: { };
         } "l")
       ];
       expectedError = {
@@ -740,12 +801,12 @@ in
         (mkKind {
           resolve = _: _: { };
           dedupKey = _: "k";
-          fold = 42;
+          foldFragments = 42;
         } "l")
       ];
       expectedError = {
         type = "ThrownError";
-        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `fold` that is neither null nor applicable"]'';
+        msg = exactly ''gen-scope.mkKinds: not every entry is a kind declaration: ["entry 0 carries a `foldFragments` that is neither null nor applicable"]'';
       };
     };
 
@@ -891,19 +952,20 @@ in
   };
 
   # ── THE FOLD PRECONDITIONS, EACH BY ITS OWN TEXT ──
-  # A fold's precondition refusal has to name the fold, the key AND the position in the fragment
-  # list, because the caller's fragments all arrived through one call and a message that says only
+  # A fold's precondition refusal has to name the fold, the key AND the contributor whose fragment
+  # it is, because the caller's fragments all arrived through one call and a message that says only
   # "a fragment" sends them looking through the group by hand. Reachability is asserted in
-  # `tests/folds.nix`; these cells are what makes "refuses by name" a claim about anything.
+  # `tests/folds.nix`; these cells are what makes "refuses by name" a claim about anything. The
+  # fragments are written as a bare list and sited `s0`, `s1`, … in list order (`sited`).
   config.flake.testsError.folds-refusals = {
-    test-same-names-the-fold-the-key-and-the-function-position = {
-      expr = folds.same "k" [
+    test-same-names-the-fold-the-key-and-the-function-site = {
+      expr = folds.same "k" (sited [
         fnA
         fnB
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a function, at fragment-list position [0].gen — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+        msg = exactly "gen-scope.folds.same: key 'k' has the fragment from s0, at .gen carrying a function — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
       };
     };
 
@@ -911,13 +973,13 @@ in
     # conflict renders each fragment by its path. Had the scan descended, this would be the guard's
     # message instead — which is exactly what the next cell asserts for the unmarked pair.
     test-same-conflict-renders-derivations-by-their-paths = {
-      expr = folds.same "k" [
+      expr = folds.same "k" (sited [
         drvA
         drvB
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.same: conflicting values for key 'k': [\"/nix/store/aaaa\",\"/nix/store/bbbb\"]";
+        msg = exactly "gen-scope.folds.same: conflicting values for key 'k': [{\"site\":\"s0\",\"value\":\"/nix/store/aaaa\"},{\"site\":\"s1\",\"value\":\"/nix/store/bbbb\"}]";
       };
     };
     # ★ THE SAME SHAPE WITHOUT THE MARKER IS THE GUARD'S, AND THIS IS THE CELL THAT SAYS WHICH.
@@ -926,32 +988,32 @@ in
     # values are the same string — an answer naming a difference the caller cannot see. The
     # evaluator's shortcut is the marker, so the scan's is too.
     test-a-store-path-without-the-derivation-marker-is-refused-by-name = {
-      expr = folds.same "k" [
+      expr = folds.same "k" (sited [
         bareA
         bareA2
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a function, at fragment-list position [0].passthru — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+        msg = exactly "gen-scope.folds.same: key 'k' has the fragment from s0, at .passthru carrying a function — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
       };
     };
 
-    test-mergeattrs-names-the-fragment-type-and-position = {
-      expr = folds.mergeAttrs "k" [
+    test-mergeattrs-names-the-fragment-type-and-site = {
+      expr = folds.mergeAttrs "k" (sited [
         { a = 1; }
         (_: "not a fragment")
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.mergeAttrs: key 'k' has a fragment that is a lambda rather than an attribute set, at fragment-list position [1]";
+        msg = exactly "gen-scope.folds.mergeAttrs: key 'k' has a fragment from s1 that is a lambda rather than an attribute set";
       };
     };
 
-    test-bykey-names-the-fragment-type-and-position = {
-      expr = folds.byKey { gen = folds.same; } "k" [ (_: "not a fragment") ];
+    test-bykey-names-the-fragment-type-and-site = {
+      expr = folds.byKey { gen = folds.same; } "k" (sited [ (_: "not a fragment") ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.byKey: key 'k' has a fragment that is a lambda rather than an attribute set, at fragment-list position [0]";
+        msg = exactly "gen-scope.folds.byKey: key 'k' has a fragment from s0 that is a lambda rather than an attribute set";
       };
     };
 
@@ -961,13 +1023,13 @@ in
     # asserting the GUARD's text is what says the scan entered them; a fold that skipped them on the
     # marker alone would not fail this cell, it would end the evaluation.
     test-a-derivation-marker-without-a-store-path-is-refused-by-name = {
-      expr = folds.same "k" [
+      expr = folds.same "k" (sited [
         markerOnly1
         markerOnly2
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a function, at fragment-list position [0].passthru — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+        msg = exactly "gen-scope.folds.same: key 'k' has the fragment from s0, at .passthru carrying a function — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
       };
     };
 
@@ -975,13 +1037,13 @@ in
     # rather than at the interior, so this cell says the scan entered the fragment AND found the
     # defect in the path itself — the one term a marker-and-presence rule reports as satisfied.
     test-a-store-path-that-is-not-a-string-is-refused-by-name = {
-      expr = folds.same "k" [
+      expr = folds.same "k" (sited [
         fnPath1
         fnPath2
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a function, at fragment-list position [0].outPath — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+        msg = exactly "gen-scope.folds.same: key 'k' has the fragment from s0, at .outPath carrying a function — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
       };
     };
 
@@ -990,13 +1052,13 @@ in
     # there; what it names instead is the path, and the reason it gives is about REPORTING rather
     # than about comparing — which is the half of the property this term belongs to.
     test-a-path-is-refused-on-its-own-ground = {
-      expr = folds.same "k" [
+      expr = folds.same "k" (sited [
         { a = /x; }
         { a = /y; }
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.same: key 'k' has a fragment carrying a path, at fragment-list position [0].a — reporting a conflict over it would either abort on a path that is not there or copy the caller's path into the store, and a message explaining a refusal may do neither";
+        msg = exactly "gen-scope.folds.same: key 'k' has the fragment from s0, at .a carrying a path — reporting a conflict over it would either abort on a path that is not there or copy the caller's path into the store, and a message explaining a refusal may do neither";
       };
     };
 
@@ -1004,10 +1066,10 @@ in
     # The refusal names the fold, because a caller with five folds in one spec learns nothing from a
     # message that names only the vocabulary.
     test-same-names-itself-when-the-key-is-not-a-string = {
-      expr = folds.same 42 [
+      expr = folds.same 42 (sited [
         1
         2
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.folds.same: `key` is a int rather than a string — every refusal this fold can raise names the key, so a key that cannot be rendered ends the evaluation in place of the refusal that was owed";
@@ -1017,7 +1079,7 @@ in
     # the vocabulary, so the member with no diagnostics of its own is exactly the one where silent
     # acceptance would make the shared contract untrue.
     test-list-names-itself-when-the-key-is-not-a-string = {
-      expr = folds.list [ "not a key" ] [ 1 ];
+      expr = folds.list [ "not a key" ] (sited [ 1 ]);
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.folds.list: `key` is a list rather than a string — every refusal this fold can raise names the key, so a key that cannot be rendered ends the evaluation in place of the refusal that was owed";
@@ -1027,26 +1089,26 @@ in
     # ── `set` AND `mergeAttrsDeep` (den-hoag-izo7a) ──
     # `set`'s function refusal is `same`'s sentence under its own name; its PATH refusal carries the
     # plain-data ground, because `set` never reports a conflict. The deep merge's leaf refusals name
-    # the deep merge, never `same`, with the position among the contributors at the full key.
+    # the deep merge, never `same`, with the contributors' sites at the full key.
     test-set-names-itself-when-the-key-is-not-a-string = {
-      expr = folds.set 1 [ ];
+      expr = folds.set 1 (sited [ ]);
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.folds.set: `key` is a int rather than a string — every refusal this fold can raise names the key, so a key that cannot be rendered ends the evaluation in place of the refusal that was owed";
       };
     };
     test-set-refuses-a-function-bearing-fragment-on-sames-ground = {
-      expr = folds.set "k" [ { f = _: 1; } ];
+      expr = folds.set "k" (sited [ { f = _: 1; } ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.set: key 'k' has a fragment carrying a function, at fragment-list position [0].f — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+        msg = exactly "gen-scope.folds.set: key 'k' has the fragment from s0, at .f carrying a function — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
       };
     };
     test-set-refuses-a-path-on-the-plain-data-ground = {
-      expr = folds.set "k" [ { p = ./tests-error.nix; } ];
+      expr = folds.set "k" (sited [ { p = ./tests-error.nix; } ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.set: key 'k' has a fragment carrying a path, at fragment-list position [0].p — a path in a fragment is not plain data, and the construction this library names for that class makes such a fragment inexpressible, so it is refused where it sits rather than deduplicated";
+        msg = exactly "gen-scope.folds.set: key 'k' has the fragment from s0, at .p carrying a path — a path in a fragment is not plain data, and the construction this library names for that class makes such a fragment inexpressible, so it is refused where it sits rather than deduplicated";
       };
     };
     test-set-refuses-a-non-string-collapse-that-would-lose-an-edge = {
@@ -1054,68 +1116,68 @@ in
         let
           a = builtins.toFile "izo7a-ctx-a" "a";
         in
-        folds.set "k" [
+        folds.set "k" (sited [
           [ (builtins.unsafeDiscardStringContext a) ]
           [ a ]
-        ];
+        ]);
       expectedError = {
         type = "ThrownError";
         msg =
           "^"
-          + genPreludeLib.escapeRegex "gen-scope.folds.set: the fold at key 'k' collapses a non-string datum at fragment-list position [0] with 1 `==`-equal twin(s) whose store dependencies it does not carry ("
+          + genPreludeLib.escapeRegex "gen-scope.folds.set: the fold at key 'k' collapses a non-string datum from s0 with 1 `==`-equal twin(s) whose store dependencies it does not carry ("
           + ".*-izo7a-ctx-a"
           + genPreludeLib.escapeRegex "); a collapse keeps its twins' dependency edges, and only a string can carry the union"
           + "$";
       };
     };
     test-mergeAttrsDeep-names-itself-when-the-key-is-not-a-string = {
-      expr = folds.mergeAttrsDeep 1 [ ];
+      expr = folds.mergeAttrsDeep 1 (sited [ ]);
       expectedError = {
         type = "ThrownError";
         msg = exactly "gen-scope.folds.mergeAttrsDeep: `key` is a int rather than a string — every refusal this fold can raise names the key, so a key that cannot be rendered ends the evaluation in place of the refusal that was owed";
       };
     };
     test-mergeAttrsDeep-refuses-a-non-attrs-fragment = {
-      expr = folds.mergeAttrsDeep "k" [
+      expr = folds.mergeAttrsDeep "k" (sited [
         { }
         1
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.mergeAttrsDeep: key 'k' has a fragment that is a int rather than an attribute set, at fragment-list position [1]";
+        msg = exactly "gen-scope.folds.mergeAttrsDeep: key 'k' has a fragment from s1 that is a int rather than an attribute set";
       };
     };
     test-mergeAttrsDeep-refuses-a-leaf-conflict-at-the-full-key = {
-      expr = folds.mergeAttrsDeep "k" [
+      expr = folds.mergeAttrsDeep "k" (sited [
         { deploy.nodes.h1.hostname = "a"; }
         { deploy.nodes.h1.hostname = "b"; }
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.mergeAttrsDeep: conflicting values for key 'k.deploy.nodes.h1.hostname': [\"a\",\"b\"]";
+        msg = exactly "gen-scope.folds.mergeAttrsDeep: conflicting values for key 'k.deploy.nodes.h1.hostname': [{\"site\":\"s0\",\"value\":\"a\"},{\"site\":\"s1\",\"value\":\"b\"}]";
       };
     };
-    # The position is among the contributors at the key, not in the fragment list: the first
-    # fragment does not contribute to `a`.
+    # The contributor named is the one at the key, not the fragment list's first: `s0` does not
+    # contribute to `a`, so the refused leaf is `s1`'s.
     test-mergeAttrsDeep-refuses-a-function-leaf-among-the-contributors = {
-      expr = folds.mergeAttrsDeep "k" [
+      expr = folds.mergeAttrsDeep "k" (sited [
         { b = 1; }
         { a = _: 1; }
         { a = _: 1; }
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.mergeAttrsDeep: the value at position [0] among the contributors at key 'k.a' carries a function — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
+        msg = exactly "gen-scope.folds.mergeAttrsDeep: the value from s1, among the contributors at key 'k.a', carries a function — `==` is not an equivalence over function-bearing values, so whether these fragments agree is not a question this fold can answer";
       };
     };
     test-mergeAttrsDeep-refuses-a-namespace-beside-a-leaf = {
-      expr = folds.mergeAttrsDeep "k" [
+      expr = folds.mergeAttrsDeep "k" (sited [
         { a.x = 1; }
         { a = 2; }
-      ];
+      ]);
       expectedError = {
         type = "ThrownError";
-        msg = exactly "gen-scope.folds.mergeAttrsDeep: the contributors at key 'k.a' hold an attribute set at position [0] beside a leaf at position [1]; a namespace and a value have no merge rule between them";
+        msg = exactly "gen-scope.folds.mergeAttrsDeep: the contributors at key 'k.a' hold an attribute set from s0 beside a leaf from s1; a namespace and a value have no merge rule between them";
       };
     };
     test-mergeAttrsDeep-refuses-a-leaf-collapse-that-would-lose-an-edge = {
@@ -1123,15 +1185,15 @@ in
         let
           a = builtins.toFile "izo7a-ctx-a" "a";
         in
-        folds.mergeAttrsDeep "k" [
+        folds.mergeAttrsDeep "k" (sited [
           { x = [ (builtins.unsafeDiscardStringContext a) ]; }
           { x = [ a ]; }
-        ];
+        ]);
       expectedError = {
         type = "ThrownError";
         msg =
           "^"
-          + genPreludeLib.escapeRegex "gen-scope.folds.mergeAttrsDeep: the leaf at key 'k.x' collapses a non-string datum with 1 `==`-equal twin(s) whose store dependencies it does not carry ("
+          + genPreludeLib.escapeRegex "gen-scope.folds.mergeAttrsDeep: the leaf at key 'k.x' collapses a non-string datum contributed from s0, s1 with 1 `==`-equal twin(s) whose store dependencies it does not carry ("
           + ".*-izo7a-ctx-a"
           + genPreludeLib.escapeRegex "); a collapse keeps its twins' dependency edges, and only a string can carry the union"
           + "$";
@@ -1157,11 +1219,207 @@ in
     # ── LIVE CONTROL: A FOLD THAT RETURNS ──
     # Without it the suite above is satisfied by a vocabulary that refuses everything.
     test-control-a-legal-fold-returns = {
-      expr = folds.same "k" [
+      expr = folds.same "k" (sited [
         1
         1
-      ];
+      ]);
       expected = 1;
+    };
+
+    # ── CONTRIBUTOR EDGES: EACH REFUSAL NAMES ITS CONTRIBUTOR (den-hoag-bluqd) ──
+    # A typed fold refuses the ill-typed fragment by the site of the contributor that wrote it.
+    test-typed-names-the-ill-typed-fragments-site = {
+      expr = folds.typed endpointChecker folds.list "endpoint" [
+        {
+          site = "root:r/box:b";
+          value = {
+            host = "b";
+            port = 23;
+          };
+        }
+        {
+          site = "root:r/box:a";
+          value = {
+            host = "a";
+            port = "22";
+          };
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.typed: key 'endpoint': fragment from root:r/box:a: in member 'port': expected type 'int' but value \"22\" is of type 'string'";
+      };
+    };
+    # Two ill-typed fragments from two contributors: the first in pinned order is the one named.
+    test-typed-names-the-first-ill-typed-fragment-in-pinned-order = {
+      expr = folds.typed endpointChecker folds.list "endpoint" [
+        {
+          site = "root:r/box:b";
+          value = {
+            host = "b";
+            port = "23";
+          };
+        }
+        {
+          site = "root:r/box:a";
+          value = {
+            host = "a";
+            port = "22";
+          };
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.typed: key 'endpoint': fragment from root:r/box:b: in member 'port': expected type 'int' but value \"23\" is of type 'string'";
+      };
+    };
+    # The fold under `typed` is handed the same edges, so its own refusal names sites too.
+    test-typed-hands-its-fold-the-sited-edges = {
+      expr = folds.typed intChecker folds.same "k" (sited [
+        1
+        2
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.same: conflicting values for key 'k': [{\"site\":\"s0\",\"value\":1},{\"site\":\"s1\",\"value\":2}]";
+      };
+    };
+    test-typed-refuses-a-checker-without-verify = {
+      expr = folds.typed { } folds.list;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.typed: the checker carries no applicable `verify`";
+      };
+    };
+    test-typed-refuses-a-checker-that-is-not-a-set = {
+      expr = folds.typed 42 folds.list;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.typed: the checker is a int rather than an attribute set carrying `verify`";
+      };
+    };
+    test-typed-refuses-a-fold-that-cannot-be-applied = {
+      expr = folds.typed intChecker 42;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.typed: the fold is a int rather than an applicable fold";
+      };
+    };
+    test-typed-refuses-a-verify-that-answers-neither-null-nor-a-string = {
+      expr = folds.typed { verify = _: 42; } folds.list "k" (sited [ 1 ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.typed: key 'k': the checker's `verify` returned a int rather than null or a string, for the fragment from s0";
+      };
+    };
+    # At the cascade the site is the claim's identity, rendered as the cascade renders it.
+    test-typed-at-the-cascade-names-the-claim = {
+      expr =
+        (resolveClaims { }
+          (mkKinds [
+            (mkKind {
+              dedupKey = _: "g";
+              foldFragments = folds.typed intChecker folds.list;
+              resolve = c: _: { resources.port = c.port; };
+            } "endpoint")
+          ])
+          [
+            (mkClaim {
+              kind = "endpoint";
+              subject = subjA;
+              port = 22;
+            })
+            (mkClaim {
+              kind = "endpoint";
+              subject = {
+                id_hash = "id-b";
+                name = "b-subject";
+              };
+              port = "22";
+            })
+          ]
+        ).resources.endpoint.port;
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.typed: key 'port': fragment from claim at path [1]: expected type 'int' but value \"22\" is of type 'string'";
+      };
+    };
+    test-one-names-every-contributor = {
+      expr = folds.one "k" (sited [
+        1
+        2
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.one: key 'k' has 2 contributors, expected exactly 1: from s0, s1";
+      };
+    };
+    test-mergeattrs-collision-names-the-contributors = {
+      expr = folds.mergeAttrs "k" (sited [
+        { a = 1; }
+        { b = 2; }
+        { a = 3; }
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.mergeAttrs: key 'k' collision on sub-key(s) [\"a\"], written by the fragments from s0, s2";
+      };
+    };
+    test-bykey-undeclared-key-names-the-contributors = {
+      expr = folds.byKey { gen = folds.same; } "k" (sited [
+        { gen = "x"; }
+        { rogue = 1; }
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.byKey: key 'k': fragment key 'rogue' not declared in the fold spec, written by the fragments from s1";
+      };
+    };
+    # A sub-fold of `byKey` is handed the edges that define its key, so it names the same sites.
+    test-a-bykey-sub-fold-names-the-contributors = {
+      expr = folds.byKey { gen = folds.same; } "k" (sited [
+        { }
+        { gen = "x"; }
+        { gen = "y"; }
+      ]);
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.same: conflicting values for key 'k.gen': [{\"site\":\"s1\",\"value\":\"x\"},{\"site\":\"s2\",\"value\":\"y\"}]";
+      };
+    };
+
+    # ── THE DOOR: THE FRAGMENTS ARE EDGES, DECIDED WHERE THE KEY IS ──
+    # A `site` is interpolated by every refusal, so a non-string one is refused at the door for the
+    # key's reason, before any refusal could be built with it.
+    test-a-non-string-site-is-refused-at-the-door = {
+      expr = folds.list "k" [
+        {
+          site = 1;
+          value = 1;
+        }
+      ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.list: key 'k': the fragment at fragment-list position [0] has a `site` that is a int rather than a string";
+      };
+    };
+    # A caller still on the bare-value contract is refused by name, not read wrong.
+    test-a-bare-value-is-refused-at-the-door = {
+      expr = folds.one "c" [ 1 ];
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.one: key 'c': the fragment at fragment-list position [0] is not a { site; value; } record";
+      };
+    };
+    test-fragments-that-are-not-a-list-are-refused-at-the-door = {
+      expr = folds.list "k" {
+        site = "a";
+        value = 1;
+      };
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.folds.list: key 'k': the fragments are a set rather than a list of { site; value; } records";
+      };
     };
   };
 

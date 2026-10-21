@@ -68,6 +68,15 @@ let
     })
   ];
 
+  # The fold vocabulary takes contributor edges `[ { site; value; } ]`; the direct cells below write
+  # their fragments as a bare list and site them `s0`, `s1`, … in list order.
+  sited =
+    vs:
+    builtins.genList (i: {
+      site = "s${toString i}";
+      value = builtins.elemAt vs i;
+    }) (builtins.length vs);
+
   # api-key secret fold spec, exercised directly.
   secretByKey = folds.byKey {
     generator = folds.same;
@@ -78,11 +87,11 @@ in
   flake.tests.cascade-helpers = {
     # ── stock fold semantics ──
     test-folds-list = {
-      expr = folds.list "k" [
+      expr = folds.list "k" (sited [
         1
         2
         3
-      ];
+      ]);
       expected = [
         1
         2
@@ -90,40 +99,40 @@ in
       ];
     };
     test-folds-same-agrees = {
-      expr = folds.same "k" [
+      expr = folds.same "k" (sited [
         7
         7
         7
-      ];
+      ]);
       expected = 7;
     };
     test-folds-same-conflict-throws = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           1
           2
-        ]
+        ])
       );
       expected = true;
     };
     test-folds-one-single = {
-      expr = folds.one "k" [ 42 ];
+      expr = folds.one "k" (sited [ 42 ]);
       expected = 42;
     };
     test-folds-one-second-throws = {
       expr = didThrow (
-        folds.one "k" [
+        folds.one "k" (sited [
           1
           2
-        ]
+        ])
       );
       expected = true;
     };
     test-folds-mergeattrs-disjoint = {
-      expr = folds.mergeAttrs "k" [
+      expr = folds.mergeAttrs "k" (sited [
         { a = 1; }
         { b = 2; }
-      ];
+      ]);
       expected = {
         a = 1;
         b = 2;
@@ -131,17 +140,17 @@ in
     };
     test-folds-mergeattrs-collision-throws = {
       expr = didThrow (
-        folds.mergeAttrs "k" [
+        folds.mergeAttrs "k" (sited [
           { a = 1; }
           { a = 2; }
-        ]
+        ])
       );
       expected = true;
     };
 
     # ── folds.byKey: per-key dispatch, skipped-key, unknown-key, non-attrset ──
     test-bykey-per-key-dispatch = {
-      expr = secretByKey "media-arr-api-keys" [
+      expr = secretByKey "media-arr-api-keys" (sited [
         {
           generator = "hex-secret";
           stringData.sonarr = "s";
@@ -150,7 +159,7 @@ in
           generator = "hex-secret";
           stringData.radarr = "r";
         }
-      ];
+      ]);
       expected = {
         generator = "hex-secret";
         stringData = {
@@ -161,13 +170,13 @@ in
     };
     # A fragment omitting a spec key is skipped (pinned order preserved among those that define it).
     test-bykey-skipped-key = {
-      expr = secretByKey "k" [
+      expr = secretByKey "k" (sited [
         { generator = "g"; }
         {
           generator = "g";
           stringData.a = 1;
         }
-      ];
+      ]);
       expected = {
         generator = "g";
         stringData = {
@@ -178,19 +187,19 @@ in
     # `generator` disagreement inside byKey routes to folds.same → throws.
     test-bykey-subfold-conflict-throws = {
       expr = didThrow (
-        secretByKey "k" [
+        secretByKey "k" (sited [
           { generator = "g1"; }
           { generator = "g2"; }
-        ]
+        ])
       );
       expected = true;
     };
     test-bykey-unknown-fragment-key-throws = {
-      expr = didThrow (secretByKey "k" [ { rogue = 1; } ]);
+      expr = didThrow (secretByKey "k" (sited [ { rogue = 1; } ]));
       expected = true;
     };
     test-bykey-non-attrset-fragment-throws = {
-      expr = didThrow (secretByKey "k" [ 7 ]);
+      expr = didThrow (secretByKey "k" (sited [ 7 ]));
       expected = true;
     };
 
@@ -362,6 +371,26 @@ in
         };
       };
     };
+    # The splice hands `combine` the vocabulary's `{ site; value; }` record, the one the cascade hands a
+    # kind's fold (`folds`, `test-a-kind-fold-is-handed-site-and-value-only`): one record at both
+    # consumers, so a fold written for either is usable at the other.
+    test-a-splice-combine-is-handed-site-and-value-only = {
+      expr = lib.unique (
+        builtins.concatLists (
+          builtins.attrValues (splice {
+            resolution = r;
+            subject = k8s.apps.sonarr;
+            combine = _: es: map builtins.attrNames es;
+          })
+        )
+      );
+      expected = [
+        [
+          "site"
+          "value"
+        ]
+      ];
+    };
     # folds.one collision: sonarr multi-writes `env` (database + secret) ⇒ loud error.
     test-splice-default-collision-throws = {
       expr = didThrow (splice {
@@ -379,13 +408,13 @@ in
             resolution = r;
             subject = k8s.apps.sonarr;
             combine =
-              key: vs:
+              key: es:
               if key == "env" || key == "persistence" then
-                folds.mergeAttrs key vs
+                folds.mergeAttrs key es
               else if key == "egress" then
-                folds.list key vs
+                folds.list key es
               else
-                folds.one key vs;
+                folds.one key es;
           };
         in
         {

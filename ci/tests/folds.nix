@@ -52,6 +52,16 @@ let
   didThrow = e: !(builtins.tryEval (builtins.deepSeq e null)).success;
   succeeds = e: (builtins.tryEval (builtins.deepSeq e null)).success;
 
+  # The fold vocabulary takes contributor edges `[ { site; value; } ]`. These cells write their
+  # fragments as a bare list and site them `s0`, `s1`, … in list order, so every pinned refusal
+  # names the contributor by its position in the cell's own list.
+  sited =
+    vs:
+    builtins.genList (i: {
+      site = "s${toString i}";
+      value = builtins.elemAt vs i;
+    }) (builtins.length vs);
+
   # ── THE COMPARISON WITHOUT ITS PRECONDITION ──
   # Built here to be measured and never used: `same`'s comparison arm alone, which is the only part
   # of the unguarded construction the cells below reach. Its other arm — the mismatch diagnostic —
@@ -189,7 +199,7 @@ let
     mkKinds [
       (mkKind {
         dedupKey = c: c.group;
-        inherit fold;
+        foldFragments = fold;
         resolve = c: _: { resources.${c.group} = c.tag; };
       } "leaf")
       (mkKind {
@@ -253,6 +263,42 @@ let
     fold = folds.same;
     tag = "from-emission";
   };
+
+  # ── CONTRIBUTOR EDGES (den-hoag-bluqd) ──
+  # A checker in gen-types' contract (`verify : value -> null | string`), written by shape: the
+  # vocabulary reads `verify` and nothing else, and gen-scope takes no gen-types input.
+  intChecker = {
+    verify =
+      v:
+      if builtins.isInt v then
+        null
+      else
+        "expected type 'int' but value ${builtins.toJSON v} is of type '${builtins.typeOf v}'";
+  };
+  # One dedup group of two `port` claims through the cascade, folded by `fold`.
+  portRun =
+    fold: ports:
+    resolveClaims { }
+      (mkKinds [
+        (mkKind {
+          dedupKey = _: "g";
+          foldFragments = fold;
+          resolve = c: _: { resources.port = c.port; };
+        } "endpoint")
+      ])
+      (
+        builtins.genList (
+          i:
+          mkClaim {
+            kind = "endpoint";
+            subject = {
+              id_hash = "id-${toString i}";
+              name = "s${toString i}";
+            };
+            port = builtins.elemAt ports i;
+          }
+        ) (builtins.length ports)
+      );
 in
 {
   flake.tests.folds = {
@@ -281,17 +327,17 @@ in
     # ── `same`: THE COMPARISON'S PRECONDITION ──
     test-same-refuses-a-function-bearing-fragment = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           fnA
           fnB
-        ]
+        ])
       );
       expected = true;
     };
     # The input the unguarded comparison ANSWERED, and the answer was the caller's value sharing
     # rather than anything about the fragments.
     test-same-refuses-one-value-slot-listed-twice = {
-      expr = didThrow (folds.same "k" shared);
+      expr = didThrow (folds.same "k" (sited shared));
       expected = true;
     };
     # LIVE CONTROL for the cell above, same run: without the precondition this input returns.
@@ -306,10 +352,10 @@ in
 
     # ── AND IT REFUSES NOTHING ELSE ──
     test-same-returns-on-agreeing-plain-fragments = {
-      expr = folds.same "k" [
+      expr = folds.same "k" (sited [
         { a = 1; }
         { a = 1; }
-      ];
+      ]);
       expected = {
         a = 1;
       };
@@ -318,10 +364,10 @@ in
     # for fragments it refuses, and leaves it in place for the fragments it admits.
     test-same-still-refuses-a-plain-conflict = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           1
           2
-        ]
+        ])
       );
       expected = true;
     };
@@ -332,10 +378,10 @@ in
     # report neither — it agrees with itself by pointer identity whatever the rule is.
     test-two-derivations-with-one-store-path-agree = {
       expr =
-        (folds.same "k" [
+        (folds.same "k" (sited [
           drvA
           drvA2
-        ]).outPath;
+        ])).outPath;
       expected = "/nix/store/aaaa";
     };
     # ★ THE SAME PAIR WITHOUT THE MARKER IS REFUSED, because the evaluator's shortcut is narrower
@@ -345,10 +391,10 @@ in
     # conflict between two fragments that render identically, so `didThrow` cannot tell them apart.
     test-a-store-path-without-the-derivation-marker-is-refused = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           bareA
           bareA2
-        ]
+        ])
       );
       expected = true;
     };
@@ -359,10 +405,10 @@ in
     # the same uncatchable failure the fold's whole precondition exists to remove.
     test-a-derivation-marker-without-a-store-path-is-refused = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           markerOnly1
           markerOnly2
-        ]
+        ])
       );
       expected = true;
     };
@@ -371,10 +417,10 @@ in
     # rendered. Skipping these is the abort again, so the scan enters them and refuses by name.
     test-a-store-path-that-is-not-a-string-is-refused = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           fnPath1
           fnPath2
-        ]
+        ])
       );
       expected = true;
     };
@@ -383,10 +429,10 @@ in
     # nothing but the path's own type can be refusing them.
     test-a-path-valued-store-path-is-refused = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           litPath1
           litPath2
-        ]
+        ])
       );
       expected = true;
     };
@@ -394,10 +440,10 @@ in
     # written about `outPath` would admit this pair and abort inside the conflict message.
     test-a-path-anywhere-in-a-fragment-is-refused = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           pathElsewhere1
           pathElsewhere2
-        ]
+        ])
       );
       expected = true;
     };
@@ -407,20 +453,20 @@ in
     # cannot report, it does not accept.
     test-agreeing-path-fragments-are-refused-too = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           pathElsewhere1
           pathElsewhere1
-        ]
+        ])
       );
       expected = true;
     };
     # POSITIVE CONTROL for all three: the same shape with a STRING is folded, not refused. Without
     # it the rows above are equally satisfied by a fold that refuses this fragment shape outright.
     test-the-same-shape-with-a-string-is-folded = {
-      expr = folds.same "k" [
+      expr = folds.same "k" (sited [
         stringElsewhere1
         stringElsewhere2
-      ];
+      ]);
       expected = {
         a = "/x";
       };
@@ -429,17 +475,17 @@ in
     # is compared, not whether anything is.
     test-two-derivations-with-different-store-paths-conflict = {
       expr = didThrow (
-        folds.same "k" [
+        folds.same "k" (sited [
           drvA
           drvB
-        ]
+        ])
       );
       expected = true;
     };
 
     # ── THE KEY IS AN ARGUMENT THE VOCABULARY DECIDES, AT EVERY MEMBER ──
     test-every-fold-refuses-a-non-string-key = {
-      expr = builtins.map (f: didThrow (f 42 [ { a = 1; } ])) everyFold;
+      expr = builtins.map (f: didThrow (f 42 (sited [ { a = 1; } ]))) everyFold;
       expected = [
         true
         true
@@ -451,7 +497,7 @@ in
     # CONTROL, same run, same folds, same fragments: with a string key every one of them returns.
     # Without it the row above is satisfied by a vocabulary that refuses this fragment list outright.
     test-every-fold-accepts-a-string-key = {
-      expr = builtins.map (f: succeeds (f "k" [ { a = 1; } ])) everyFold;
+      expr = builtins.map (f: succeeds (f "k" (sited [ { a = 1; } ]))) everyFold;
       expected = [
         true
         true
@@ -464,50 +510,153 @@ in
     # folded cleanly, where they would have conflicted, and where there are none at all.
     test-a-non-string-key-is-refused-where-the-fragments-would-conflict = {
       expr = didThrow (
-        folds.same 42 [
+        folds.same 42 (sited [
           1
           2
-        ]
+        ])
       );
       expected = true;
     };
     test-a-non-string-key-is-refused-on-an-empty-fragment-list = {
-      expr = didThrow (folds.same 42 [ ]);
+      expr = didThrow (folds.same 42 (sited [ ]));
       expected = true;
     };
 
     # ── THE FRAGMENT-SHAPE PRECONDITIONS ──
     test-mergeattrs-refuses-a-fragment-that-is-not-an-attribute-set = {
       expr = didThrow (
-        folds.mergeAttrs "k" [
+        folds.mergeAttrs "k" (sited [
           { a = 1; }
           (_: "not a fragment")
-        ]
+        ])
       );
       expected = true;
     };
     test-mergeattrs-returns-on-attribute-set-fragments = {
-      expr = folds.mergeAttrs "k" [
+      expr = folds.mergeAttrs "k" (sited [
         { a = 1; }
         { b = 2; }
-      ];
+      ]);
       expected = {
         a = 1;
         b = 2;
       };
     };
     test-bykey-refuses-a-fragment-that-is-not-an-attribute-set = {
-      expr = didThrow (folds.byKey { gen = folds.same; } "k" [ (_: "not a fragment") ]);
+      expr = didThrow (folds.byKey { gen = folds.same; } "k" (sited [ (_: "not a fragment") ]));
       expected = true;
     };
     test-bykey-returns-on-attribute-set-fragments = {
-      expr = folds.byKey { gen = folds.same; } "k" [
+      expr = folds.byKey { gen = folds.same; } "k" (sited [
         { gen = "hex"; }
         { gen = "hex"; }
-      ];
+      ]);
       expected = {
         gen = "hex";
       };
+    };
+
+    # ── CONTRIBUTOR EDGES: WHAT A FOLD IS HANDED (den-hoag-bluqd) ──
+    # Every refusal's TEXT, the sited one, is pinned in `../tests-error.nix` `folds-refusals`.
+    test-typed-is-in-the-vocabulary = {
+      expr = folds ? typed;
+      expected = true;
+    };
+    # A passing typed fold IS the fold it wraps, over the same edges.
+    test-a-passing-typed-fold-equals-the-untyped-fold = {
+      expr =
+        let
+          es = sited [
+            22
+            23
+          ];
+        in
+        [
+          (folds.typed intChecker folds.list "port" es)
+          (folds.list "port" es)
+        ];
+      expected = [
+        [
+          22
+          23
+        ]
+        [
+          22
+          23
+        ]
+      ];
+    };
+    # Two equal values from two contributors agree: the comparison is of the values, never of the
+    # records that carry them.
+    test-agreeing-values-from-different-sites-agree = {
+      expr = folds.same "k" [
+        {
+          site = "a";
+          value = 1;
+        }
+        {
+          site = "b";
+          value = 1;
+        }
+      ];
+      expected = 1;
+    };
+    # The cascade hands a kind's fold the contributor edges, sited by claim path, in schedule order.
+    test-the-cascade-sites-each-fragment-by-its-claim = {
+      expr =
+        (portRun (_: es: map (e: e.site) es) [
+          22
+          23
+        ]).resources.endpoint.port;
+      expected = [
+        "claim at path [0]"
+        "claim at path [1]"
+      ];
+    };
+    # ★ AND THE RECORD IS THE VOCABULARY'S `{ site; value; }`, nothing of the run's own bookkeeping:
+    # a fold reading another field would work here and abort at a wiring splice, which hands the
+    # same record (`cascade-helpers`, `test-a-splice-combine-is-handed-site-and-value-only`).
+    test-a-kind-fold-is-handed-site-and-value-only = {
+      expr =
+        (portRun (_: es: map builtins.attrNames es) [
+          22
+          23
+        ]).resources.endpoint.port;
+      expected = [
+        [
+          "site"
+          "value"
+        ]
+        [
+          "site"
+          "value"
+        ]
+      ];
+    };
+    # The control the typed refusal (`folds-refusals`, `test-typed-at-the-cascade-names-the-claim`)
+    # is read against, same fixture: untyped, the ill-typed fragment folds at rc 0.
+    test-control-the-untyped-cascade-folds-the-ill-typed-fragment = {
+      expr =
+        (portRun folds.list [
+          22
+          "22"
+        ]).resources.endpoint.port;
+      expected = [
+        22
+        "22"
+      ];
+    };
+    # ★ THE ENUMERATED RESIDUE AT THE DOOR (`lib/folds.nix`, the head): a bare-value list whose values
+    # spell an edge is read as edges. Pinned so the residue stays a decision; any other bare value is
+    # refused by name (`folds-refusals`, `test-a-bare-value-is-refused-at-the-door`).
+    test-residue-bare-values-that-spell-an-edge-are-read-as-edges = {
+      expr = folds.list "c" [
+        {
+          site = "x";
+          value = 1;
+        }
+      ];
+      expected = [ 1 ];
     };
   };
 
@@ -522,7 +671,7 @@ in
       ca = "${builtins.substring 0 0 (toString (builtins.toFile "izo7a-ctx-a" "a"))}x";
       cb = "${builtins.substring 0 0 (toString (builtins.toFile "izo7a-ctx-b" "b"))}x";
       ctxN = s: builtins.length (builtins.attrNames (builtins.getContext s));
-      deep = folds.mergeAttrsDeep "k";
+      deep = vs: folds.mergeAttrsDeep "k" (sited vs);
       fleet = [
         {
           nixosConfigurations.h1 = "sys1";
@@ -553,13 +702,13 @@ in
         expected = true;
       };
       test-set-keeps-first-occurrences-in-pinned-order = {
-        expr = folds.set "k" [
+        expr = folds.set "k" (sited [
           "b"
           "a"
           "b"
           "c"
           "a"
-        ];
+        ]);
         expected = [
           "b"
           "a"
@@ -567,7 +716,7 @@ in
         ];
       };
       test-set-dedups-non-strings-in-the-same-order = {
-        expr = folds.set "k" [
+        expr = folds.set "k" (sited [
           1
           "a"
           { x = 1; }
@@ -575,7 +724,7 @@ in
           "a"
           { x = 1; }
           [ 2 ]
-        ];
+        ]);
         expected = [
           1
           "a"
@@ -584,7 +733,7 @@ in
         ];
       };
       test-set-of-a-singleton-is-the-singleton = {
-        expr = folds.set "k" [ "a" ];
+        expr = folds.set "k" (sited [ "a" ]);
         expected = [ "a" ];
       };
       test-set-is-idempotent = {
@@ -599,15 +748,15 @@ in
               "b"
             ];
           in
-          folds.set "k" (folds.set "k" vs ++ vs) == folds.set "k" vs;
+          folds.set "k" (sited (folds.set "k" (sited vs) ++ vs)) == folds.set "k" (sited vs);
         expected = true;
       };
       test-set-carries-both-twins-contexts = {
         expr = map ctxN (
-          folds.set "k" [
+          folds.set "k" (sited [
             ca
             cb
-          ]
+          ])
         );
         expected = [ 2 ];
       };
@@ -622,7 +771,7 @@ in
         expected = [ 1 ];
       };
       test-mergeAttrs-refuses-the-fleet = {
-        expr = didThrow (folds.mergeAttrs "k" fleet);
+        expr = didThrow (folds.mergeAttrs "k" (sited fleet));
         expected = true;
       };
       test-mergeAttrsDeep-joins-the-fleet = {
@@ -700,14 +849,14 @@ in
       };
       test-refusals-are-reached = {
         expr = map didThrow [
-          (folds.set 1 [ ])
-          (folds.set "k" [ { f = _: 1; } ])
-          (folds.set "k" [ { p = ./folds.nix; } ])
-          (folds.set "k" [
+          (folds.set 1 (sited [ ]))
+          (folds.set "k" (sited [ { f = _: 1; } ]))
+          (folds.set "k" (sited [ { p = ./folds.nix; } ]))
+          (folds.set "k" (sited [
             [ (builtins.unsafeDiscardStringContext ca) ]
             [ ca ]
-          ])
-          (folds.mergeAttrsDeep 1 [ ])
+          ]))
+          (folds.mergeAttrsDeep 1 (sited [ ]))
           (deep [
             { }
             1

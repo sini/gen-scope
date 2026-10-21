@@ -22,11 +22,11 @@ let
     inherit name;
   };
 
-  # An `item` kind: group by `c.group`, one resource key per group, fold = list (records order).
+  # An `item` kind: group by `c.group`, one resource key per group, foldFragments = list (records order).
   itemKinds = mkKinds [
     (mkKind {
       dedupKey = c: c.group;
-      fold = folds.list;
+      foldFragments = folds.list;
       resolve = c: _: { resources.${c.group} = c.tag; };
     } "item")
   ];
@@ -49,7 +49,7 @@ let
   collideKinds = mkKinds [
     (mkKind {
       dedupKey = c: c.group;
-      fold = folds.same;
+      foldFragments = folds.same;
       resolve = c: _: { resources.constant = c.v; };
     } "c")
   ];
@@ -178,7 +178,7 @@ in
           (mkKinds [
             (mkKind {
               dedupKey = _: 42;
-              fold = folds.same;
+              foldFragments = folds.same;
               resolve = _: _: { resources.k = 1; };
             } "b")
           ])

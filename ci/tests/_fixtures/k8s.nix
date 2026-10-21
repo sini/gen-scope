@@ -36,7 +36,7 @@ let
     # ── floor: connect (leaf) ──
     (mkKind {
       dedupKey = c: "${c.subject.id_hash}->${c.to.id_hash}:${toString (c.port or "any")}";
-      fold = folds.same; # duplicate edges must agree, provision once
+      foldFragments = folds.same; # duplicate edges must agree, provision once
       resolve = c: _ctx: {
         resources."cnp:${c.subject.name}->${c.to.name}:${toString (c.port or "any")}" = {
           from = c.subject.name;
@@ -53,7 +53,7 @@ let
     # ── leaf fabric: secret ──
     (mkKind {
       dedupKey = c: c.shared or "private:${c.subject.id_hash}:${c.name}";
-      fold = folds.byKey {
+      foldFragments = folds.byKey {
         generator = folds.same; # all claimants must agree on the generator
         stringData = folds.mergeAttrs; # one stringData entry per claimant
       };
@@ -72,7 +72,7 @@ let
     # ── leaf fabric: storage ──
     (mkKind {
       dedupKey = c: c.claim or "provision:${c.subject.id_hash}:${c.path}";
-      fold = folds.same; # a shared PV+PVC is provisioned once
+      foldFragments = folds.same; # a shared PV+PVC is provisioned once
       resolve = c: _ctx: {
         resources.${c.claim or "pvc:${c.subject.name}:${c.path}"} = {
           claim = c.claim or null;

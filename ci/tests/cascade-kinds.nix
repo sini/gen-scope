@@ -105,7 +105,7 @@ let
   # cell passing and the suite whole. Forging the marker is what puts the field arms on the path.
   #
   # ★ AND THE REST OF THE RECORD HAS TO BE WHOLE, which is the half that is easy to miss. The arms
-  # BELOW the field checks ask for `resolve`, `dedupKey` and `fold` by presence, so a forged record
+  # BELOW the field checks ask for `resolve`, `dedupKey` and `foldFragments` by presence, so a forged record
   # that stops at the marker is refused THERE instead — the same defect wearing a later arm, and
   # measurably so: with the provenance arm deleted the old bare records were still refused, two
   # arms further down, for carrying no `resolve`. Every field except the one under test is supplied
@@ -124,7 +124,7 @@ let
       below = [ ];
       resolve = _: _: { };
       dedupKey = null;
-      fold = null;
+      foldFragments = null;
     }
     // fields;
 
@@ -420,7 +420,7 @@ in
     test-fold-without-dedup-key-refused = {
       expr = didThrow (
         mkKind {
-          fold = _: vs: builtins.head vs;
+          foldFragments = _: es: (builtins.head es).value;
           resolve = _: _: { };
         } "x"
       );
@@ -430,7 +430,7 @@ in
       expr = succeeds (
         mkKind {
           dedupKey = _: "k";
-          fold = _: vs: builtins.head vs;
+          foldFragments = _: es: (builtins.head es).value;
           resolve = _: _: { };
         } "x"
       );

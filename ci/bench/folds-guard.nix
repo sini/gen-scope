@@ -40,6 +40,14 @@ let
     };
   prelude = import "${fetch "gen-prelude"}/lib";
   inherit (import ../../lib/folds.nix { inherit prelude; }) folds;
+  # The vocabulary takes contributor edges `[ { site; value; } ]`: a bare fragment list, sited `s0`,
+  # `s1`, … in list order. The unguarded arms below keep their bare lists.
+  sited =
+    vs:
+    builtins.genList (i: {
+      site = "s${toString i}";
+      value = builtins.elemAt vs i;
+    }) (builtins.length vs);
 
   inherit (builtins)
     all
@@ -190,15 +198,15 @@ let
   arms = {
     # The guarded fold: a named refusal, which `tryEval` holds — so the wrapped arm RETURNS.
     guarded-wrapped = didThrow (
-      folds.same "k" [
+      folds.same "k" (sited [
         fnA
         fnB
-      ]
+      ])
     );
-    guarded-bare = folds.same "k" [
+    guarded-bare = folds.same "k" (sited [
       fnA
       fnB
-    ];
+    ]);
     # The same input through the construction without the precondition.
     unguarded-wrapped = didThrow (
       unguardedSame "k" [
@@ -213,35 +221,35 @@ let
 
     # The pointer accident, both ways: the guard refuses what the comparison would have "agreed"
     # on only because the caller happened to pass one value slot twice.
-    guarded-shared = didThrow (folds.same "k" shared);
+    guarded-shared = didThrow (folds.same "k" (sited shared));
     unguarded-shared = builtins.typeOf (unguardedSame "k" shared);
 
     # OPPOSITE CONTROL: an ordinary refusal, wrapped identically, must be caught.
     plain-conflict-wrapped = didThrow (
-      folds.same "k" [
+      folds.same "k" (sited [
         1
         2
-      ]
+      ])
     );
     # The guard refuses fragments it cannot compare, and nothing else.
-    plain-agree = folds.same "k" plain;
+    plain-agree = folds.same "k" (sited plain);
 
-    bykey-wrapped = didThrow (folds.byKey spec "k" [ (_: "not a fragment") ]);
+    bykey-wrapped = didThrow (folds.byKey spec "k" (sited [ (_: "not a fragment") ]));
     unguarded-bykey-wrapped = didThrow (unguardedByKey unguardedSpec "k" [ (_: "not a fragment") ]);
 
     # ── THE MARKER WITHOUT A PATH, WHICH IS THE HALF AN EXIT CODE IS NEEDED FOR ──
-    marker-only-guarded-wrapped = didThrow (folds.same "k" markerOnly);
+    marker-only-guarded-wrapped = didThrow (folds.same "k" (sited markerOnly));
     unguarded-marker-only-wrapped = didThrow (unguardedSame "k" markerOnly);
     unguarded-marker-only-bare = unguardedSame "k" markerOnly;
 
     # ── A PATH, WHICH THE COMPARISON TAKES AND THE MESSAGE CANNOT ──
     # No function anywhere in these fragments: what the unguarded arms end on is the path alone.
-    path-guarded-wrapped = didThrow (folds.same "k" pathBearing);
+    path-guarded-wrapped = didThrow (folds.same "k" (sited pathBearing));
     unguarded-path-wrapped = didThrow (unguardedSame "k" pathBearing);
     unguarded-path-bare = unguardedSame "k" pathBearing;
 
     # ── AND THE PATH'S OWN VALUE, WHICH BOTH READERS NEED ──
-    nonstring-path-guarded-wrapped = didThrow (folds.same "k" nonStringPath);
+    nonstring-path-guarded-wrapped = didThrow (folds.same "k" (sited nonStringPath));
     unguarded-nonstring-path-wrapped = didThrow (unguardedSame "k" nonStringPath);
     unguarded-nonstring-path-bare = unguardedSame "k" nonStringPath;
 
@@ -249,12 +257,12 @@ let
     # Both forms the defect named: fragments that would have conflicted, and no fragments at all.
     # The refusal each was owed is assembled from the key, so without the door neither arrives.
     key-guarded-wrapped = didThrow (
-      folds.same 42 [
+      folds.same 42 (sited [
         1
         2
-      ]
+      ])
     );
-    key-guarded-empty-wrapped = didThrow (folds.same 42 [ ]);
+    key-guarded-empty-wrapped = didThrow (folds.same 42 (sited [ ]));
     unguarded-key-wrapped = didThrow (
       unguardedKeySame 42 [
         1
@@ -266,10 +274,10 @@ let
     # ── `set` AND `mergeAttrsDeep` (den-hoag-izo7a): `same`'s precondition at both ──
     # The deep merge's leaves: refused by name, where the unguarded join ends on the diagnostic.
     deep-guarded-wrapped = didThrow (
-      folds.mergeAttrsDeep "k" [
+      folds.mergeAttrsDeep "k" (sited [
         { x = fnA; }
         { x = fnB; }
-      ]
+      ])
     );
     unguarded-deep-wrapped = didThrow (
       unguardedDeep "k" [
@@ -279,14 +287,14 @@ let
     );
     # `set` reports no conflict, so the unguarded dedup ends nothing: it ANSWERS, by value sharing.
     # One slot listed twice dedups to one; the guarded fold refuses the question instead.
-    set-guarded-shared = didThrow (folds.set "k" shared);
+    set-guarded-shared = didThrow (folds.set "k" (sited shared));
     unguarded-set-shared = builtins.length (prelude.unique shared);
 
     mergeattrs-wrapped = didThrow (
-      folds.mergeAttrs "k" [
+      folds.mergeAttrs "k" (sited [
         { a = 1; }
         (_: "not a fragment")
-      ]
+      ])
     );
     unguarded-mergeattrs-wrapped = didThrow (
       unguardedMergeAttrs "k" [
