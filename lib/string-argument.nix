@@ -9,7 +9,7 @@
 #
 # ★ ONE BINDING, SEVERAL DOORS: the evaluators' accessors, the structural queries and the minting
 # entry all take it, and the queries reach the accessors' guards by composition rather than carrying
-# their own. The module takes no argument, like `callable.nix` beside it.
+# their own. The module takes no argument, like `graph.nix` beside it.
 who: noun: v:
 if builtins.isString v then
   v

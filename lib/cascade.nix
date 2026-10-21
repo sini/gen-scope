@@ -490,7 +490,7 @@ let
     else if repeatedBelow != [ ] then
       throw "gen-scope.mkKind: kind '${name}' declares ${toJSON repeatedBelow} more than once in `below`. `below` is the ordered list of the kinds this kind produces, and a host's spawned children compose in its order, so a kind is at one position or not listed; name each once."
     else if resolve != null && !(callable resolve) then
-      throw "gen-scope.mkKind: kind '${name}' declares a `resolve` that cannot be applied (it is a ${typeOf resolve})"
+      throw "gen-scope.mkKind: kind '${name}' declares a `resolve` that cannot be applied (it is ${prelude.applicableKindOf resolve})"
     else if !isAttrs spawns then
       throw "gen-scope.mkKind: kind '${name}' declares a `spawns` that is a ${typeOf spawns} rather than an attribute set keyed by the kind each builder produces"
     else if undeclaredSpawn != [ ] then
@@ -538,11 +538,10 @@ let
   # before any claim runs, at both doors a kind passes: `mkKind`'s options and the kind record's.
   retiredFold = "declares `fold`, which is retired: a kind's fold now receives contributor edges `[ { site; value; } ]` rather than bare values, so a fold written to the old contract would read an edge as a value. Declare it as `foldFragments`, reading each fragment's `value`.";
 
-  # The applicability approximation, bound where it lives rather than written a second time: the
-  # circular carrier decides the same property of its `leq`, and two copies of a discipline agree
-  # only for as long as someone keeps them in step. The argument for the approximation, and for
-  # what it costs, is stated at its module.
-  callable = import ./callable.nix;
+  # What Nix can apply, gen-prelude's one definition (`isApplicable`, the fuelled `__functor` walk),
+  # bound rather than written a second time: the circular carrier decides the same property of its
+  # `leq`, and two copies of a discipline agree only for as long as someone keeps them in step.
+  callable = prelude.isApplicable;
 
   # The circular-declaration classifier, the evaluator's own (`lib/eval.nix`), repeated as the one
   # line it is because `mkKind` refuses a circular `nta` builder before any evaluator exists. The

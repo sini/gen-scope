@@ -735,10 +735,7 @@ let
       };
     in
     entryWellFormed // { resolve = selfRef; };
-  # THE SECOND BOUND, MEASURED IN THE DIRECTION IT ACTUALLY FALLS. A nested functor DOES apply —
-  # measured, it returns — and the one-level check refuses it. The approximation errs toward
-  # refusing working input rather than admitting input that aborts, and this cell is that cost
-  # stated rather than discovered.
+  # A nested functor DOES apply — measured, it returns — so the door serves it.
   entryFunctorNestedWorking = entryWellFormed // {
     resolve = {
       __functor = {
@@ -1399,14 +1396,12 @@ in
       expr = survivesWhnf (kindWith entryFunctorSelfReferential);
       expected = false;
     };
-    # ★ THE BOUND, IN THE DIRECTION IT FALLS. A nested functor APPLIES — measured, it returns — and
-    # the one-level check refuses it. Exact applicability is not decidable by any terminating
-    # predicate: the `__functor` chain is unbounded and can refer to itself, so a walk would
-    # diverge and a depth ceiling would be a number nobody can justify. This cell is the cost of
-    # that choice, asserted rather than described; if the approximation ever changes it goes red.
-    test-a-nested-functor-that-would-apply-is-refused-and-that-is-the-bound = {
+    # A nested functor APPLIES, and the door admits what Nix applies: gen-prelude's `isApplicable`
+    # walks the `__functor` chain under a fuel of 32 steps, so the self-referential value above is
+    # refused and this one is served.
+    test-a-nested-functor-that-applies-is-served = {
       expr = didThrow (runKindWith entryFunctorNestedWorking);
-      expected = true;
+      expected = false;
     };
     # CONTROL — a hand-built kind-set record whose entries are well formed still passes through.
     # The pass-through is the door's whole purpose; the check is about what comes through it.

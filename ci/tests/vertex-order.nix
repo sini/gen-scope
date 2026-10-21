@@ -206,7 +206,6 @@ let
       [
         "import ./structural.nix"
         "import ./interface.nix"
-        "import ./callable.nix"
         "import ./least-model.nix"
         "import ./string-argument.nix"
         "import ./door.nix"
@@ -214,7 +213,6 @@ let
       [
         "import ${o10Abs "structural.nix"}"
         "import ${o10Abs "interface.nix"}"
-        "import ${o10Abs "callable.nix"}"
         "import ${o10Abs "least-model.nix"}"
         "import ${o10Abs "string-argument.nix"}"
         "import ${o10Abs "door.nix"}"

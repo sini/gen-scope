@@ -155,6 +155,53 @@ let
 
   run = claims: resolveClaims { } kinds claims;
 
+  # A caller function is admitted by what Nix can apply (gen-prelude `isApplicable`, the fuelled
+  # `__functor` walk): a functor Nix cannot apply is refused by the door's name, catchably; one whose
+  # walk exhausts the bound is refused naming it; what Nix applies is served as its lambda twin.
+  chain = n: leaf: if n == 0 then leaf else { __functor = _: chain (n - 1) leaf; };
+  selfFunctor =
+    let
+      s = {
+        __functor = self: self;
+      };
+    in
+    s;
+  five = {
+    __functor = _: 5;
+  };
+  # what Nix applies as `leaf`: nested, a functor-valued `__functor`, 32 steps, stacked
+  # `setFunctionArgs` (nixpkgs' encoding, written out)
+  applicable = leaf: [
+    { __functor = _: { __functor = _: leaf; }; }
+    {
+      __functor = {
+        __functor = _: _: leaf;
+      };
+    }
+    (chain 32 leaf)
+    {
+      __functor = _: {
+        __functor = _: leaf;
+        __functionArgs = { };
+      };
+      __functionArgs = { };
+    }
+  ];
+  bound = "a functor that reaches no function within 32 `__functor` steps";
+  caught = expr: {
+    expr = (builtins.tryEval (builtins.deepSeq expr true)).success;
+    expected = false;
+  };
+  # One claim of kind `k` run under a registry whose `k` resolves with `resolve`.
+  runResolve =
+    resolve:
+    (resolveClaims { } (mkKinds [ (mkKind { inherit resolve; } "k") ]) [
+      (mkClaim {
+        kind = "k";
+        subject = subjA;
+      })
+    ]).resources;
+
   # The reserved-key arm is reachable only through a record the constructor did not build: it
   # refuses a shadowing payload itself, at the site the author wrote. A fixture built with
   # `mkClaim` would exercise the constructor and report this arm as covered without entering it.
@@ -518,6 +565,34 @@ in
         type = "ThrownError";
         msg = exactly "gen-scope.mkKind: kind 'k' declares a `resolve` that cannot be applied (it is a int)";
       };
+    };
+    test-constructor-refuses-a-functor-resolve-returning-a-non-function-by-name = {
+      expr = mkKind { resolve = five; } "k";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.mkKind: kind 'k' declares a `resolve` that cannot be applied (it is a set)";
+      };
+    };
+    test-constructor-refusal-of-a-functor-resolve-returning-a-non-function-is-catchable = caught (
+      mkKind { resolve = five; } "k"
+    );
+    test-constructor-refuses-a-self-returning-resolve-naming-the-bound = {
+      expr = mkKind { resolve = selfFunctor; } "k";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.mkKind: kind 'k' declares a `resolve` that cannot be applied (it is ${bound})";
+      };
+    };
+    test-constructor-refuses-a-33-level-resolve-naming-the-bound = {
+      expr = mkKind { resolve = chain 33 (_: _: { }); } "k";
+      expectedError = {
+        type = "ThrownError";
+        msg = exactly "gen-scope.mkKind: kind 'k' declares a `resolve` that cannot be applied (it is ${bound})";
+      };
+    };
+    test-applicable-resolves-are-served-as-their-lambda = {
+      expr = map runResolve (applicable (_: _: { resources.r = "ran"; }));
+      expected = builtins.genList (_: runResolve (_: _: { resources.r = "ran"; })) 4;
     };
     # LIVE CONTROL, same suite, same constructor: an arm that was ALREADY named and catchable still
     # is. Without it the three cells above are equally consistent with a constructor that refuses
@@ -4967,7 +5042,57 @@ in
           "gen-scope: node 'a' is read for the edges of letter 'l1', but this evaluation declares no `edges-l1` attribute; an undeclared letter is refused rather than read as no edges (declare `edges-l1`, answering `[ ]` where a node has none).";
         "row21-reserved-lifted-label" =
           ''gen-scope.buildRoots: `edgeGraphs` carries reserved label(s) ["imports"]: 'imports' is the calculus's import letter, whose edges arrive as the `importGraph` argument. A reserved label is this library's own name for a relation it privileges, and `edgeGraphs` does not extend to it — supply those edges as the argument named, or relabel them.'';
-      };
+      }
+    # `dataFilter` is a `callableAt` door shared with `bound`, a mark's `admits` and `groupBy`
+    # (gen-graph's key former under this library's name): what Nix can apply is admitted there.
+    // (
+      let
+        ev =
+          genScope.eval { parseParent = _: null; }
+            {
+              children = _: _: { };
+              imports = _: _: [ ];
+              marks = _: _: [ ];
+              edges-e = _: id: if id == "a" then [ "b" ] else [ ];
+            }
+            (
+              genScope.buildRoots {
+                parentGraph = genScope.vertices [
+                  "a"
+                  "b"
+                ];
+                decls.b.x = "vb";
+              }
+            );
+        filterBy =
+          dataFilter:
+          (genScope.resolve {
+            wf = genScope.wellFormed {
+              alphabet = [ "e" ];
+              expression = "e?";
+            };
+            inherit dataFilter;
+          } ev "a").answers;
+        x = n: n.decls.x or null;
+        refused = expr: msg: {
+          expr = builtins.deepSeq expr expr;
+          expectedError = {
+            type = "ThrownError";
+            msg = exactly msg;
+          };
+        };
+      in
+      {
+        test-a-dataFilter-functor-returning-a-non-function-is-refused-by-name = refused (filterBy five) "gen-scope.resolve: dataFilter is a set, not a function returning a datum or null";
+        test-a-dataFilter-functor-returning-a-non-function-is-catchable = caught (filterBy five);
+        test-a-self-returning-dataFilter-is-refused-naming-the-bound = refused (filterBy selfFunctor) "gen-scope.resolve: dataFilter is ${bound}, not a function returning a datum or null";
+        test-a-33-level-dataFilter-is-refused-naming-the-bound = refused (filterBy (chain 33 x)) "gen-scope.resolve: dataFilter is ${bound}, not a function returning a datum or null";
+        test-applicable-dataFilters-are-served-as-their-lambda = {
+          expr = map filterBy (applicable x);
+          expected = builtins.genList (_: filterBy x) 4;
+        };
+      }
+    );
 
   # ── RESOLUTION STAYS LAZY IN DATA IT SHADOWS (den-hoag-gayc C1): what must STILL throw ──
   # Laziness is not skipping: an ancestor that IS the answer is forced (L4), and a key that reads the

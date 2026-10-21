@@ -28,9 +28,9 @@ let
   structural = import ./structural.nix { inherit prelude; };
   interface = import ./interface.nix { inherit prelude; };
 
-  # The applicability approximation, taken from the one binding (`lib/callable.nix`): the circular
-  # carrier decides it of a `leq` exactly as the kind registry decides it of a `resolve`.
-  callable = import ./callable.nix;
+  # What Nix can apply, gen-prelude's one definition (`isApplicable`, the fuelled `__functor` walk):
+  # the circular carrier decides it of a `leq` exactly as the kind registry decides it of a `resolve`.
+  callable = prelude.isApplicable;
 
   # The accessors' identifier arguments are node identifiers; anything else is refused by the
   # accessor's name before it reaches an attribute lookup. It answers the identifier's TEXT: an id
@@ -206,7 +206,7 @@ let
     else if !(c ? leq) then
       "declares a `carrier` with no `leq` (the order the step is required to ascend)"
     else if !(callable c.leq) then
-      "declares a `carrier` whose `leq` cannot be applied (it is a ${builtins.typeOf c.leq})"
+      "declares a `carrier` whose `leq` cannot be applied (it is ${prelude.applicableKindOf c.leq})"
     else if !(c ? height) then
       "declares a `carrier` with no `height` (the lattice's bounded height, from which the iteration bound is derived)"
     else if !builtins.isInt c.height then

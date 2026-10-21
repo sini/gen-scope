@@ -231,7 +231,7 @@ let
   firstSite = items: foldl' (found: it: if found != null then found else siteIn it.w it.v) null items;
 
   hasPath = p: v: p == [ ] || (isAttrs v && v ? ${head p} && hasPath (tail p) v.${head p});
-  callable = import ./callable.nix;
+  callable = prelude.isApplicable;
 
   # ★ THE REFUSAL IS ONE THROW OVER TWO GROUNDS, AND WHAT THE MESSAGE CELLS PIN IS ITS RENDERED
   # TEXT, not the template that produces it. The template carries `what` and `because` from the
@@ -713,7 +713,7 @@ let
     if cd != null then
       throw "gen-scope.folds.typed: ${cd}"
     else if !(callable fold) then
-      throw "gen-scope.folds.typed: the fold is a ${typeOf fold} rather than an applicable fold"
+      throw "gen-scope.folds.typed: the fold is ${prelude.applicableKindOf fold} rather than an applicable fold"
     else
       key: es:
       admit "typed" key es (
