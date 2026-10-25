@@ -15,7 +15,7 @@
 # is the one place the harness names and the shim names meet.
 #
 # ★★ THE CELL IS PURE, AND THE PURITY IS A CONSEQUENCE OF HOW IT IS CALLED. The shim's three
-# dependency defaults each `builtins.fetchTree` the flake-locked revision; supplying every one
+# dependency defaults each `builtins.fetchTarball` the flake-locked revision; supplying every one
 # explicitly means none of those defaults is ever forced, so this reaches the network not at all.
 # What it tests is the shim's SIGNATURE and its DELEGATION — which is precisely where the defect
 # lives. The bare `import ../.. { }` form does NOT have this property, and the difference is measured
@@ -98,7 +98,7 @@ let
     wire =
       {
         deps,
-        resolve,
+        fetch,
         lock,
       }:
       import ../../lib deps;
@@ -110,8 +110,8 @@ let
   # THAN WRITTEN AT THE APPLICATION — `entryArgs`' own rule, for the same reason. `dep` stops the
   # resolver at the PATH instead of fetching it, and replacing `wire` publishes the whole record the
   # shim's body hands TO `wire` — its `deps` half is the attrset `./lib` receives only while `wire`'s
-  # own default is `{ deps, resolve, lock }: import ./lib deps`, which the cell at the foot of this file is
-  # what holds, and its `resolve` half is the shim's own `follows` rule, which is why nothing below
+  # own default is `{ deps, fetch, lock }: import ./lib deps`, which the cell at the foot of this file is
+  # what holds, and its `fetch` half carries the shim's own `follows` rule, which is why nothing below
   # transcribes that rule. So this application is hermetic by CONSTRUCTION. Nothing else is supplied:
   # every dependency formal is left at its default, which is the point — the defaults are the
   # subject.
@@ -128,7 +128,7 @@ let
   # expression the shim itself resolves with, and `…-defaults-to-its-own-node` resolves the shim's
   # declared paths by the shim's own rule rather than by a second copy that can agree with its own
   # expectation while both are wrong.
-  shimResolve = seam.resolve;
+  shimResolve = seam.fetch.resolve;
 
   # ★ THE ROOT LOCK, READ AS PURE DATA — and the rule that walks it is NOT TRANSCRIBED HERE:
   # `shimResolve` above IS `default.nix`'s binding. A direct edge IS the node key; a `follows` value
@@ -189,7 +189,7 @@ let
   # prophylactic, because the shim's own prose quotes this default, so an unstripped scan keeps
   # reading 1 on a file whose CODE has been rewired. Bound once and read by BOTH cells below: two
   # literals spelled the same are two predicates, and the control would then guard only its own copy.
-  wireNeedle = ''wire[[:space:]]*\?[[:space:]]*[{][[:space:]]*deps[[:space:]]*,[[:space:]]*resolve[[:space:]]*,[[:space:]]*lock[[:space:]]*,?[[:space:]]*[}][[:space:]]*:[[:space:]]*import[[:space:]]+\./lib[[:space:]]+deps[[:space:]]*,'';
+  wireNeedle = ''wire[[:space:]]*\?[[:space:]]*[{][[:space:]]*deps[[:space:]]*,[[:space:]]*fetch[[:space:]]*,[[:space:]]*lock[[:space:]]*,?[[:space:]]*[}][[:space:]]*:[[:space:]]*import[[:space:]]+\./lib[[:space:]]+deps[[:space:]]*,'';
   countWire =
     text:
     builtins.length (
@@ -240,6 +240,63 @@ let
       offending = builtins.length (builtins.filter (rhs: !isSeam rhs) rhss);
       seamBound = builtins.length (builtins.filter isSeam rhss);
     };
+  # ★★★ THE FIXED-OUTPUT FETCH RULE, COUNTED AS TEXT. `default.nix`'s `fetch` binding is the one place
+  # this library fetches, and Nix publishes no default, so the reading that `src` takes that rule is
+  # textual, as `countWire`'s is. COMMENTS ARE STRIPPED, then EVERY whitespace character is deleted, so
+  # a formatter's line breaking cannot move the reading. Bound once and read by both cells below.
+  fetchRule = ''
+    fetch = {
+      inherit resolve;
+      node = resolve lock;
+      locked =
+        locked:
+        if builtins.attrNames locked == [ "lastModified" "narHash" "owner" "repo" "rev" "type" ] && locked.type == "github" then
+          builtins.fetchTarball { url = "https://github.com/''${locked.owner}/''${locked.repo}/archive/''${locked.rev}.tar.gz"; sha256 = locked.narHash; }
+        else
+          throw "gen-scope: a locked node of type `''${toString (locked.type or null)}` with attributes ''${toString (builtins.attrNames locked)} has no fixed-output form here; refusing rather than falling back to fetchTree";
+    };
+  '';
+  # The comment marker, spelled as a JSON escape so that no `#` stands inside a string literal on any
+  # line here: a line-wise comment strip cuts at the first `#` and would truncate live code there.
+  commentMarker = builtins.fromJSON ''"\u0023"'';
+  fetchSrcLine = "src ? segs: fetch.locked lock.nodes.\${fetch.node segs}.locked,";
+  countFetch =
+    text:
+    let
+      dense =
+        s:
+        builtins.replaceStrings [ " " "\n" "\t" ] [ "" "" "" ] (
+          builtins.concatStringsSep "\n" (
+            map (l: builtins.head (builtins.split commentMarker l)) (
+              builtins.filter builtins.isString (builtins.split "\n" s)
+            )
+          )
+        );
+      occurrences =
+        needle: hay:
+        (builtins.stringLength hay - builtins.stringLength (builtins.replaceStrings [ needle ] [ "" ] hay))
+        / builtins.stringLength needle;
+      d = dense text;
+    in
+    {
+      fetchTree = occurrences "builtins.fetchTree" d;
+      rule = occurrences (dense fetchRule) d;
+      src = occurrences (dense fetchSrcLine) d;
+    };
+
+  # ★ ONE REAL SIX-KEY `github` NODE, so that in C3's `extraKey` arm the added `host` key is the ONLY
+  # difference from an admitted node: a fixture missing `lastModified` lets a rule that ignores `host`
+  # pass. The arm is not named for the key, which is no word of this library's vocabulary (ADR-0035).
+  githubNode = {
+    lastModified = 0;
+    narHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    owner = "sini";
+    repo = "gen-prelude";
+    rev = "0000000000000000000000000000000000000000";
+    type = "github";
+  };
+  refusesFetch =
+    locked: !(builtins.tryEval (builtins.deepSeq (seam.fetch.locked locked) true)).success;
 in
 {
   flake.tests.entry.test-standalone-entry-constructs-its-siblings =
@@ -286,7 +343,7 @@ in
 
   # ★ THE CELL ABOVE CANNOT SEE THIS CLASS, and the reason is the property that makes it hermetic: it
   # supplies every dependency formal explicitly, so the shim's `fetch`-backed DEFAULTS — which is
-  # where the divergence lives — are never forced. Forcing them would put `builtins.fetchTree` inside
+  # where the divergence lives — are never forced. Forcing them would put `builtins.fetchTarball` inside
   # the suite. This cell reads the CONSTRUCTION instead of the outcome, which is strictly wider: it
   # also catches the member that never throws (a defaulted formal on the far side turns the loud arm
   # of the class silent) and the member that has not yet drifted.
@@ -465,8 +522,8 @@ in
   };
 
   # ★★★ THE DEFAULT FORCED — the one cell in this file that is NOT hermetic. Forcing it IS
-  # `builtins.fetchTree`: the accepted price of measuring the non-flake contract at all, and it
-  # remains PURE, because `fetchTree` on a locked node is narHash-addressed with no channel and no
+  # `builtins.fetchTarball`: the accepted price of measuring the non-flake contract at all, and it
+  # remains PURE, because `fetchTarball` on a locked node is narHash-addressed with no channel and no
   # `<…>`. `builtins.seq` of the dispatched root runs the shim's eager body, which forces every wired
   # dependency to WHNF before `./lib` sees it, so a nonexistent node, an unresolvable follows path or
   # a throwing root is loud at the BOUNDARY rather than wherever a consumer first happens to reach it.
@@ -485,7 +542,7 @@ in
 
   # ★★★ THE SHIM'S OWN `wire` DEFAULT, AND IT IS WHAT EVERY HERMETIC CELL ABOVE RESTS ON. `paths` is
   # the `deps` half of the record the shim's body hands to `wire` — it is the attrset `./lib`
-  # RECEIVES only while `wire`'s own default is `{ deps, resolve, lock }: import ./lib deps`, and no cell
+  # RECEIVES only while `wire`'s own default is `{ deps, fetch, lock }: import ./lib deps`, and no cell
   # above reads that default: the two hermetic cells REPLACE `wire` with `args: args`, the forcing
   # cell stops at WHNF of whatever `wire` returned, and the surface cell compares `attrNames`, which
   # `./lib`'s structure fixes independently of its arguments.
@@ -505,11 +562,11 @@ in
   # `commented` proves the comment strip is LIVE.
   flake.tests.entry.test-control-the-wire-default-check-discriminates = {
     expr = {
-      exact = countWire "wire ? { deps, resolve, lock }: import ./lib deps,";
-      rewired = countWire ''wire ? { deps, resolve, lock }: import ./lib (deps // { x = throw "no"; }),'';
+      exact = countWire "wire ? { deps, fetch, lock }: import ./lib deps,";
+      rewired = countWire ''wire ? { deps, fetch, lock }: import ./lib (deps // { x = throw "no"; }),'';
       commented = countWire ''
-        # wire ? { deps, resolve, lock }: import ./lib deps,
-        wire ? { deps, resolve, lock }: import ./lib (deps // { }),
+        # wire ? { deps, fetch, lock }: import ./lib deps,
+        wire ? { deps, fetch, lock }: import ./lib (deps // { }),
       '';
     };
     expected = {
@@ -605,4 +662,116 @@ in
       };
     };
   };
+
+  # ★★★ C1: `src` TAKES THE FIXED-OUTPUT RULE, AND `builtins.fetchTree` IS GONE FROM `default.nix`.
+  # Upstream Nix's `fetchTree` of a locked `github` node looks its revision up in the git tarball
+  # cache per process even when the store path is valid; `fetchTarball` keyed on the node's `narHash`
+  # does not. This cell is also the one that sees a URL-template typo: C4 cannot on a warm store,
+  # because the URL is read only on a miss.
+  flake.tests.entry.test-the-fetch-rule-is-the-fixed-output-rule = {
+    expr = countFetch (builtins.readFile ../../default.nix);
+    expected = {
+      fetchTree = 0;
+      rule = 1;
+      src = 1;
+    };
+  };
+
+  # ★★ C2: `countFetch` SHOWN ABLE TO FIRE, at inputs the main arm does not use. `planted` is the
+  # shipped `fetchTree` line, `commented` proves the comment strip is live, and `urltypo` is the
+  # template typo C1 exists to catch.
+  flake.tests.entry.test-control-the-fetch-rule-check-discriminates = {
+    expr = {
+      exact = countFetch (fetchRule + fetchSrcLine);
+      planted = countFetch ''src ? segs: "''${builtins.fetchTree lock.nodes.''${fetch segs}.locked}",'';
+      commented = countFetch (
+        builtins.concatStringsSep "\n" (
+          map (l: commentMarker + " " + l) (
+            builtins.filter builtins.isString (builtins.split "\n" (fetchRule + fetchSrcLine))
+          )
+        )
+      );
+      urltypo = countFetch (builtins.replaceStrings [ ".tar.gz" ] [ ".tar" ] fetchRule + fetchSrcLine);
+    };
+    expected = {
+      exact = {
+        fetchTree = 0;
+        rule = 1;
+        src = 1;
+      };
+      planted = {
+        fetchTree = 1;
+        rule = 0;
+        src = 0;
+      };
+      commented = {
+        fetchTree = 0;
+        rule = 0;
+        src = 0;
+      };
+      urltypo = {
+        fetchTree = 0;
+        rule = 0;
+        src = 1;
+      };
+    };
+  };
+
+  # ★★★ C3: `fetch.locked` REFUSES BY NAME OUTSIDE ITS FORM, and never falls back to `fetchTree`.
+  # HERMETIC: each fixture is refused before anything is fetched. A rule blind to a key would instead
+  # try to download the all-zero revision, and the cell would red on the network.
+  flake.tests.entry.test-fetch-locked-refuses-outside-its-form = {
+    expr = {
+      git = refusesFetch (
+        builtins.removeAttrs githubNode [
+          "owner"
+          "repo"
+        ]
+        // {
+          type = "git";
+          url = "https://github.com/sini/gen-prelude";
+        }
+      );
+      tarball = refusesFetch (
+        builtins.removeAttrs githubNode [
+          "owner"
+          "repo"
+        ]
+        // {
+          type = "tarball";
+          url = "https://example.invalid/x.tar.gz";
+        }
+      );
+      extraKey = refusesFetch (githubNode // { host = "ghe.example.invalid"; });
+    };
+    expected = {
+      git = true;
+      tarball = true;
+      extraKey = true;
+    };
+  };
+
+  # ★★★ C4: `fetch.locked` IS `fetchTree`, PATH FOR PATH, ON EVERY LOCKED NODE OF THIS LIBRARY'S OWN
+  # LOCK. NOT HERMETIC, for the reason `…-forces-every-dependency` is not: it fetches every node. The
+  # domain is the lock's node set minus its root, total by construction: `src` is a function over
+  # paths in this lock, and the record's `deps` cannot enumerate what it reaches. A rule that always
+  # throws passes C3 and reds here; one that names its store path differently reds every node.
+  #
+  # ★★ `fetchTree`'s side is COPIED by `builtins.path` under the fixed-output name, never compared as
+  # its string: under Determinate's lazy trees that string is a virtual path, and `==` reads it
+  # unequal to the very store path it denotes, while the copy is that store path on every evaluator.
+  flake.tests.entry.test-fetch-locked-is-fetchTree-on-every-lock-node =
+    let
+      nodes = builtins.removeAttrs lock.nodes [ lock.root ];
+    in
+    {
+      expr = builtins.mapAttrs (
+        _: n:
+        seam.fetch.locked n.locked == builtins.path {
+          path = builtins.fetchTree n.locked;
+          name = "source";
+        }
+      ) nodes;
+      expected = builtins.mapAttrs (_: _: true) nodes;
+    };
 }
