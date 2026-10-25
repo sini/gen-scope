@@ -757,20 +757,29 @@ in
   # paths in this lock, and the record's `deps` cannot enumerate what it reaches. A rule that always
   # throws passes C3 and reds here; one that names its store path differently reds every node.
   #
-  # ★★ `fetchTree`'s side is COPIED by `builtins.path` under the fixed-output name, never compared as
-  # its string: under Determinate's lazy trees that string is a virtual path, and `==` reads it
-  # unequal to the very store path it denotes, while the copy is that store path on every evaluator.
+  # ★★ BOTH SIDES ARE COPIED by `builtins.path`, each under its own store-path name, never compared as
+  # strings: under Determinate's lazy trees `fetchTree`'s string is a virtual path, and so is
+  # `fetchTarball`'s on a store miss, and `==` reads a virtual path unequal to the very store path it
+  # denotes. The copy is that store path on every evaluator, and keeping each side's own name keeps
+  # the name in the identity.
   flake.tests.entry.test-fetch-locked-is-fetchTree-on-every-lock-node =
     let
       nodes = builtins.removeAttrs lock.nodes [ lock.root ];
+      nameOf =
+        p:
+        builtins.head (
+          builtins.match "${builtins.storeDir}/[^-]*-(.*)" (builtins.unsafeDiscardStringContext p)
+        );
+      copied =
+        p:
+        builtins.path {
+          path = p;
+          name = nameOf p;
+        };
     in
     {
       expr = builtins.mapAttrs (
-        _: n:
-        seam.fetch.locked n.locked == builtins.path {
-          path = builtins.fetchTree n.locked;
-          name = "source";
-        }
+        _: n: copied (seam.fetch.locked n.locked) == copied (builtins.fetchTree n.locked)
       ) nodes;
       expected = builtins.mapAttrs (_: _: true) nodes;
     };
