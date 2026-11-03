@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reads the `graph-clique.nix` arms and REFUSES if `clique` costs more than the clique it emits.
 #
-#   ./ci/bench/graph-clique.sh [sizes...]   -> arm n rc list.elements sets.elements nrLookups digest
+#   nix develop ./ci --command ./ci/bench/graph-clique.sh [sizes...]   -> arm n rc list.elements sets.elements nrLookups digest
 #                                           -> then the per-doubling exponent per arm per axis
 #
 # WHAT THE COLUMNS MEAN. `rc` is the evaluator's exit code, read IMMEDIATELY and never through a
@@ -32,6 +32,16 @@
 # the unapplied expression. The stats file cannot tell you the size you asked for was ignored.
 set -u
 cd "$(dirname "$0")/../.." || exit 99
+# The counted evaluations are serial (gen-harness `lib.serialEval`, which the ci devshell exports): a thunk
+# count is defined only for a serial run. Outside the devshell this refuses, rather than read unpinned.
+[ -n "${GEN_SERIAL_EVAL:-}" ] || {
+  echo "graph-clique: CONTROL FAILED: GEN_SERIAL_EVAL is unset; run under nix develop ./ci" >&2
+  exit 2
+}
+# shellcheck disable=SC1090
+source "$GEN_SERIAL_EVAL"
+serialEvalOptions "$(command -v nix-instantiate)" || exit 2
+echo "graph-clique: serial options: ${SERIAL_EVAL[*]:-(none)}"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -63,7 +73,7 @@ for arm in $arms; do
   for n in $sizes; do
     rm -f "$tmp/stats.json"
     NIX_SHOW_STATS=1 NIX_SHOW_STATS_PATH="$tmp/stats.json" \
-      nix-instantiate --eval --strict --argstr arm "$arm" --arg n "$n" \
+      nix-instantiate "${SERIAL_EVAL[@]}" --eval --strict --argstr arm "$arm" --arg n "$n" \
       ./ci/bench/graph-clique.nix >"$tmp/out" 2>"$tmp/err"
     rc=$?
     # Flatten first: the stats writer's whitespace is not a promised format.

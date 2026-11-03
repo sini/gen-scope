@@ -50,6 +50,18 @@
           cd "$TMPDIR"
           # The evaluator the cells run under, from this process and the binary they call.
           echo "evaluator: $(nix-instantiate --version | sed -n 1p)"
+          # A thunk count is defined only for a serial run, so the counted cells below (`statOf`, `callsOf`,
+          # `statsRun`) are serial, and every other cell runs under the column's own evaluator,
+          # Determinate's parallel one included. The options are resolved once (gen-harness `lib.serialEval`);
+          # `evalArm` carries them only while NIX_SHOW_STATS is set, so a counted cell cannot run unpinned, nor
+          # a correctness cell pinned.
+          # shellcheck disable=SC1091
+          source ${inputs.gen-harness.lib.serialEval { inherit pkgs; }}
+          serialEvalOptions "$(command -v nix-instantiate)" || {
+            echo "tests-process: CONTROL FAILED: the serial options of $(command -v nix-instantiate) could not be resolved" >&2
+            exit 2
+          }
+          echo "tests-process: serial options: ''${SERIAL_EVAL[*]:-(none)}"
         ''
         + ''
           export NIX_STATE_DIR=$TMPDIR/nix-state NIX_LOG_DIR=$TMPDIR/nix-log
@@ -62,7 +74,7 @@
           # value variable is `val`, never `out` — `out` is the derivation's own output path.
           evalArm() {
             rc=0
-            val=$(nix-instantiate --eval --strict --readonly-mode ''${3:+"$3"} \
+            val=$(nix-instantiate ''${NIX_SHOW_STATS:+"''${SERIAL_EVAL[@]}"} --eval --strict --readonly-mode ''${3:+"$3"} \
               --argstr arm "$1" \
               --argstr genPreludeSrc "$genPreludeSrc" \
               --argstr genGraphSrc "$genGraphSrc" \

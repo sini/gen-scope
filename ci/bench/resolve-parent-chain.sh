@@ -2,7 +2,7 @@
 # Reads the `resolve-parent-chain.nix` arms and REFUSES if a `parent`-letter resolution grows faster
 # than linearly in the chain it walks.
 #
-#   ./ci/bench/resolve-parent-chain.sh   -> arm d rc nrThunks value, then the per-step exponents
+#   nix develop ./ci --command ./ci/bench/resolve-parent-chain.sh   -> arm d rc nrThunks value, then the per-step exponents
 #
 # THE DEPTHS ARE FIXED at 10, 100 and 400: the gate's C2 isolate (den-hoag-gayc U1 landing gate),
 # where the per-read D9 chain walk measured `inherit'` at 3,247 / 51,307 / 679,507 thunks.
@@ -20,6 +20,16 @@
 # writes a full stats table for the unapplied lambda (see `resolve-inherit-set.sh`).
 set -u
 cd "$(dirname "$0")/../.." || exit 99
+# The counted evaluations are serial (gen-harness `lib.serialEval`, which the ci devshell exports): a thunk
+# count is defined only for a serial run. Outside the devshell this refuses, rather than read unpinned.
+[ -n "${GEN_SERIAL_EVAL:-}" ] || {
+  echo "resolve-parent-chain: CONTROL FAILED: GEN_SERIAL_EVAL is unset; run under nix develop ./ci" >&2
+  exit 2
+}
+# shellcheck disable=SC1090
+source "$GEN_SERIAL_EVAL"
+serialEvalOptions "$(command -v nix-instantiate)" || exit 2
+echo "resolve-parent-chain: serial options: ${SERIAL_EVAL[*]:-(none)}"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -47,7 +57,7 @@ for arm in $arms; do
   for d in $depths; do
     rm -f "$tmp/stats.json"
     NIX_SHOW_STATS=1 NIX_SHOW_STATS_PATH="$tmp/stats.json" \
-      nix-instantiate --eval --strict --argstr arm "$arm" --arg d "$d" \
+      nix-instantiate "${SERIAL_EVAL[@]}" --eval --strict --argstr arm "$arm" --arg d "$d" \
       ./ci/bench/resolve-parent-chain.nix >"$tmp/out" 2>"$tmp/err"
     rc=$?
     tr -d ' \n' <"$tmp/stats.json" >"$tmp/flat" 2>/dev/null || : >"$tmp/flat"

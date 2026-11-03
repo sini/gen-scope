@@ -2,7 +2,7 @@
 # Reads the `resolve-one-hop.nix` arms and REFUSES if a one-hop edge read grows faster than linearly
 # in the edges it reads (`fan-*`) or in the calls made across a graph (`every-*`).
 #
-#   ./ci/bench/resolve-one-hop.sh   -> arm n rc nrThunks list.elements value, then the exponents
+#   nix develop ./ci --command ./ci/bench/resolve-one-hop.sh   -> arm n rc nrThunks list.elements value, then the exponents
 #
 # TWO AXES, BOTH BUDGETED. `nrThunks` alone is blind to a quadratic ALLOCATION — a dedup that
 # rebuilds its kept list per target (`acc ++ [ x ]`) allocates n²/2 list elements and creates no
@@ -19,6 +19,16 @@
 # ★ USE `nix-instantiate --arg`, NEVER `nix eval --file` (see `resolve-inherit-set.sh`).
 set -u
 cd "$(dirname "$0")/../.." || exit 99
+# The counted evaluations are serial (gen-harness `lib.serialEval`, which the ci devshell exports): a thunk
+# count is defined only for a serial run. Outside the devshell this refuses, rather than read unpinned.
+[ -n "${GEN_SERIAL_EVAL:-}" ] || {
+  echo "resolve-one-hop: CONTROL FAILED: GEN_SERIAL_EVAL is unset; run under nix develop ./ci" >&2
+  exit 2
+}
+# shellcheck disable=SC1090
+source "$GEN_SERIAL_EVAL"
+serialEvalOptions "$(command -v nix-instantiate)" || exit 2
+echo "resolve-one-hop: serial options: ${SERIAL_EVAL[*]:-(none)}"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -40,7 +50,7 @@ for arm in $arms; do
   for n in $sizes; do
     rm -f "$tmp/stats.json"
     NIX_SHOW_STATS=1 NIX_SHOW_STATS_PATH="$tmp/stats.json" \
-      nix-instantiate --eval --strict --argstr arm "$arm" --arg n "$n" \
+      nix-instantiate "${SERIAL_EVAL[@]}" --eval --strict --argstr arm "$arm" --arg n "$n" \
       ./ci/bench/resolve-one-hop.nix >"$tmp/out" 2>"$tmp/err"
     rc=$?
     tr -d ' \n' <"$tmp/stats.json" >"$tmp/flat" 2>/dev/null || : >"$tmp/flat"

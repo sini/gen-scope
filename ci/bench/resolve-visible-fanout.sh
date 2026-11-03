@@ -3,7 +3,7 @@
 # more per walk-tree visit than its recorded bound, or LESS (a ratchet: lower the bound to the reading
 # in the same change, so a won optimization stays won).
 #
-#   ./ci/bench/resolve-visible-fanout.sh   -> arm d rc nrThunks value, then each arm's marginal
+#   nix develop ./ci --command ./ci/bench/resolve-visible-fanout.sh   -> arm d rc nrThunks value, then each arm's marginal
 #
 # THE READING is the MARGINAL cost, nrThunks(d2) - nrThunks(d1), over the visits the two sizes differ
 # by, so the evaluator's start-up and the library's own evaluation cancel. It is compared EXACTLY, as
@@ -29,6 +29,16 @@
 # ★ USE `nix-instantiate --arg`, NEVER `nix eval --file` (see `resolve-inherit-set.sh`).
 set -u
 cd "$(dirname "$0")/../.." || exit 99
+# The counted evaluations are serial (gen-harness `lib.serialEval`, which the ci devshell exports): a thunk
+# count is defined only for a serial run. Outside the devshell this refuses, rather than read unpinned.
+[ -n "${GEN_SERIAL_EVAL:-}" ] || {
+  echo "resolve-visible-fanout: CONTROL FAILED: GEN_SERIAL_EVAL is unset; run under nix develop ./ci" >&2
+  exit 2
+}
+# shellcheck disable=SC1090
+source "$GEN_SERIAL_EVAL"
+serialEvalOptions "$(command -v nix-instantiate)" || exit 2
+echo "resolve-visible-fanout: serial options: ${SERIAL_EVAL[*]:-(none)}"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -64,7 +74,7 @@ for arm in fanout neron chain; do
   for d in $d1 $d2; do
     rm -f "$tmp/stats.json"
     NIX_SHOW_STATS=1 NIX_SHOW_STATS_PATH="$tmp/stats.json" \
-      nix-instantiate --eval --strict --json --argstr arm "$arm" --arg d "$d" \
+      nix-instantiate "${SERIAL_EVAL[@]}" --eval --strict --json --argstr arm "$arm" --arg d "$d" \
       ./ci/bench/resolve-visible-fanout.nix >"$tmp/out" 2>"$tmp/err"
     rc=$?
     t=$(tr -d ' \n' <"$tmp/stats.json" 2>/dev/null | sed -n 's/.*"nrThunks":\([0-9]*\).*/\1/p')
