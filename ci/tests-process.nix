@@ -133,6 +133,8 @@
             [ "$rc" -eq 0 ] || die "$1" "expected exit 0, got $rc"
             stat=$(tr -d ' \n' < "$TMPDIR/stats" | grep -o "\"$2\":[0-9]*" | cut -d: -f2 || true)
             [ -n "$stat" ] || die "$1" "the evaluator wrote no $2 to $TMPDIR/stats: cannot measure"
+            # The reading itself, so its spread across runs is visible in the plane's own output.
+            echo "$1: $2 $stat"
           }
           callsOf() {
             statOf "$1" nrFunctionCalls
@@ -147,6 +149,7 @@
             unset NIX_SHOW_STATS NIX_SHOW_STATS_PATH
             [ "$rc" -eq 0 ] || die "$1" "expected exit 0, got $rc"
             statArm=$1
+            echo "$1: thunks and calls $(tr -d ' \n' < "$TMPDIR/stats" | grep -o '"nr\(Thunks\|FunctionCalls\)":[0-9]*' | tr '\n' ' ')"
           }
           # <key>: the top-level count `key`; <outer> <inner>: the count `inner` inside the stats
           # object `outer` (`sets` `elements`, `list` `elements`), which `statOf`'s top-level read
