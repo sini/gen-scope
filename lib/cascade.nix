@@ -364,11 +364,14 @@ let
           (if a ? __sealed then b else a).kind or "(unnamed)"
         }' carries a mark but no sealed subjects (`__sealed`), so an equal mark cannot be decided; take the kind from a gen-schema that stamps both"
       # `sealedCollisionEq`'s own first limb (`eq a.sealed b.sealed`, the same `==` under the same
-      # `tryEval`), hoisted so that the equal case allocates no subjects; every other outcome is
-      # still the helper's. The helper's shape check (`sealed` an attribute set) needs no repeat:
-      # both callers hand a registry value as one operand, which `kindValueDefect` admitted only
-      # with a set `__sealed`, so an equal `__sealed` is a set on both sides.
-      else if (builtins.tryEval (a.__sealed == b.__sealed)).value or false then
+      # `tryEval`) less its departure record, hoisted so that the equal honest case allocates no
+      # subjects; a map carrying `__departed` and every other outcome are the helper's. The helper's
+      # shape check (`sealed` an attribute set) needs no repeat: both callers hand a registry value
+      # as one operand, which `kindValueDefect` admitted only with a set `__sealed`, so an equal
+      # `__sealed` is a set on both sides.
+      else if
+        !(a.__sealed ? __departed) && (builtins.tryEval (a.__sealed == b.__sealed)).value or false
+      then
         true
       else
         algebra.sealedCollisionEq site

@@ -193,11 +193,11 @@
     },
     "gen-algebra": {
       "locked": {
-        "lastModified": 1793727727,
-        "narHash": "sha256-mxQnychDZ0nx9hTuzhrLxGJ9S8/KyRRexgNi0+bQhec=",
+        "lastModified": 1793842546,
+        "narHash": "sha256-1ZKq8TUPmUmDmogHOZCliBlqfqotIF8Tqyce2zxLd6Q=",
         "owner": "sini",
         "repo": "gen-algebra",
-        "rev": "ac92bc949bb499ee0d13b6994c0d738244cb0ccd",
+        "rev": "c8128dd564f3e3597b8b10cde496c06b8979f2cb",
         "type": "github"
       },
       "original": {
