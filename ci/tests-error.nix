@@ -44,6 +44,8 @@
   genScope,
   genPreludeLib,
   genGraph,
+  genAlgebra,
+  genIdentity,
   ...
 }:
 let
@@ -4027,7 +4029,58 @@ in
           );
         };
       };
-    };
+    }
+    # ★ K1 (den-hoag-28dnv): two kind values at one mark whose sealed component is a registered
+    # construction, each side a different `//` extension of it. The two maps are equal (one stale
+    # subject) and each carries the departure record `componentsPreimage` wrote, so the hoisted
+    # equal-map `true` must not decide them: the node door refuses them by name, as gen-schema's
+    # `kindEq` does. Live controls: two constructions of one term are one kind value; another term
+    # is a different one.
+    // (
+      let
+        mk = genAlgebra.mkIntensional genIdentity.hashIdentity {
+          revision = 1;
+          members.mk = _: v: builtins.isInt v;
+        } "mk";
+        c0 = mk 0;
+        over =
+          c:
+          valueOf "host" "host:a"
+          // {
+            __sealed =
+              (genAlgebra.componentsPreimage genIdentity.hashIdentity [
+                {
+                  path = [
+                    "options"
+                    "n"
+                    "type"
+                  ];
+                  value = c;
+                }
+              ]).sealed;
+          };
+      in
+      {
+        test-K1-eval-refuses-a-node-whose-kind-value-is-another-extension-of-one-construction = {
+          expr = handNode (over (c0 // { includes = [ "A" ]; })) (over (c0 // { includes = [ "B" ]; }));
+          expectedError = {
+            type = "ThrownError";
+            msg = exactly "gen-scope.eval: node 'a' of kind 'host': carry the kind's own value (`buildRoots` stamps it); two constructions of one kind are two kinds: 'host' holds component(s) 'options.n.type' that are not the value their producer completed: a `//` over it keeps its mark while changing what the mark stands for; build the change through its producer";
+          };
+        };
+        test-K1-eval-refuses-a-node-whose-kind-value-is-another-term = {
+          expr = handNode (over c0) (over (mk 1));
+          expectedError = {
+            type = "ThrownError";
+            msg = exactly "gen-scope.eval: node 'a' of kind 'host' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark and, at an equal mark, its sealed subjects). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
+          };
+        };
+        test-K1-eval-admits-a-node-whose-kind-value-is-another-construction-of-one-term = {
+          expr = handNode (over c0) (over (mk 0));
+          expected = [ "a" ];
+        };
+      }
+    );
 
   # ── THE IDENTIFIER DOORS (den-hoag-bkdkg) ──
   # A record handed where a node identifier goes — the node VALUE, typically — used to abort past
