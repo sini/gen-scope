@@ -78,11 +78,13 @@ let
     "projected"
   ];
   interface = import ./interface.nix { inherit prelude; };
-  scopeDoor = import ./require-scope.nix {
-    inherit prelude;
-    inherit (cascadeModule) kindSetDefect sameKindValue;
-  };
-  inherit (scopeDoor) requireScope;
+  inherit
+    (import ./require-scope.nix {
+      inherit prelude;
+      inherit (cascadeModule) kindSetDefect sameKindValue;
+    })
+    requireScope
+    ;
   # The declared relation's input type. It takes `graph` because the DISCRIMINATOR is `gen-graph`'s
   # — the tag only that library's constructors write — while the refusal is this library's, naming
   # this library's entry point for a defect at this library's door.
@@ -97,7 +99,7 @@ let
   evalModule = import ./eval.nix {
     inherit
       prelude
-      scopeDoor
+      requireScope
       requireDeclaredDependencies
       graph
       ;

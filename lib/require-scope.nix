@@ -72,17 +72,9 @@
   kindSetDefect,
   sameKindValue,
 }:
-let
-  # Whether a scope's registry declares a kind value: ONE predicate, read by the door (whether to check at all) and
-  # by the evaluator (whether a root's read must force that root's record first, `eval.nix`'s `rootEval`).
-  declaresKindValue =
-    scope:
-    (scope.kinds or null) != null
-    && prelude.any (k: k.kindValue != null) (prelude.attrValues scope.kinds.kinds);
-  # The door, handed that predicate's verdict for this scope. The evaluator computes the verdict ONCE and hands
-  # the same value to the door and to `rootEval`, so one evaluation of the predicate serves both readers.
-  requireScopeDeclaring =
-    entry: declares: scope:
+{
+  requireScope =
+    entry: scope:
     let
       must = "gen-scope.${entry}: `scope` must be the record returned by `buildRoots` ({ nodes, nodeOrder })";
       pass = "A node map alone no longer carries the declared order — pass the whole record.";
@@ -106,7 +98,11 @@ let
       bad "received an attrset whose `nodeOrder` is a ${builtins.typeOf scope.nodeOrder}, not a list"
     else if kindsDefect != null then
       badKinds kindsDefect
-    else if !declares then
+    # whether the registry declares a kind value: the door's one predicate. The evaluator does not read it: the
+    # checking branch below marks the record it returns (`checked`), and `eval.nix`'s `rootEval` reads the mark.
+    else if
+      kinds == null || !(prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds))
+    then
       scope
     else
       # bound only here, so a scope whose registry declares no value allocates neither
@@ -133,12 +129,13 @@ let
           in
           throw "gen-scope.${entry}: node '${id}' of kind '${t}' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark and, at an equal mark, its sealed subjects). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
       in
+      # `checked`: this record's node values refuse when forced, so a root's `get` forces the root's record
+      # first (`eval.nix`'s `rootEval`); a record without the mark carries no check and its roots stay unforced. The mark
+      # only ever adds a force (this branch always sets it), so a caller's own `checked` key cannot skip the check. Its
+      # name is one the library already interns: a new attribute name is paid in symbol bytes by every process.
       scope
       // {
         nodes = builtins.mapAttrs (id: n: if contradicts id then refuse id else n) scope.nodes;
+        checked = true;
       };
-in
-{
-  inherit declaresKindValue requireScopeDeclaring;
-  requireScope = entry: scope: requireScopeDeclaring entry (declaresKindValue scope) scope;
 }

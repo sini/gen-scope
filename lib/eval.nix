@@ -16,8 +16,7 @@
 # or `derived-children` attribute.
 {
   prelude,
-  # `require-scope.nix`'s record: the door and the predicate it is handed (`declaresKindValue`)
-  scopeDoor,
+  requireScope,
   requireDeclaredDependencies,
   graph,
   # The key former under this library's name; defaulted so a caller wiring the module by hand keeps
@@ -1169,9 +1168,7 @@ let
       declaredDependencies ? null,
     }:
     let
-      # whether the registry declares a kind value, decided once for the door and for `rootEval`
-      declares = scopeDoor.declaresKindValue scope;
-      checked = scopeDoor.requireScopeDeclaring "eval" declares scope;
+      checked = requireScope "eval" scope;
       roots = checked.nodes;
 
       # The relation as a function of a node, which is what every site below reads. The projection
@@ -2107,10 +2104,10 @@ let
             # Where the registry declares a kind value, a root's record is forced before its attributes, so `get` on
             # a root decides that root's coherence (`requireScope`'s element check) before any body reads it. A scope
             # declaring none carries no check, so its roots' records stay unforced, as before the check moved. The test
-            # is `declares`, the door's own predicate (`require-scope.nix`, `declaresKindValue`) evaluated ONCE per
-            # evaluation and handed to the door too: evaluated a second time here it cost every evaluation ~4 thunks.
+            # is the door's own mark on the record it returned (`checked`, set by its checking branch only), so
+            # the door's predicate is evaluated once, by the door, and nothing here re-reads it.
             rootEval =
-              if declares then
+              if checked ? checked then
                 prelude.mapAttrs (id: n: builtins.seq n (builtins.mapAttrs (evalAttr null id) runAttributes)) roots
               else
                 prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots;
@@ -2551,7 +2548,7 @@ let
       parseParent ? null,
     }:
     let
-      checked = scopeDoor.requireScopeDeclaring "evalDebug" (scopeDoor.declaresKindValue scope) scope;
+      checked = requireScope "evalDebug" scope;
       roots = checked.nodes;
 
       # The debug evaluator runs the same effective set for the same reason: a spawn the production

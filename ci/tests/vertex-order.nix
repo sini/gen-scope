@@ -232,8 +232,8 @@ let
   };
   o10PatchedText = builtins.replaceStrings [ o10FoldSite ] [ o10FoldSiteThreaded ] o10ThreadedFormal;
   o10PatchedFile = builtins.toFile "eval-o10-patched.nix" o10PatchedText;
-  o10ScopeDoor = (
-    import (libDir + "/require-scope.nix") {
+  o10RequireScope =
+    (import (libDir + "/require-scope.nix") {
       prelude = genPreludeLib;
       inherit
         (import (libDir + "/cascade.nix") {
@@ -243,15 +243,14 @@ let
         kindSetDefect
         sameKindValue
         ;
-    }
-  );
+    }).requireScope;
   o10RequireDeclaredDependencies =
     (import (libDir + "/require-declared-dependencies.nix") { graph = genGraph; })
     .requireDeclaredDependencies;
   o10PatchedEval =
     (import o10PatchedFile {
       prelude = genPreludeLib;
-      scopeDoor = o10ScopeDoor;
+      requireScope = o10RequireScope;
       requireDeclaredDependencies = o10RequireDeclaredDependencies;
       graph = genGraph;
     }).eval;
