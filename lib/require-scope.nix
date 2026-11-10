@@ -72,7 +72,16 @@
   kindSetDefect,
   sameKindValue,
 }:
+let
+  # Whether a scope's registry declares a kind value: ONE predicate, read by the door (whether to check at all) and
+  # by the evaluator (whether a root's read must force that root's record first, `eval.nix`'s `rootEval`).
+  declaresKindValue =
+    scope:
+    (scope.kinds or null) != null
+    && prelude.any (k: k.kindValue != null) (prelude.attrValues scope.kinds.kinds);
+in
 {
+  inherit declaresKindValue;
   requireScope =
     entry: scope:
     let
@@ -98,11 +107,7 @@
       bad "received an attrset whose `nodeOrder` is a ${builtins.typeOf scope.nodeOrder}, not a list"
     else if kindsDefect != null then
       badKinds kindsDefect
-    # whether to check is decided once per scope, with no binding, so a scope declaring no value pays nothing for it
-    # (`eval.nix`'s `rootEval` reads the same test)
-    else if
-      kinds == null || !(prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds))
-    then
+    else if !(declaresKindValue scope) then
       scope
     else
       # bound only here, so a scope whose registry declares no value allocates neither

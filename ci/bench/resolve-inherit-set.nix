@@ -72,6 +72,7 @@ let
   inherit (import ../../lib/cascade.nix { inherit prelude algebra; }) kindSetDefect sameKindValue;
   inherit (import ../../lib/require-scope.nix { inherit prelude kindSetDefect sameKindValue; })
     requireScope
+    declaresKindValue
     ;
   inherit (import ../../lib/require-declared-dependencies.nix { inherit graph; })
     requireDeclaredDependencies
@@ -80,6 +81,7 @@ let
     inherit
       prelude
       requireScope
+      declaresKindValue
       requireDeclaredDependencies
       graph
       ;

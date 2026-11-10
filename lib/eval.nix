@@ -17,6 +17,7 @@
 {
   prelude,
   requireScope,
+  declaresKindValue,
   requireDeclaredDependencies,
   graph,
   # The key former under this library's name; defaulted so a caller wiring the module by hand keeps
@@ -2103,15 +2104,10 @@ let
               };
             # Where the registry declares a kind value, a root's record is forced before its attributes, so `get` on
             # a root decides that root's coherence (`requireScope`'s element check) before any body reads it. A scope
-            # declaring none carries no check, so its roots' records stay unforced, as before the check moved. The
-            # test is `requireScope`'s own, spelled again here because a binding shared through the module wiring
-            # costs every library load a thunk; a drift that skipped the force where the door checks would serve
-            # `get` on an incoherent root, which `kind-value-refusals`' R2 cell refuses.
+            # declaring none carries no check, so its roots' records stay unforced, as before the check moved. The test
+            # is the door's own predicate (`require-scope.nix`, `declaresKindValue`), never a second spelling of it.
             rootEval =
-              if
-                (checked.kinds or null) != null
-                && prelude.any (k: k.kindValue != null) (prelude.attrValues checked.kinds.kinds)
-              then
+              if declaresKindValue checked then
                 prelude.mapAttrs (id: n: builtins.seq n (builtins.mapAttrs (evalAttr null id) runAttributes)) roots
               else
                 prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots;

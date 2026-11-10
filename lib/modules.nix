@@ -84,6 +84,7 @@ let
       inherit (cascadeModule) kindSetDefect sameKindValue;
     })
     requireScope
+    declaresKindValue
     ;
   # The declared relation's input type. It takes `graph` because the DISCRIMINATOR is `gen-graph`'s
   # — the tag only that library's constructors write — while the refusal is this library's, naming
@@ -100,6 +101,7 @@ let
     inherit
       prelude
       requireScope
+      declaresKindValue
       requireDeclaredDependencies
       graph
       ;

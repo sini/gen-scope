@@ -41,6 +41,7 @@ let
     ;
   inherit (import "${libSrc}/require-scope.nix" { inherit prelude kindSetDefect sameKindValue; })
     requireScope
+    declaresKindValue
     ;
   # The declared relation's input type. The evaluator takes it as a formal like `requireScope`, so
   # this wiring binds it the same way; none of the arms below supplies a relation, so every one of
@@ -52,6 +53,7 @@ let
     inherit
       prelude
       requireScope
+      declaresKindValue
       requireDeclaredDependencies
       graph
       ;
