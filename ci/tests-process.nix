@@ -324,6 +324,32 @@
           [ "$val" = "802" ] || die walk-cost-400 "expected value 802, got '$val'"
           [ $((stat - w100)) -le $((139 * 300)) ] || die walk-cost-400 "the walk costs $((stat - w100)) thunks over 300 children, above 139 per child"
 
+          # den-hoag-25mup W2 — the walk's record and the by-id record share one co-located cache: a
+          # spawned node's traced attribute read through `allNodes` and through `get` applies ONCE, at
+          # depth 1 and 2; `evalDebug`'s two `get`s on the same fixture are the live control, 2.
+          for c in walk-memo-d1 walk-memo-d2; do
+            answers "$c" "$libSrc" 6
+            traceCount "$c" 1
+          done
+          answers walk-memo-dbg-ctl "$libSrc" 6
+          traceCount walk-memo-dbg-ctl 2
+          # den-hoag-25mup C1 — one root's lookup beside n roots of a kind declaring a value pays at most
+          # 2 thunks per further root, nixpkgs' lazy twin's increment (measured 1 on upstream Nix; the
+          # entry-time coherence scan read 11). C3a — the enumeration's increment, at most 165 per root
+          # (measured 165; the scan read 192). Both over n = 4 → 64 on the hand-built record.
+          statOf lookup-cost-4 nrThunks
+          [ "$val" = '"h0"' ] || die lookup-cost-4 "expected value \"h0\", got '$val'"
+          l4=$stat
+          statOf lookup-cost-64 nrThunks
+          [ "$val" = '"h0"' ] || die lookup-cost-64 "expected value \"h0\", got '$val'"
+          [ $((stat - l4)) -le $((2 * 60)) ] || die lookup-cost-64 "one root's lookup costs $((stat - l4)) thunks over 60 further roots, above 2 per root"
+          statOf universe-cost-4 nrThunks
+          [ "$val" = "8" ] || die universe-cost-4 "expected value 8, got '$val'"
+          u4=$stat
+          statOf universe-cost-64 nrThunks
+          [ "$val" = "128" ] || die universe-cost-64 "expected value 128, got '$val'"
+          [ $((stat - u4)) -le $((165 * 60)) ] || die universe-cost-64 "the enumeration costs $((stat - u4)) thunks over 60 further roots, above 165 per root"
+
           # den-hoag-hm8t1 — a dedup group's per-key combination is linear in the group: one
           # group of n claims, each writing its own key, at n = 100, 400, 1600. Linear growth makes
           # the second difference in function calls 4x the first; it must stay under 5x. A per-key
@@ -371,8 +397,8 @@
           growsUnder list 5 || die set-one-fold "list.elements grow faster than linear in the twins: $c_list_100 / $c_list_400 / $c_list_1600"
 
           # 0/0 is a false pass: the runner must have executed every cell above.
-          [ "$ran" = "60" ] || die runner "expected 60 evaluations, ran $ran"
-          echo "tests-process: 60 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
+          [ "$ran" = "67" ] || die runner "expected 67 evaluations, ran $ran"
+          echo "tests-process: 67 cells, every exit read unpiped, every death on its named channel; nta-cyc channel: $(cat "$TMPDIR/channel-nta-cyc")" > $out
         ''
         + ''
           cat "$out"

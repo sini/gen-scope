@@ -3870,6 +3870,59 @@ in
       registryRefusal =
         detail:
         "gen-scope.buildRoots: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it; ${detail}. Mint the kinds with `mkKinds` over their declarations and pass the result.";
+      # den-hoag-25mup: the reads that reach the incoherent `h1` (`tests/_fixtures/kind-value-read.nix`;
+      # each one's coherent twin serves, `kind-value`'s live control).
+      kr = import ./tests/_fixtures/kind-value-read.nix { inherit genScope genGraph; };
+      inherit (kr) planted;
+      incoherentAt =
+        entry:
+        "gen-scope.${entry}: node 'h1' of kind 'thimble' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark and, at an equal mark, its sealed subjects). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
+      refusedAt = entry: {
+        type = "ThrownError";
+        msg = exactly (incoherentAt entry);
+      };
+      hand = id: parent: {
+        inherit id parent;
+        type = "host";
+        decls = { };
+      };
+      empty = {
+        children = _: _: { };
+      };
+      # the record's `nodeOrder` conjunct stays at the door: a string, and a node map passed as the record
+      orderEv = genScope.eval { } empty {
+        nodes.a = hand "a" null;
+        nodeOrder = "a";
+      };
+      nmapEv = genScope.eval { } empty {
+        nodes = hand "nodes" null;
+        nodeOrder = hand "nodeOrder" null;
+      };
+      notAList =
+        what:
+        "gen-scope.eval: `scope` must be the record returned by `buildRoots` ({ nodes, nodeOrder }); received an attrset whose `nodeOrder` is a ${what}, not a list. A node map alone no longer carries the declared order — pass the whole record.";
+      # D1: root h spawns `h/kids/k`; `parseParent` places every id under h, so `h/kids/zzz` is a ghost
+      # under a parent that resolves and does not carry it.
+      ghostDbg =
+        genScope.evalDebug
+          {
+            parseParent = _: "h";
+          }
+          {
+            children = _: _: { };
+            probe = _: _: 3;
+          }
+          {
+            nodes.h = hand "h" null;
+            nodeOrder = [ "h" ];
+            kinds = mkKinds [
+              (mkKind { } "kid")
+              (mkKind {
+                below = [ "kid" ];
+                spawns.kid = _: id: { "${id}/kids/k".decls = { }; };
+              } "host")
+            ];
+          };
     in
     {
       # c3: the hand-written stand-in carries no mint, so it is not a kind value.
@@ -4027,6 +4080,87 @@ in
           msg = exactly (
             registryRefusal "files under 'host' a kind that differs from the kind 'host' that entry 'leaf' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
           );
+        };
+      };
+      # ── den-hoag-25mup: EVERY ROUTE TO THE INCOHERENT NODE REFUSES, AT ITS OWN READ ──
+      test-25mup-R1-a-lookup-of-the-incoherent-root-refuses = {
+        expr = (planted.ev.node "h1").id;
+        expectedError = refusedAt "eval";
+      };
+      test-25mup-R2-a-get-on-the-incoherent-root-refuses = {
+        expr = planted.ev.get "h1" "children";
+        expectedError = refusedAt "eval";
+      };
+      test-25mup-R3-a-nested-lookup-under-the-incoherent-root-refuses = {
+        expr = (planted.ev.node "h1/needles/h1-m").id;
+        expectedError = refusedAt "eval";
+      };
+      # the read a per-node kind test makes: without the check it answers the other kind's mark
+      test-25mup-R4-the-incoherent-roots-kind-value-refuses = {
+        expr = (planted.ev.node "h1").kindValue.__mint.minted;
+        expectedError = refusedAt "eval";
+      };
+      test-25mup-R5-an-enumeration-reaching-the-incoherent-root-refuses = {
+        expr = builtins.length planted.ev.allNodeIds;
+        expectedError = refusedAt "eval";
+      };
+      test-25mup-R6-the-debug-lookup-of-the-incoherent-root-refuses = {
+        expr = (planted.dbg.node "h1").id;
+        expectedError = refusedAt "evalDebug";
+      };
+      test-25mup-R7-a-debug-get-on-the-incoherent-root-refuses = {
+        expr = planted.dbg.get "h1" "children";
+        expectedError = refusedAt "evalDebug";
+      };
+      test-25mup-R8-a-nested-debug-get-under-the-incoherent-root-refuses = {
+        expr = planted.dbg.get "h1/needles/h1-m" "children";
+        expectedError = refusedAt "evalDebug";
+      };
+      test-25mup-R9-the-folds-sealed-roots-refuse-the-incoherent-root = {
+        expr = planted.fold.roots.h1.kindValue == kr.needleV;
+        expectedError = refusedAt "foldEquations";
+      };
+      # a selection hands out the body's record under a registered key; it is served after the scope's own
+      test-25mup-R10-a-selected-raw-record-of-the-incoherent-root-refuses = {
+        expr = (planted.sel.get "h0" "children").h1.kindValue == kr.needleV;
+        expectedError = refusedAt "eval";
+      };
+      test-25mup-O1-a-lookup-in-a-record-whose-nodeOrder-is-not-a-list-refuses = {
+        expr = (orderEv.node "a").id;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (notAList "string");
+        };
+      };
+      test-25mup-O2-a-get-in-a-record-whose-nodeOrder-is-not-a-list-refuses = {
+        expr = orderEv.get "a" "children";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (notAList "string");
+        };
+      };
+      test-25mup-O3-an-enumeration-of-a-record-whose-nodeOrder-is-not-a-list-refuses-by-name = {
+        expr = orderEv.allNodeIds;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (notAList "string");
+        };
+      };
+      test-25mup-O4-a-node-map-passed-as-the-record-refuses-a-lookup-of-its-field-names = {
+        expr = [
+          (nmapEv.node "id")
+          (nmapEv.node "decls")
+        ];
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (notAList "set");
+        };
+      };
+      test-25mup-D1-a-debug-get-on-a-ghost-under-a-resolving-parent-refuses = {
+        expr = ghostDbg.get "h/kids/zzz" "probe";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: node 'h/kids/zzz' not reachable";
         };
       };
     }

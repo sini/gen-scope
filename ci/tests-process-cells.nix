@@ -600,6 +600,109 @@ let
     in
     builtins.length ev.allNodeIds + builtins.foldl' (a: i: a + ev.get i "v") 0 ev.allNodeIds;
 
+  # den-hoag-25mup W2 — the walk descends a spawned child from the record it holds, and that record
+  # and the by-id record share ONE co-located cache: a spawned node's traced `probe`, read once
+  # through `allNodes` and once through `get`, applies once, at depth 1 (`h/kids/k`) and depth 2
+  # (`h/kids/k/gks/g`). `evalDebug`, a fresh self per `get`, is the live control that the trace
+  # channel sees a second application.
+  walkMemo =
+    depth: debug:
+    let
+      evaluator = if debug then evalLib.evalDebug else evalLib.eval;
+      leaf = if depth == 1 then "h/kids/k" else "h/kids/k/gks/g";
+      kinds = mkKinds [
+        (mkKind { } "gk")
+        (mkKind {
+          below = [ "gk" ];
+          spawns.gk = _: id: if depth == 2 then { "${id}/gks/g".decls = { }; } else { };
+        } "kid")
+        (mkKind {
+          below = [ "kid" ];
+          spawns.kid = _: id: { "${id}/kids/k".decls = { }; };
+        } "host")
+      ];
+      ev =
+        evaluator
+          {
+            parseParent =
+              id:
+              if id == "h/kids/k" then
+                "h"
+              else if id == "h/kids/k/gks/g" then
+                "h/kids/k"
+              else
+                null;
+          }
+          {
+            children = _: _: { };
+            probe = _: _: builtins.trace "F1-PROBE" 3;
+          }
+          {
+            nodes.h = {
+              id = "h";
+              type = "host";
+              parent = null;
+              decls = { };
+            };
+            nodeOrder = [ "h" ];
+            inherit kinds;
+          };
+    in
+    if debug then
+      ev.get leaf "probe" + ev.get leaf "probe"
+    else
+      ev.allNodes.${leaf}._eval.probe + ev.get leaf "probe";
+
+  # den-hoag-25mup C1/C3a — one root's lookup beside N roots of a kind declaring a value, on the
+  # hand-built record: `n` roots `h<i>`, each spawning one child. `lookup` reads `node "h0"`;
+  # `universe` the enumeration. The runner reads the per-root increment between n = 4 and n = 64.
+  kindValueCost =
+    what: n:
+    let
+      valueOf = name: {
+        kind = name;
+        __mint.minted = "${name}:v";
+        __sealed = { };
+      };
+      kinds = mkKinds [
+        (mkKind { kindValue = valueOf "needle"; } "needle")
+        (mkKind {
+          kindValue = valueOf "thimble";
+          below = [ "needle" ];
+          spawns.needle = _: id: { "${id}/needles/${id}-m".decls = { }; };
+        } "thimble")
+      ];
+      ids = builtins.genList (i: "h${toString i}") n;
+      ev =
+        evalLib.eval
+          {
+            parseParent =
+              id:
+              let
+                p = builtins.filter builtins.isString (builtins.split "/" id);
+              in
+              if builtins.length p == 3 then builtins.head p else null;
+          }
+          { children = _: _: { }; }
+          {
+            inherit kinds;
+            nodeOrder = ids;
+            nodes = builtins.listToAttrs (
+              map (id: {
+                name = id;
+                value = {
+                  inherit id;
+                  type = "thimble";
+                  parent = null;
+                  decls = { };
+                  kindValue = kinds.kinds.thimble.kindValue;
+                };
+              }) ids
+            );
+          };
+    in
+    if what == "lookup" then (ev.node "h0").id else builtins.length ev.allNodeIds;
+
   # U2.0-g — a same-kind `nta` chain of depth `n`, one empty-seed child per node, bounded by a
   # `depth` read through `getHostAt`. `what` picks the read: every id (`allNodeIds`), or the
   # deepest node's `depth` by its identifier. The verdict is the evaluator's own function-call
@@ -853,6 +956,20 @@ else if arm == "hostat-once" then
   (onceEval 1).get "h" "viaHost"
 else if arm == "hostat-once-ctl" then
   (onceEval 1).get "h" "viaHostCtl"
+else if arm == "walk-memo-d1" then
+  walkMemo 1 false
+else if arm == "walk-memo-d2" then
+  walkMemo 2 false
+else if arm == "walk-memo-dbg-ctl" then
+  walkMemo 2 true
+else if arm == "lookup-cost-4" then
+  kindValueCost "lookup" 4
+else if arm == "lookup-cost-64" then
+  kindValueCost "lookup" 64
+else if arm == "universe-cost-4" then
+  kindValueCost "universe" 4
+else if arm == "universe-cost-64" then
+  kindValueCost "universe" 64
 else if arm == "chain-ids-6" then
   chain "ids" 6
 else if arm == "chain-ids-12" then

@@ -616,11 +616,12 @@ let
   #
   # ⇒ IT IS A KEY TEST, AND THAT IS SUFFICIENT RATHER THAN CHEAP. Keys are eager and values lazy, so
   # this forces no child record and the strictness decided at `childRecordsOf` is untouched. What
-  # makes it sufficient is that for a REGISTERED id the child record is already inert: `resolveNode`
-  # and `get` both answer from `roots` before this value is consulted, so a body returning a
-  # different record under a registered key changes no read. The only thing a body can contribute
-  # that the scope does not already hold is a new KEY — which is exactly growth, and exactly what
-  # this refuses.
+  # makes it sufficient is that for a REGISTERED id the node is already the scope's: `resolveNode`
+  # answers it from `roots`, and so does the walk, so a body returning a different record under a
+  # registered key moves no by-id read and no enumeration. It is not inert everywhere: the
+  # selection record itself, read off `get id "children"`, is the body's (den-hoag-9ponv). The only
+  # thing a body can contribute that the scope does not already hold is a new KEY — which is
+  # exactly growth, and exactly what this refuses.
   selectionChannel = "children";
 
   selectAmong =
@@ -630,7 +631,17 @@ let
       unregistered = builtins.filter (childId: !(nodes ? ${childId})) records.nodeOrder;
     in
     if unregistered == [ ] then
-      records
+      # Every key is registered, so each record is served only after the scope's own record of its key: the
+      # coherence check `requireScope` places on each node reaches a node selected here as it reaches the node read
+      # by id. The value served is unchanged; an empty selection is returned as it is, so a graph selecting nothing
+      # pays no wrapper.
+      if records.nodeOrder == [ ] then
+        records
+      else
+        records
+        // {
+          nodes = builtins.mapAttrs (childId: r: builtins.seq nodes.${childId} r) records.nodes;
+        }
     else
       throw "gen-scope: node '${id}' declares child(ren) ${builtins.toJSON unregistered} that the scope does not carry. `children` SELECTS among the nodes the scope already registered — it is not a growth channel, and a record under an unregistered key is a node minted while the attribute is read, whose kind nothing can have checked descends its host's. Growth is the spawn channel's: declare it on the host's kind as `mkKind { spawns = { <produced-kind> = builder; }; }` with the produced kind named in that kind's `below`. To keep a node here, register it in the scope and select it.";
 
@@ -2090,7 +2101,11 @@ let
                   else
                     builtins.mapAttrs (evalAttr null childNode.id) runAttributes;
               };
-            rootEval = prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots;
+            # A root's record is forced before its attributes, so `get` on a root decides that root's coherence
+            # (`requireScope`'s element check) before any body reads it.
+            rootEval = prelude.mapAttrs (
+              id: n: builtins.seq n (builtins.mapAttrs (evalAttr null id) runAttributes)
+            ) roots;
 
             # ── THE PARENT CHAIN, GROUNDED BEFORE IT IS DESCENDED ──
             # `parseParent` names an id; nothing obliges that id to resolve. Handed straight to
@@ -2253,8 +2268,14 @@ let
                 # whose record its host's product already holds, is never re-resolved from its
                 # identifier: a by-id resolution walks the whole address up to a root, and paying it per
                 # node made a depth-d chain's enumeration cost grow with the sum of every node's depth.
-                # A `children` or spawned child is resolved as `self.node` resolves it, so the record
-                # the walk hands out is the one a by-id read answers.
+                # A spawned child is descended from the record the walk already holds when its by-id
+                # resolution runs through this node — `parseParent` places it here, and its key does
+                # not decode as an `nta` identifier — since that resolution answers this very record.
+                # Every other child (a registered one, one placed elsewhere or nowhere, an `nta`-shaped
+                # key) is resolved as `self.node` resolves it, so the record the walk hands out is the
+                # one a by-id read answers. A child descended from the held record is not re-resolved
+                # here, so an unreachable or ungrounded parent chain is refused by that child's own
+                # by-id reads (its spawn channel reads its kind through `self.node`), not by the walk.
                 walkAt =
                   id: n:
                   let
@@ -2287,7 +2308,22 @@ let
                       value = n;
                     }
                   ]
-                  ++ prelude.concatMap (cid: walkAt cid (ntaKids.${cid} or (self.node cid))) all.nodeOrder;
+                  ++ prelude.concatMap (
+                    cid:
+                    walkAt cid (
+                      ntaKids.${cid} or (
+                        if
+                          !(roots ? ${cid})
+                          && parseParent != null
+                          && builtins.substring 0 4 cid != ntaIdPrefix
+                          && parseParent cid == id
+                        then
+                          all.nodes.${cid}
+                        else
+                          self.node cid
+                      )
+                    )
+                  ) all.nodeOrder;
               in
               id: walkAt id (self.node id);
 
@@ -2590,7 +2626,19 @@ let
                   if !(runAttributes ? ${attrName}) then
                     throw (unknownAttribute id attrName)
                   else
-                    applyTraced id at attrName traceEntry path;
+                    # The addressed node is decided before the attribute applies, as `eval`'s demand decides it: a
+                    # root by its own record, a node `parseParent` places by this evaluator's resolver (an incoherent
+                    # node, or a ghost under a parent that does not carry it, refuses here). An id this evaluator
+                    # cannot place keeps the decision the scope door made before the element check: every root's
+                    # record, so it refuses beside any incoherent root, where `eval` may serve.
+                    builtins.seq (
+                      if roots ? ${id} then
+                        roots.${id}
+                      else if parseParent != null && parseParent id != null then
+                        (mkSelf visited traceList).node id
+                      else
+                        builtins.all (r: builtins.seq roots.${r} true) (builtins.attrNames roots)
+                    ) (applyTraced id at attrName traceEntry path);
               }
             );
           getTraced =

@@ -49,11 +49,24 @@
 # a value K does not declare gives the node two kinds that silently disagree — the registry's and
 # the carried one — which is the registry door's own coherence defect at node grain. So it is
 # refused by name, decided by `cascade.nix`'s `sameKindValue`: the mark, then at an equal mark the
-# sealed subjects through gen-algebra's `sealedCollisionEq`. Decided ONCE per scope: only a
-# registry in which some kind declares a value is walked, so a scope whose kinds declare none pays
-# nothing per node. A node omitting the field is admitted (it stays kind-blind at `sel.kind`, and
-# is refused there by name); a node carrying a value in a scope whose registry declares none is the
-# node's own declaration and is admitted too.
+# sealed subjects through gen-algebra's `sealedCollisionEq`. Whether to check is decided ONCE per
+# scope: only a registry in which some kind declares a value is checked, so a scope whose kinds
+# declare none pays nothing per node. A node omitting the field is admitted (it stays kind-blind at
+# `sel.kind`, and is refused there by name); a node carrying a value in a scope whose registry
+# declares none is the node's own declaration and is admitted too.
+#
+# ★ THE CONJUNCT IS AN ELEMENT CHECK, DECIDED AT THE NODE'S OWN READ (den-hoag-25mup). Its subject
+# is the node, so the returned record's `nodes` is the scope's own key set with each value refusing
+# when it is forced: a read addressed at an incoherent node, or reaching its record by any route,
+# refuses by name, and a read of another node serves the value it has with that node coherent —
+# reading one node reads no other (the registry view's `contains id` contract). Keys stay eager, so
+# every key test on the map (`roots ? id`, the selection and spawn-collision tests) is unforced. The
+# shape conjuncts above are the record's TYPE and stay at the door, as a container type checks its
+# own shape and leaves its elements to their reads (nixpkgs' `attrsOf`). The evaluator routes that
+# hand out a registered record without reading it through the map are closed in `eval.nix`: a
+# root's `get` forces the root's record first (`rootEval`), a selected record is served after the
+# scope's own record of its key (`selectAmong`), and `evalDebug`'s traced cell decides the node it
+# addresses (`tracedCell`).
 {
   prelude,
   kindSetDefect,
@@ -73,25 +86,28 @@
       kindsPass = "Mint the kinds with `mkKinds` over their declarations and pass the result.";
       badKinds = detail: throw "${kindsMust}; ${detail}. ${kindsPass}";
 
-      contradicting =
-        if !(prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds)) then
-          [ ]
-        else
-          builtins.filter (
-            id:
-            let
-              n = scope.nodes.${id};
-              t = n.type or null;
-            in
-            n ? kindValue
-            && builtins.isString t
-            && kinds.kinds ? ${t}
-            && !(sameKindValue
-              "gen-scope.${entry}: node '${id}' of kind '${t}': carry the kind's own value (`buildRoots` stamps it); two constructions of one kind are two kinds"
-              n.kindValue
-              kinds.kinds.${t}.kindValue
-            )
-          ) (builtins.attrNames scope.nodes);
+      declaresValue = prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds);
+      contradicts =
+        id:
+        let
+          n = scope.nodes.${id};
+          t = n.type or null;
+        in
+        n ? kindValue
+        && builtins.isString t
+        && kinds.kinds ? ${t}
+        && !(sameKindValue
+          "gen-scope.${entry}: node '${id}' of kind '${t}': carry the kind's own value (`buildRoots` stamps it); two constructions of one kind are two kinds"
+          n.kindValue
+          kinds.kinds.${t}.kindValue
+        );
+      # the refusal a node's own read meets, naming the entry, the node and its kind
+      refuse =
+        id:
+        let
+          t = scope.nodes.${id}.type;
+        in
+        throw "gen-scope.${entry}: node '${id}' of kind '${t}' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark and, at an equal mark, its sealed subjects). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
     in
     if !(builtins.isAttrs scope) then
       bad "received a ${builtins.typeOf scope}"
@@ -105,12 +121,11 @@
       bad "received an attrset whose `nodeOrder` is a ${builtins.typeOf scope.nodeOrder}, not a list"
     else if kindsDefect != null then
       badKinds kindsDefect
-    else if kinds == null || contradicting == [ ] then
+    else if kinds == null || !declaresValue then
       scope
     else
-      let
-        id = builtins.head contradicting;
-        t = scope.nodes.${id}.type;
-      in
-      throw "gen-scope.${entry}: node '${id}' of kind '${t}' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark and, at an equal mark, its sealed subjects). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
+      scope
+      // {
+        nodes = builtins.mapAttrs (id: n: if contradicts id then refuse id else n) scope.nodes;
+      };
 }
