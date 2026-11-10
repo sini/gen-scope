@@ -85,29 +85,6 @@
       kindsMust = "gen-scope.${entry}: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it";
       kindsPass = "Mint the kinds with `mkKinds` over their declarations and pass the result.";
       badKinds = detail: throw "${kindsMust}; ${detail}. ${kindsPass}";
-
-      declaresValue = prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds);
-      contradicts =
-        id:
-        let
-          n = scope.nodes.${id};
-          t = n.type or null;
-        in
-        n ? kindValue
-        && builtins.isString t
-        && kinds.kinds ? ${t}
-        && !(sameKindValue
-          "gen-scope.${entry}: node '${id}' of kind '${t}': carry the kind's own value (`buildRoots` stamps it); two constructions of one kind are two kinds"
-          n.kindValue
-          kinds.kinds.${t}.kindValue
-        );
-      # the refusal a node's own read meets, naming the entry, the node and its kind
-      refuse =
-        id:
-        let
-          t = scope.nodes.${id}.type;
-        in
-        throw "gen-scope.${entry}: node '${id}' of kind '${t}' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark and, at an equal mark, its sealed subjects). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
     in
     if !(builtins.isAttrs scope) then
       bad "received a ${builtins.typeOf scope}"
@@ -121,9 +98,37 @@
       bad "received an attrset whose `nodeOrder` is a ${builtins.typeOf scope.nodeOrder}, not a list"
     else if kindsDefect != null then
       badKinds kindsDefect
-    else if kinds == null || !declaresValue then
+    # whether to check is decided once per scope, with no binding, so a scope declaring no value pays nothing for it
+    # (`eval.nix`'s `rootEval` reads the same test)
+    else if
+      kinds == null || !(prelude.any (k: k.kindValue != null) (prelude.attrValues kinds.kinds))
+    then
       scope
     else
+      # bound only here, so a scope whose registry declares no value allocates neither
+      let
+        contradicts =
+          id:
+          let
+            n = scope.nodes.${id};
+            t = n.type or null;
+          in
+          n ? kindValue
+          && builtins.isString t
+          && kinds.kinds ? ${t}
+          && !(sameKindValue
+            "gen-scope.${entry}: node '${id}' of kind '${t}': carry the kind's own value (`buildRoots` stamps it); two constructions of one kind are two kinds"
+            n.kindValue
+            kinds.kinds.${t}.kindValue
+          );
+        # the refusal a node's own read meets, naming the entry, the node and its kind
+        refuse =
+          id:
+          let
+            t = scope.nodes.${id}.type;
+          in
+          throw "gen-scope.${entry}: node '${id}' of kind '${t}' carries a `kindValue` that is not the one its kind declares (compared by the kind value's mark and, at an equal mark, its sealed subjects). A node of a registered kind carries its kind's value, and a different one gives the node two kinds that disagree. Build the scope with `buildRoots`, which stamps the value, or carry the kind's own value.";
+      in
       scope
       // {
         nodes = builtins.mapAttrs (id: n: if contradicts id then refuse id else n) scope.nodes;
