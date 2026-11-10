@@ -39,11 +39,8 @@ let
     mkKinds
     resolveClaims
     ;
-  inherit (import "${libSrc}/require-scope.nix" { inherit prelude kindSetDefect sameKindValue; })
-    requireScope
-    declaresKindValue
-    ;
-  # The declared relation's input type. The evaluator takes it as a formal like `requireScope`, so
+  scopeDoor = import "${libSrc}/require-scope.nix" { inherit prelude kindSetDefect sameKindValue; };
+  # The declared relation's input type. The evaluator takes it as a formal like `scopeDoor`, so
   # this wiring binds it the same way; none of the arms below supplies a relation, so every one of
   # them runs under the evaluator's third state and the guard is never reached.
   inherit (import "${libSrc}/require-declared-dependencies.nix" { inherit graph; })
@@ -52,8 +49,7 @@ let
   evalLib = import "${libSrc}/eval.nix" {
     inherit
       prelude
-      requireScope
-      declaresKindValue
+      scopeDoor
       requireDeclaredDependencies
       graph
       ;

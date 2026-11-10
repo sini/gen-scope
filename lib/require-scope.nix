@@ -79,11 +79,10 @@ let
     scope:
     (scope.kinds or null) != null
     && prelude.any (k: k.kindValue != null) (prelude.attrValues scope.kinds.kinds);
-in
-{
-  inherit declaresKindValue;
-  requireScope =
-    entry: scope:
+  # The door, handed that predicate's verdict for this scope. The evaluator computes the verdict ONCE and hands
+  # the same value to the door and to `rootEval`, so one evaluation of the predicate serves both readers.
+  requireScopeDeclaring =
+    entry: declares: scope:
     let
       must = "gen-scope.${entry}: `scope` must be the record returned by `buildRoots` ({ nodes, nodeOrder })";
       pass = "A node map alone no longer carries the declared order — pass the whole record.";
@@ -107,7 +106,7 @@ in
       bad "received an attrset whose `nodeOrder` is a ${builtins.typeOf scope.nodeOrder}, not a list"
     else if kindsDefect != null then
       badKinds kindsDefect
-    else if !(declaresKindValue scope) then
+    else if !declares then
       scope
     else
       # bound only here, so a scope whose registry declares no value allocates neither
@@ -138,4 +137,8 @@ in
       // {
         nodes = builtins.mapAttrs (id: n: if contradicts id then refuse id else n) scope.nodes;
       };
+in
+{
+  inherit declaresKindValue requireScopeDeclaring;
+  requireScope = entry: scope: requireScopeDeclaring entry (declaresKindValue scope) scope;
 }
