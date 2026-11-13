@@ -690,6 +690,18 @@ let
       host = kindOf kinds nodes ev id;
       hostKind = (ev.node id).type or null;
       spawns = if host == null then { } else host.spawns;
+      # The order a host's entries compose in: by `below` position of their produced kind, then by
+      # label within one kind. `attrNames` is bytewise and `groupBy` keeps its input's order, so
+      # within a kind the labels are bytewise, the only order an attribute set carries. Bound here
+      # rather than called: it is read once per node, and a host declaring no spawn pays nothing.
+      order =
+        if { } == spawns then
+          [ ]
+        else
+          let
+            byKind = builtins.groupBy (l: spawns.${l}.produced) (builtins.attrNames spawns);
+          in
+          builtins.concatMap (k: byKind.${k} or [ ]) host.below;
       stamped =
         label:
         let
@@ -765,20 +777,7 @@ let
           nodes = acc.nodes // next.nodes;
           nodeOrder = acc.nodeOrder ++ next.nodeOrder;
         }
-    ) noChildren (if host == null then [ ] else spawnOrder spawns host.below);
-
-  # The order a host's spawn entries compose in: by `below` position of their produced kind, then
-  # by label within one kind. `attrNames` is bytewise, and `groupBy` keeps its input's order, so
-  # within a kind the labels are bytewise — the only order an attribute set carries.
-  spawnOrder =
-    spawns: below:
-    if { } == spawns then
-      [ ]
-    else
-      let
-        byKind = builtins.groupBy (l: spawns.${l}.produced) (builtins.attrNames spawns);
-      in
-      prelude.concatMap (k: byKind.${k} or [ ]) below;
+    ) noChildren order;
 
   # ── THE `nta` CHANNEL — Vogt, Swierstra & Kuiper 1989 Def. 3.14's recursive form, beside `spawns` ──
   #
