@@ -1,11 +1,12 @@
 # THE `self.node` SEAM GUARD — O15.
 #
-# A body may not ACQUIRE a node record across an edge its node did not declare. The coverage
-# condition already governs the READ seam (`self.get`); this cell governs the one beside it, and the
-# distinction is the whole of the cell: `node` is a separate entry point, and the traversal helpers
-# — `siblings`, `ancestors`, the Neron collection walks, the reverse query — reach their targets
-# through it rather than through `get`. A suite carrying only the read-seam cell leaves this seam
-# unarmed, and the dispositions that rest on it rest on an undetectable mechanism.
+# A body may not ACQUIRE a node record across an edge its node did not declare. The READ seam beside
+# it (`self.get`, `self.getRepresentative`) is `codomain-read-guard`'s cell; this cell governs the
+# record seam, and the distinction is the whole of the cell: `node` is a separate entry point, and
+# the traversal helpers — `siblings`, `ancestors`, the Neron collection walks, the reverse query —
+# reach their targets through it rather than through `get`. A suite carrying only the read-seam
+# cell leaves this seam unarmed, and the dispositions that rest on it rest on an undetectable
+# mechanism.
 #
 # THE SEEDED DEFECT IS THE SUBSTRATE'S OWN BEHAVIOUR, not an implementer's possible slip: an
 # undeclared cross-node acquisition SUCCEEDS on an evaluator reached directly, which is the last

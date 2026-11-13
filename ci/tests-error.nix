@@ -3546,13 +3546,14 @@ in
       };
     };
 
-  # ── THE DECLARED RELATION'S INPUT TYPE, AND THE TWO ENTRIES THAT STATE IT ──
+  # ── THE DECLARED RELATION'S INPUT TYPE, AND THE THREE ENTRIES THAT STATE IT ──
   # `gen-graph` ships the CONSTRUCTOR, the shared TYPE and the discriminator, and deliberately no
   # refusal helper: a refusal minted there would name `gen-graph` for a defect at this library's
   # door. So each entry states its OWN, naming itself — and a discriminator no consumer calls is a
   # guard nobody calls, which is what these cells hold.
   #
-  # BOTH DETAIL ARMS ARE EXERCISED, one per entry, because they are not interchangeable. A bare
+  # BOTH DETAIL ARMS ARE EXERCISED, one per entry, `evalWarm` repeating the lambda arm under its own
+  # name, because they are not interchangeable. A bare
   # relation is a `lambda` and the type names it usefully; a hand-assembled attrset carrying an
   # `index` and a `dependencies` has the right SHAPE — `builtins.typeOf` says `set` and tells the
   # reader nothing — so that arm names the CONSTRUCTOR that was missed instead. The second arm is
@@ -3617,6 +3618,112 @@ in
         expectedError = {
           type = "ThrownError";
           msg = exactly "gen-scope.eval: `declaredDependencies` must be the relation `gen-graph.mkDeclaredEdges` returns; received an attrset that `mkDeclaredEdges` did not build. Build it with `gen-graph.mkDeclaredEdges` and pass the result: the relation is contracted where it is constructed, so a value this entry cannot tell apart from a contracted one is one it must refuse.";
+        };
+      };
+
+      # `evalWarm`, on a BARE relation. It checks under its own name, as `foldEquations` does; were
+      # the check left to the `eval` it delegates to, the refusal would name `gen-scope.eval`, a
+      # call the caller never made.
+      test-evalWarm-refuses-an-uncontracted-relation-by-name = {
+        expr =
+          (genScope.evalWarm { declaredDependencies = _: [ ]; } {
+            scope = contractScope;
+            inherit attributes;
+            prior = genScope.eval { } attributes contractScope;
+            decision = genScope.mkDecision {
+              isClean = _: false;
+              reusable = _: [ ];
+            };
+          }).get
+            "solo"
+            "self-v";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.evalWarm: `declaredDependencies` must be the relation `gen-graph.mkDeclaredEdges` returns; received a lambda. Build it with `gen-graph.mkDeclaredEdges` and pass the result: the relation is contracted where it is constructed, so a value this entry cannot tell apart from a contracted one is one it must refuse.";
+        };
+      };
+    };
+
+  # ── THE READ SEAM'S REFUSAL, BY MESSAGE ──
+  # `codomain-read-guard` asserts that `self.get` and `self.getRepresentative` refuse across an
+  # undeclared edge, and that the validator's text is what it should be. Neither reaches the text a
+  # seam actually RAISES: a guard throwing the record seam's text, or another demand form's, passes
+  # every `tryEval` cell there. These pin the raised text, one cell per demand form.
+  config.flake.testsError.codomain-read-guard-refusals =
+    let
+      readScope = genScope.buildRoots {
+        parentGraph = genScope.overlays [
+          (genScope.edge {
+            from = "a";
+            to = "root";
+          })
+          (genScope.edge {
+            from = "b";
+            to = "root";
+          })
+        ];
+        decls = {
+          root.v = 0;
+          a.v = 1;
+          b.v = 2;
+        };
+        types = { };
+      };
+      peerOf = id: if id == "a" then "b" else "a";
+      attributes = {
+        children = _self: _id: { };
+        own-v = self: id: (self.node id).decls.v;
+        own-rep =
+          genScope.circular
+            {
+              carrier = {
+                bottom = 0;
+                leq = x: y: x <= y;
+                height = 2;
+                quotient = true;
+              };
+            }
+            (
+              self: id: _prev:
+              (self.node id).decls.v
+            );
+        peer-get = self: id: self.get (peerOf id) "own-v";
+        peer-rep = self: id: (self.getRepresentative (peerOf id) "own-rep").representative;
+      };
+      emptyCtx = genScope.foldEquations { } {
+        scope = readScope;
+        declaredDependencies = import ./tests/_fixtures/declared.nix {
+          inherit genGraph;
+          scope = readScope;
+        } { };
+        schedule.equations = builtins.mapAttrs (name: compute: {
+          inherit name compute;
+          kind =
+            if name == "children" then
+              "nta"
+            else if name == "own-rep" then
+              "circular"
+            else
+              "synthesized";
+          readsAttrs = [ ];
+          stratum = if name == "children" then "structural" else "resolution";
+        }) attributes;
+        parseParent = id: readScope.nodes.${id}.parent or null;
+      };
+    in
+    {
+      test-get-raises-the-read-seams-text = {
+        expr = emptyCtx.eval.get "a" "peer-get";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: node 'a' read attribute 'own-v' of node 'b' through `self.get`, and 'b' is not in the dependency relation 'a' declared: []. A body may not read across an edge its node did not declare — the relation a grammar gate runs over is contracted at every firing, so an undeclared read would make the declaration false while the evaluation still answered. Declare 'b' among 'a's dependencies; a traversal that ranges over the graph declares the range it ranges over.";
+        };
+      };
+      test-getRepresentative-raises-the-read-seams-text = {
+        expr = emptyCtx.eval.get "a" "peer-rep";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: node 'a' read attribute 'own-rep' of node 'b' through `self.getRepresentative`, and 'b' is not in the dependency relation 'a' declared: []. A body may not read across an edge its node did not declare — the relation a grammar gate runs over is contracted at every firing, so an undeclared read would make the declaration false while the evaluation still answered. Declare 'b' among 'a's dependencies; a traversal that ranges over the graph declares the range it ranges over.";
         };
       };
     };

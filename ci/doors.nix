@@ -118,6 +118,7 @@ in
     ];
     evalDebug.optional = [ "parseParent" ];
     evalWarm.optional = [
+      "declaredDependencies"
       "parseParent"
       "provenance"
     ];
@@ -316,6 +317,10 @@ in
         "declared"
         "reader"
         "target"
+      ];
+      optional = [
+        "attribute"
+        "through"
       ];
       good = {
         reader = "a";

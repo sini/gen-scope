@@ -218,11 +218,11 @@ let
         "import ${o10Abs "door.nix"}"
       ]
       o10EvalSrc;
-  o10FormalAnchor = "declaredDependencies ? null,\n    }:";
+  o10FormalAnchor = "refuses by name.\n      declaredDependencies ? null,\n    }:";
   o10ThreadedFormal =
     builtins.replaceStrings
       [ o10FormalAnchor ]
-      [ "declaredDependencies ? null,\n      rootOrder ? null,\n    }:" ]
+      [ "refuses by name.\n      declaredDependencies ? null,\n      rootOrder ? null,\n    }:" ]
       o10WithAbsoluteImports;
   o10FoldSite = "found = prelude.foldl' (acc: rootId: if acc != null then acc else walkChildren rootId) null (\n                  builtins.attrNames roots\n                );";
   o10FoldSiteThreaded = "found = prelude.foldl' (acc: rootId: if acc != null then acc else walkChildren rootId) null (\n                  if rootOrder != null then rootOrder else builtins.attrNames roots\n                );";

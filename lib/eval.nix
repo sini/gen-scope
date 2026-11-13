@@ -241,8 +241,8 @@ let
     else
       null;
 
-  # THE `self.node` SEAM'S REFUSAL, AS A VALUE — the reason an acquisition is not permitted, or
-  # null. It RETURNS its message and the seam raises it, because `builtins.tryEval` catches a throw
+  # THE COVERAGE CONDITION'S REFUSAL, AS A VALUE — the reason an acquisition through `self.node`,
+  # or a read through `self.get` or `self.getRepresentative`, is not permitted, or null. It RETURNS its message and the seam raises it, because `builtins.tryEval` catches a throw
   # and discards its text: a guard that only throws is a guard whose message no cell can assert,
   # and every oracle over this contract turns on the message rather than on the fact of a refusal.
   #
@@ -258,20 +258,38 @@ let
       reader,
       target,
       declared,
+      # The read seam's two demand forms name the attribute read and the entry it was read through;
+      # the record seam (`self.node`) names neither.
+      attribute ? null,
+      through ? "self.node",
     }:
-    if reader == target then
-      null
-    else if builtins.elem target declared then
+    if reader == target || builtins.elem target declared then
       null
     else
-      "gen-scope: node '${reader}' acquired the record of node '${target}' through `self.node`, and '${target}' is not in the dependency relation '${reader}' declared: ${builtins.toJSON declared}. A body may not read across an edge its node did not declare — the relation a grammar gate runs over is contracted at every firing, so an undeclared acquisition would make the declaration false while the evaluation still answered. Declare '${target}' among '${reader}'s dependencies; a traversal that ranges over the graph declares the range it ranges over.";
+      "gen-scope: node '${reader}' ${
+        if attribute == null then
+          "acquired the record of node '${target}'"
+        else
+          "read attribute '${attribute}' of node '${target}'"
+      } through `${through}`, and '${target}' is not in the dependency relation '${reader}' declared: ${builtins.toJSON declared}. A body may not read across an edge its node did not declare — the relation a grammar gate runs over is contracted at every firing, so an undeclared ${
+        if attribute == null then "acquisition" else "read"
+      } would make the declaration false while the evaluation still answered. Declare '${target}' among '${reader}'s dependencies; a traversal that ranges over the graph declares the range it ranges over.";
 
-  # ── THE READER BINDING, AND THE SEAM GUARD IT MAKES EXPRESSIBLE ──
+  # ── THE READER BINDING, AND THE SEAM GUARDS IT MAKES EXPRESSIBLE ──
   # The accessor a BODY is handed, as against the one the substrate walks with. They differ in
-  # exactly one name — `node` — and the difference is the READER: `self.node` takes a target and no
-  # source, so the seam cannot name the node whose body is acquiring unless the accessor itself
-  # carries it. Every site that APPLIES a body has that identity in hand, and binding it there is
-  # what makes this a firing check at an existing seam rather than a new seam.
+  # exactly three names — `node`, `get` and `getRepresentative` — and the difference is the READER:
+  # each takes a target and no source, so a seam cannot name the node whose body is demanding unless
+  # the accessor itself carries it. `node` is the record seam; `get` and `getRepresentative` are the
+  # read seam's two demand forms over one demand, so a guard on one alone would leave the other
+  # open. Every site that APPLIES a body has that identity in hand, and binding it there is what
+  # makes this a firing check at an existing seam rather than a new seam.
+  #
+  # Each guard spells the coverage condition inline on its admitted path and calls
+  # `seamAcquisitionDefect` only to raise its refusal: the guard and the validator are two
+  # spellings of one condition.
+  #
+  # WHAT THE GUARDS DO NOT REACH: only these three names are rebound. The record's other fields
+  # that take a target (`_childSet`, `facade.get` among them) consult no declaration.
   #
   # `declared == null` is the unarmed case and returns the accessor unchanged, so an evaluation
   # outside the codomain contract pays nothing and refuses nothing.
@@ -282,9 +300,11 @@ let
   # there is no reader whose declaration could be consulted, and a guard treating that absence as
   # the empty declaration would refuse every entry point.
   #
-  # COST: one attrset extension per body application when armed, and the O(d) membership test of
-  # the coverage condition per cross-node acquisition, d the reader's out-degree in the declared
-  # relation. Always on, per the cost ruling: there is no setting that disables it.
+  # COST, by class: one attrset extension per body application when armed; per cross-node demand
+  # through any of the three names, a constant guard application and a membership walk over the
+  # reader's declared list; per reader, a term linear in its out-degree d at the first
+  # consultation, which forces that list; per self-read, the guard's application alone. Unarmed, it
+  # costs nothing. Always on, per the cost ruling: there is no setting that disables it.
   bindReader =
     declared: acc: readerId:
     if declared == null then
@@ -294,14 +314,38 @@ let
       // {
         node =
           targetId:
-          let
-            defect = seamAcquisitionDefect {
+          if readerId == targetId || builtins.elem targetId (declared readerId) then
+            acc.node targetId
+          else
+            throw (seamAcquisitionDefect {
               reader = readerId;
               target = targetId;
               declared = declared readerId;
-            };
-          in
-          if defect == null then acc.node targetId else throw defect;
+            });
+        get =
+          targetId: attrName:
+          if readerId == targetId || builtins.elem targetId (declared readerId) then
+            acc.get targetId attrName
+          else
+            throw (seamAcquisitionDefect {
+              reader = readerId;
+              target = targetId;
+              attribute = attrName;
+              through = "self.get";
+              declared = declared readerId;
+            });
+        getRepresentative =
+          targetId: attrName:
+          if readerId == targetId || builtins.elem targetId (declared readerId) then
+            acc.getRepresentative targetId attrName
+          else
+            throw (seamAcquisitionDefect {
+              reader = readerId;
+              target = targetId;
+              attribute = attrName;
+              through = "self.getRepresentative";
+              declared = declared readerId;
+            });
       };
 
   # A CIRCULAR attribute's step is a body too, and it does not reach the substrate through the
@@ -1395,8 +1439,9 @@ let
 
             # ── THE `self.node` SEAM GUARD, AT THE ORDINARY APPLICATION SITE ──
             # A body may not ACQUIRE a node record across an edge its node did not declare. This is
-            # the same firing check the coverage condition specifies for the read seam, at the seam
-            # beside it: `node` is a separate entry point from `get`, and the traversal helpers —
+            # the record seam's half of the coverage condition; `bindReader` binds three guarded
+            # names — `node`, and the read seam's `get` and `getRepresentative` beside it, under the
+            # same condition. `node` is a separate entry point from `get`, and the traversal helpers —
             # `siblings`, `ancestors`, the Neron collection walks, the reverse query — reach their
             # targets through this one, so a guard here makes their dependence DECLARED rather than
             # approximated by publishing the structural relation's inverse, which is ⊤ over a
@@ -2774,6 +2819,7 @@ let
       prior,
       decision,
       provenance ? [ ],
+      declaredDependencies ? null,
     }:
     eval {
       inherit
@@ -2784,6 +2830,12 @@ let
         decision
         provenance
         ;
+      # Checked under this entry's name, as `foldEquations` checks it under its own.
+      declaredDependencies =
+        if declaredDependencies == null then
+          null
+        else
+          requireDeclaredDependencies "evalWarm" declaredDependencies;
     };
 
   # THERE IS NO DECLARED-READS PROJECTION HERE, and its absence is the design rather than a gap.

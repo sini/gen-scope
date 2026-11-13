@@ -6,11 +6,12 @@
 # not — each entry states its own, naming itself — and until a consumer calls it, a discriminator is
 # a guard nobody calls.
 #
-# TWO ENTRIES, AND THEY ARE NOT THE SAME ENTRY. `foldEquations`' formal is REQUIRED and total, so
+# THREE ENTRIES, AND THEY ARE NOT THE SAME ENTRY. `foldEquations`' formal is REQUIRED and total, so
 # absence cannot be expressed there at all and every value it receives is a candidate relation.
 # `eval`'s carries a THIRD STATE — `null` says no declaration was supplied and this evaluation was
 # not constructed under the contract — which is a sequencing fact rather than a relation, so it is
-# not put to the guard and its survival is a cell here.
+# not put to the guard and its survival is a cell here. `evalWarm`'s option carries the same third
+# state and checks a non-null value under its own name.
 #
 # ── WHY EVERY CELL BELOW READS A SELF-ACQUISITION ──
 # `self-v` acquires the node's OWN record, which the `self.node` seam guard permits unconditionally
@@ -65,6 +66,18 @@ let
     genScope.eval {
       inherit declaredDependencies;
     } attributes scope;
+
+  # Nothing is clean, so the warm entry recomputes through the reader its relation arms.
+  warmWith =
+    declaredDependencies:
+    genScope.evalWarm { inherit declaredDependencies; } {
+      inherit scope attributes;
+      prior = genScope.eval { } attributes scope;
+      decision = genScope.mkDecision {
+        isClean = _: false;
+        reusable = _: [ ];
+      };
+    };
 
   # THE SEEDS, both of them shapes a caller really produces.
   # (1) The bare relation — what every call site wrote before the contract existed.
@@ -130,6 +143,22 @@ in
     # happens.
     test-control-eval-with-no-relation-at-all-still-answers = {
       expr = (evalWith null).get "solo" "self-v";
+      expected = 1;
+    };
+
+    # ══ THE WARM ENTRY ══
+    # `evalWarm` takes the relation as `eval` does. With its relation discarded the bare value never
+    # reaches a guard and the cell reads `true`.
+    test-evalWarm-refuses-an-uncontracted-relation = {
+      expr = (builtins.tryEval ((warmWith bare).get "solo" "self-v")).success;
+      expected = false;
+    };
+    test-control-evalWarm-accepts-the-contracted-relation = {
+      expr = (warmWith (contracted { })).get "solo" "self-v";
+      expected = 1;
+    };
+    test-control-evalWarm-with-no-relation-at-all-still-answers = {
+      expr = (warmWith null).get "solo" "self-v";
       expected = 1;
     };
 
