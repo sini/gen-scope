@@ -63,7 +63,8 @@ let
     (mkKind { } "endpoint")
     (mkKind {
       below = [ "endpoint" ];
-      spawns.endpoint = self: id: {
+      spawns.endpoint.produced = "endpoint";
+      spawns.endpoint.builder = self: id: {
         "${id}-ep" = {
           id = "${id}-ep";
           parent = id;
@@ -75,7 +76,8 @@ let
     } "member")
     (mkKind {
       below = [ "member" ];
-      spawns.member =
+      spawns.member.produced = "member";
+      spawns.member.builder =
         self: id:
         builtins.mapAttrs (memberId: spec: {
           id = memberId;

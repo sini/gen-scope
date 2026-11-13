@@ -31,7 +31,8 @@ let
       # in `decls`, because a value computed from other nodes' attributes IS an attribute. The
       # manifest's `resolvedDeps` / `totalAPIs` are attributes on the manifest node
       # (`attributes.nix`), computed where the substrate computes values.
-      spawns.manifest = _self: _id: {
+      spawns.manifest.produced = "manifest";
+      spawns.manifest.builder = _self: _id: {
         "resolved:app@1.0" = {
           id = "resolved:app@1.0";
           parent = "workspace";

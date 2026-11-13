@@ -590,7 +590,8 @@ let
               (mkKind { } "leaf")
               (mkKind {
                 below = [ "leaf" ];
-                spawns.leaf = _: id: if id == "h" then kids else { };
+                spawns.leaf.produced = "leaf";
+                spawns.leaf.builder = _: id: if id == "h" then kids else { };
               } "host")
             ];
             parentGraph = ag.vertex "h";

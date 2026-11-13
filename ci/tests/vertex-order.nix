@@ -137,7 +137,8 @@ let
     (genScope.mkKind { } "leaf")
     (genScope.mkKind {
       below = [ "leaf" ];
-      spawns.leaf = _handle: id: {
+      spawns.leaf.produced = "leaf";
+      spawns.leaf.builder = _handle: id: {
         shared = {
           id = "shared";
           decls = {

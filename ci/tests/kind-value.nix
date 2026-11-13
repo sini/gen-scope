@@ -86,7 +86,8 @@ let
       (S.mkKind {
         below = [ "leaf" ];
         kindValue = hostA;
-        spawns.leaf = _self: id: {
+        spawns.leaf.produced = "leaf";
+        spawns.leaf.builder = _self: id: {
           sprout = {
             id = "sprout";
             parent = id;

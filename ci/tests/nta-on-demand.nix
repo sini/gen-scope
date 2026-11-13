@@ -67,7 +67,8 @@ let
       (mkKind (
         {
           below = [ "leaf" ];
-          spawns.leaf =
+          spawns.leaf.produced = "leaf";
+          spawns.leaf.builder =
             _: id:
             if id == "r" then
               [

@@ -38,17 +38,20 @@ let
   # ── W1 — self-naming. A declaration; `mkKinds` cannot mint it.
   w1 = mkKind {
     below = [ "k" ];
-    spawns.k = spawnOf "k";
+    spawns.k.produced = "k";
+    spawns.k.builder = spawnOf "k";
   } "k";
 
   # ── W2 — a two-cycle. Both halves are declarations and NEITHER names itself.
   w2a = mkKind {
     below = [ "b" ];
-    spawns.b = spawnOf "i";
+    spawns.b.produced = "b";
+    spawns.b.builder = spawnOf "i";
   } "a";
   w2b = mkKind {
     below = [ "a" ];
-    spawns.a = spawnOf "i";
+    spawns.a.produced = "a";
+    spawns.a.builder = spawnOf "i";
   } "b";
 
   # ── THE CONTROL REGISTRY — `host` ranks above `item` and `item` spawns nothing, so the
@@ -56,7 +59,8 @@ let
   itemDecl = mkKind { } "item";
   hostDecl = mkKind {
     below = [ "item" ];
-    spawns.item = spawnOf "i";
+    spawns.item.produced = "item";
+    spawns.item.builder = spawnOf "i";
   } "host";
   okKinds = mkKinds [
     itemDecl
@@ -68,7 +72,8 @@ let
     (mkKind { } "host")
     (mkKind {
       below = [ "host" ];
-      spawns.host = spawnOf "i";
+      spawns.host.produced = "host";
+      spawns.host.builder = spawnOf "i";
     } "item")
   ];
   merged = okKinds // {
@@ -84,14 +89,16 @@ let
     leafDecl
     (mkKind {
       below = [ "leaf" ];
-      spawns.leaf = spawnOf "l";
+      spawns.leaf.produced = "leaf";
+      spawns.leaf.builder = spawnOf "l";
     } "left")
   ];
   rightKinds = mkKinds [
     leafDecl
     (mkKind {
       below = [ "leaf" ];
-      spawns.leaf = spawnOf "r";
+      spawns.leaf.produced = "leaf";
+      spawns.leaf.builder = spawnOf "r";
     } "right")
   ];
   sharedLeaf = leftKinds // {
@@ -106,14 +113,16 @@ let
     suffix:
     mkKind {
       below = [ "leaf" ];
-      spawns.leaf = spawnOf suffix;
+      spawns.leaf.produced = "leaf";
+      spawns.leaf.builder = spawnOf suffix;
     } "mid";
   topKinds = mkKinds [
     leafDecl
     (midDecl "x")
     (mkKind {
       below = [ "mid" ];
-      spawns.mid = spawnOf "m";
+      spawns.mid.produced = "mid";
+      spawns.mid.builder = spawnOf "m";
     } "top")
   ];
   otherMid = mkKinds [
@@ -140,7 +149,8 @@ let
     (ntaMidDecl "x")
     (mkKind {
       below = [ "mid" ];
-      spawns.mid = spawnOf "m";
+      spawns.mid.produced = "mid";
+      spawns.mid.builder = spawnOf "m";
     } "top")
   ];
   ntaOtherMid = mkKinds [ (ntaMidDecl "y") ];
@@ -165,7 +175,10 @@ let
     kinds = okKinds.kinds // {
       host = okKinds.kinds.host // {
         spawns = okKinds.kinds.host.spawns // {
-          extra = spawnOf "e";
+          extra = {
+            produced = "extra";
+            builder = spawnOf "e";
+          };
         };
       };
     };
@@ -175,7 +188,10 @@ let
       host = okKinds.kinds.host // {
         below = okKinds.kinds.host.below ++ [ "extra" ];
         spawns = okKinds.kinds.host.spawns // {
-          extra = spawnOf "e";
+          extra = {
+            produced = "extra";
+            builder = spawnOf "e";
+          };
         };
       };
     };

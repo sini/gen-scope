@@ -20,7 +20,8 @@ let
     (genScope.mkKind { } "chaff")
     (genScope.mkKind {
       below = [ "chaff" ];
-      spawns.chaff = _self: id: {
+      spawns.chaff.produced = "chaff";
+      spawns.chaff.builder = _self: id: {
         winnow = {
           id = "winnow";
           parent = id;

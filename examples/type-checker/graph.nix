@@ -35,7 +35,8 @@ let
     (genScope.mkKind { } "env")
     (genScope.mkKind {
       below = [ "record" ];
-      spawns.record = _self: _id: {
+      spawns.record.produced = "record";
+      spawns.record.builder = _self: _id: {
         "Pair<Num,String>" = {
           id = "Pair<Num,String>";
           parent = "root";

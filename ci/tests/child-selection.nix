@@ -124,7 +124,8 @@ let
         below = [ "sub" ];
         # No `type` on the record: the substrate stamps `sub` from the key this builder is
         # declared under.
-        spawns.sub = _self: id: {
+        spawns.sub.produced = "sub";
+        spawns.sub.builder = _self: id: {
           "${id}-mint" = {
             id = "${id}-mint";
             parent = id;

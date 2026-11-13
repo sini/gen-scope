@@ -672,7 +672,8 @@ in
               (genScope.mkKind { } "leaf")
               (genScope.mkKind {
                 below = [ "leaf" ];
-                spawns.leaf = _self: id: {
+                spawns.leaf.produced = "leaf";
+                spawns.leaf.builder = _self: id: {
                   g = {
                     id = "g";
                     parent = id;

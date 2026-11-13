@@ -43,14 +43,16 @@ let
                 "leafOne"
                 "leafTwo"
               ];
-              spawns.leafOne = _self: id: {
+              spawns.leafOne.produced = "leafOne";
+              spawns.leafOne.builder = _self: id: {
                 ${childKey} = {
                   id = childKey;
                   parent = id;
                   decls = { };
                 };
               };
-              spawns.leafTwo = _self: id: {
+              spawns.leafTwo.produced = "leafTwo";
+              spawns.leafTwo.builder = _self: id: {
                 ${secondKey} = {
                   id = secondKey;
                   parent = id;
@@ -82,7 +84,8 @@ let
             (genScope.mkKind { } "leaf")
             (genScope.mkKind {
               below = [ "leaf" ];
-              spawns.leaf = _self: _id: { warp = child; };
+              spawns.leaf.produced = "leaf";
+              spawns.leaf.builder = _self: _id: { warp = child; };
             } "host")
           ];
         }

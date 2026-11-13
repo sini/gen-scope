@@ -95,6 +95,7 @@ in
 
   options = {
     buildRoots.optional = [
+      "containedAs"
       "decls"
       "edgeGraphs"
       "importGraph"

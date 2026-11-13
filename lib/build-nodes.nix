@@ -115,6 +115,7 @@ let
       types ? { },
       kinds ? null,
       strict ? true,
+      containedAs ? { },
     }:
     let
       # A node id is a string that MAY carry store-path context, and an attribute name cannot: Nix
@@ -264,7 +265,7 @@ let
       # constructor here rather than testing per node: a scope with no kinds, or kinds carrying no
       # value, keeps the record it always had and pays nothing per node. It takes the id as written,
       # which the record keeps, and that id's key, which every table above is indexed by.
-      nodeOf =
+      unlabelledNodeOf =
         if kinds == null || !(prelude.any (kd: kd.kindValue != null) (prelude.attrValues kinds.kinds)) then
           id: k: {
             inherit id;
@@ -286,27 +287,71 @@ let
               __edges = prelude.mapAttrs (_label: idx: idx.${k} or [ ]) edgeIndex;
             };
           };
-    in
-    builtins.seq parentIndex {
-      inherit nodeOrder;
-      # The registry travels WITH the node set, because the evaluator needs the same vocabulary
-      # this constructor validated against and a second formal there would be a second declaration.
-      # `null` is the no-kinds case and reads as one: an evaluator handed it runs no spawn channel,
-      # which is exactly right for a scope whose nodes have no kinds to descend from.
-      inherit kinds;
-      nodes = builtins.listToAttrs (
-        map (
-          id:
+
+      # ── THE ROOT LABEL ──
+      # `containedAs` maps a root's id to the label of the registry containing it: the label of the
+      # root's incoming containment edge, as a spawn entry's key is its children's and an NTA's name
+      # its children's. It is stamped on exactly the roots it names. Like `kindValue`, it is decided
+      # once per scope: a caller declaring no label keeps the record it always had and pays nothing
+      # per node, and no record of such a caller carries the field.
+      labelDefect =
+        if { } == containedAs then
+          null
+        else if !builtins.isAttrs containedAs then
+          "must be an attribute set mapping a root's id to its label, not a ${builtins.typeOf containedAs}"
+        else
           let
-            k = toKey id;
+            nonString = prelude.filter (k: !builtins.isString containedAs.${k}) (
+              builtins.attrNames containedAs
+            );
+            unknown = prelude.filter (k: !(firstVertex ? ${k})) (builtins.attrNames containedAs);
           in
-          {
-            name = k;
-            value = nodeOf id k;
-          }
-        ) nodeOrder
+          if nonString != [ ] then
+            "gives ${builtins.toJSON nonString} a label that is not a string. A root's label is the name of the registry containing it"
+          else if unknown != [ ] then
+            "labels ${builtins.toJSON unknown}, which name no vertex of this scope. A label is stamped on the root it names, so it labels a vertex the contributions, `decls` or `types` declare"
+          else
+            null;
+      firstVertex = builtins.listToAttrs (
+        map (id: {
+          name = toKey id;
+          value = null;
+        }) nodeOrder
       );
-    };
+
+      nodeOf =
+        if { } == containedAs then
+          unlabelledNodeOf
+        else
+          id: k:
+          if containedAs ? ${k} then
+            unlabelledNodeOf id k // { containedAs = containedAs.${k}; }
+          else
+            unlabelledNodeOf id k;
+    in
+    if labelDefect != null then
+      throw "gen-scope.buildRoots: `containedAs` ${labelDefect}."
+    else
+      builtins.seq parentIndex {
+        inherit nodeOrder;
+        # The registry travels WITH the node set, because the evaluator needs the same vocabulary
+        # this constructor validated against and a second formal there would be a second declaration.
+        # `null` is the no-kinds case and reads as one: an evaluator handed it runs no spawn channel,
+        # which is exactly right for a scope whose nodes have no kinds to descend from.
+        inherit kinds;
+        nodes = builtins.listToAttrs (
+          map (
+            id:
+            let
+              k = toKey id;
+            in
+            {
+              name = k;
+              value = nodeOf id k;
+            }
+          ) nodeOrder
+        );
+      };
 
   # ── THE RETIRED NAME ──
   # A tombstone rather than a silent redirect. `buildRoots` returns a record where this returned a

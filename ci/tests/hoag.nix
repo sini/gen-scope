@@ -75,25 +75,24 @@ let
     (genScope.mkKind { } "service")
     (genScope.mkKind {
       below = [ "proxy" ];
-      spawns = {
-        proxy =
-          self: id:
-          let
-            node = self.node id;
-          in
-          if node.decls.proxy or false then
-            {
-              "${id}-proxy" = {
-                id = "${id}-proxy";
-                parent = id;
-                decls = {
-                  upstream = id;
-                };
+      spawns.proxy.produced = "proxy";
+      spawns.proxy.builder =
+        self: id:
+        let
+          node = self.node id;
+        in
+        if node.decls.proxy or false then
+          {
+            "${id}-proxy" = {
+              id = "${id}-proxy";
+              parent = id;
+              decls = {
+                upstream = id;
               };
-            }
-          else
-            { };
-      };
+            };
+          }
+        else
+          { };
     } "cluster")
   ];
 
@@ -157,14 +156,13 @@ let
             (genScope.mkKind { } "low")
             (genScope.mkKind {
               below = [ "low" ];
-              spawns = {
-                low = handle: id: {
-                  "${id}-obs" = {
-                    id = "${id}-obs";
-                    decls = {
-                      handleNames = builtins.attrNames handle;
-                      nodeRecordNames = builtins.attrNames (handle.node id);
-                    };
+              spawns.low.produced = "low";
+              spawns.low.builder = handle: id: {
+                "${id}-obs" = {
+                  id = "${id}-obs";
+                  decls = {
+                    handleNames = builtins.attrNames handle;
+                    nodeRecordNames = builtins.attrNames (handle.node id);
                   };
                 };
               };
@@ -308,7 +306,8 @@ in
           (genScope.mkKind { } "low")
           (genScope.mkKind {
             below = [ "low" ];
-            spawns.low = _self: id: {
+            spawns.low.produced = "low";
+            spawns.low.builder = _self: id: {
               "${id}-c" = {
                 id = "${id}-c";
                 parent = id;
@@ -346,7 +345,8 @@ in
           (genScope.mkKind { } "low")
           (genScope.mkKind {
             below = [ "low" ];
-            spawns.low = _self: id: {
+            spawns.low.produced = "low";
+            spawns.low.builder = _self: id: {
               "${id}-c" = {
                 id = "${id}-c";
                 parent = id;

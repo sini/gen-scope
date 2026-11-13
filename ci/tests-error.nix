@@ -536,7 +536,8 @@ in
     test-a-spawn-outside-the-hosts-below-set-is-refused-at-construction = {
       expr = mkKind {
         below = [ "low" ];
-        spawns.sideways = _self: _id: { };
+        spawns.sideways.produced = "sideways";
+        spawns.sideways.builder = _self: _id: { };
       } "host";
       expectedError = {
         type = "ThrownError";
@@ -548,7 +549,8 @@ in
     # that the order is what licenses it.
     test-a-spawn-with-no-below-at-all-is-refused = {
       expr = mkKind {
-        spawns.child = _self: _id: { };
+        spawns.child.produced = "child";
+        spawns.child.builder = _self: _id: { };
       } "host";
       expectedError = {
         type = "ThrownError";
@@ -1899,7 +1901,7 @@ in
         } selectionScope) "host";
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope: node 'host' declares child(ren) [\"alpha\",\"zeta\"] that the scope does not carry. `children` SELECTS among the nodes the scope already registered — it is not a growth channel, and a record under an unregistered key is a node minted while the attribute is read, whose kind nothing can have checked descends its host's. Growth is the spawn channel's: declare it on the host's kind as `mkKind { spawns = { <produced-kind> = builder; }; }` with the produced kind named in that kind's `below`. To keep a node here, register it in the scope and select it.";
+          msg = exactly "gen-scope: node 'host' declares child(ren) [\"alpha\",\"zeta\"] that the scope does not carry. `children` SELECTS among the nodes the scope already registered — it is not a growth channel, and a record under an unregistered key is a node minted while the attribute is read, whose kind nothing can have checked descends its host's. Growth is the spawn channel's: declare it on the host's kind as `mkKind { spawns.<label> = { produced = \"<kind>\"; builder = self: id: …; }; }` with the produced kind named in that kind's `below`. To keep a node here, register it in the scope and select it.";
         };
       };
 
@@ -1910,7 +1912,8 @@ in
         expr = builtins.seq (mkKinds [
           (mkKind {
             below = [ "a" ];
-            spawns.a = _self: _id: { };
+            spawns.a.produced = "a";
+            spawns.a.builder = _self: _id: { };
           } "a")
         ]) null;
         expectedError = {
@@ -2138,7 +2141,8 @@ in
           (genScope.mkKind { } "low")
           (genScope.mkKind {
             below = [ "low" ];
-            spawns.low = spawn;
+            spawns.low.produced = "low";
+            spawns.low.builder = spawn;
           } "high")
         ];
       runWith =
@@ -2200,7 +2204,7 @@ in
         };
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope.eval: `attributes` declares `derived-children` directly. A node expansion is declared on the KIND it expands FROM — `mkKind { spawns = { <produced-kind> = builder; }; }` — so that the produced kind is a registered name below its host's own and the descent is settled before anything fires. Written as a bare attribute the produced kind is whatever the body returns, which is a choice made at firing time and one nothing can check. Move the builder onto its host kind's `spawns`.";
+          msg = exactly "gen-scope.eval: `attributes` declares `derived-children` directly. A node expansion is declared on the KIND it expands FROM — `mkKind { spawns.<label> = { produced = \"<kind>\"; builder = self: id: …; }; }` — so that the produced kind is a registered name below its host's own and the descent is settled before anything fires. Written as a bare attribute the produced kind is whatever the body returns, which is a choice made at firing time and one nothing can check. Move the builder onto its host kind's `spawns`.";
         };
       };
 
@@ -2220,7 +2224,7 @@ in
         )) { };
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope: kind 'high' spawns 'low' and its builder returned a child 'h-c' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field.";
+          msg = exactly "gen-scope: kind 'high' spawns 'low' and its builder returned a child 'h-c' carrying its own `type`. A spawn does not choose its child's kind: the kind is the one its entry declares as `produced`, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field.";
         };
       };
 
@@ -2253,6 +2257,101 @@ in
       };
     };
 
+  # ── THE CONTAINMENT LABEL'S REFUSALS (den-hoag-f77c8 U1a) ──
+  # A builder asserting its child's `containedAs`, a `buildRoots` label naming no vertex or not a
+  # string, and the spawn entry's two shape refusals: the retired kind-keyed form and an entry that
+  # is not `{ produced; builder; }`. The admitting half is `tests/contained-as.nix`.
+  config.flake.testsError.contained-as-refusals =
+    let
+      hostWith =
+        spawns:
+        genScope.mkKind {
+          below = [ "needle" ];
+          inherit spawns;
+        } "host";
+      evWith =
+        spawns:
+        genScope.eval { parseParent = id: if id == "h" then null else "h"; } { children = _: _: { }; } (
+          genScope.buildRoots {
+            kinds = genScope.mkKinds [
+              (genScope.mkKind { } "needle")
+              (hostWith spawns)
+            ];
+            parentGraph = genScope.vertex "h";
+            types.h = "host";
+          }
+        );
+    in
+    {
+      test-A3-a-builder-asserting-the-label-is-refused-by-name = {
+        expr =
+          (evWith {
+            needles = {
+              produced = "needle";
+              builder = _: id: {
+                "${id}/x" = {
+                  containedAs = "asserted";
+                  decls = { };
+                };
+              };
+            };
+          }).node
+            "h/x";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: kind 'host' spawns 'needles' and its builder returned a child 'h/x' carrying its own `containedAs`. A spawn does not choose the label of its child's containment edge any more than its kind: the label is the key its entry is declared under, stamped by the substrate with `parent` — a label chosen while the spawn fires is one no declaration states. Drop the field.";
+        };
+      };
+      test-A5-a-root-label-naming-no-vertex-is-refused-by-name = {
+        expr =
+          (genScope.buildRoots {
+            parentGraph = genScope.vertex "r";
+            containedAs.nowhere = "hosts";
+          }).nodes;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope.buildRoots: `containedAs` labels ["nowhere"], which name no vertex of this scope. A label is stamped on the root it names, so it labels a vertex the contributions, `decls` or `types` declare.'';
+        };
+      };
+      test-A5-a-root-label-that-is-not-a-string-is-refused-by-name = {
+        expr =
+          (genScope.buildRoots {
+            parentGraph = genScope.vertex "r";
+            containedAs.r = 1;
+          }).nodes;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope.buildRoots: `containedAs` gives ["r"] a label that is not a string. A root's label is the name of the registry containing it.'';
+        };
+      };
+      test-A6-the-retired-kind-keyed-form-is-refused-by-name = {
+        expr = builtins.deepSeq (hostWith { needle = _: _: { }; }) null;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope.mkKind: kind 'host' declares spawn(s) ["needle"] in the retired kind-keyed form `<kind> = builder`. A spawn entry is keyed by its LABEL, the name of the containment edge its children hang under, and names the kind it produces: write `<label> = { produced = "<kind>"; builder = self: id: …; }`.'';
+        };
+      };
+      test-A6-an-entry-that-is-not-produced-and-builder-is-refused-by-name = {
+        expr = builtins.deepSeq (hostWith { needles.produced = "needle"; }) null;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope.mkKind: kind 'host' declares spawn entr(ies) ["needles"] that are not an attribute set of exactly `produced` (the produced kind's name, a string) and `builder`. A spawn entry is `<label> = { produced = "<kind>"; builder = self: id: …; }`.'';
+        };
+      };
+      test-A6-an-entry-producing-a-kind-outside-below-is-refused-by-name = {
+        expr = builtins.deepSeq (hostWith {
+          threads = {
+            produced = "thread";
+            builder = _: _: { };
+          };
+        }) null;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly ''gen-scope.mkKind: kind 'host' declares a spawn producing kind(s) ["thread"] that its `below` set ["needle"] does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there.'';
+        };
+      };
+    };
+
   # ── THE SPAWNED KEY'S CONTRACT, TWO COLLISION FLAVORS ──
   # A spawn builder's return is keyed by the child it names, and that key was checked against
   # neither the scope's own registered nodes nor a sibling spawn's own output — either one silently
@@ -2279,7 +2378,8 @@ in
                   (genScope.mkKind { } "leaf")
                   (genScope.mkKind {
                     below = [ "leaf" ];
-                    spawns.leaf = _self: id: {
+                    spawns.leaf.produced = "leaf";
+                    spawns.leaf.builder = _self: id: {
                       b = {
                         id = "b";
                         parent = id;
@@ -2319,14 +2419,16 @@ in
                       "leafOne"
                       "leafTwo"
                     ];
-                    spawns.leafOne = _self: id: {
+                    spawns.leafOne.produced = "leafOne";
+                    spawns.leafOne.builder = _self: id: {
                       shared = {
                         id = "shared";
                         parent = id;
                         decls = { };
                       };
                     };
-                    spawns.leafTwo = _self: id: {
+                    spawns.leafTwo.produced = "leafTwo";
+                    spawns.leafTwo.builder = _self: id: {
                       shared = {
                         id = "shared";
                         parent = id;
@@ -2363,7 +2465,8 @@ in
                   (genScope.mkKind { } "leaf")
                   (genScope.mkKind {
                     below = [ "leaf" ];
-                    spawns.leaf = _self: id: {
+                    spawns.leaf.produced = "leaf";
+                    spawns.leaf.builder = _self: id: {
                       warp = {
                         id = "weft";
                         parent = id;
@@ -3183,7 +3286,8 @@ in
           (mkKind { } "ep")
           (mkKind {
             below = [ "ep" ];
-            spawns.ep =
+            spawns.ep.produced = "ep";
+            spawns.ep.builder =
               circular
                 {
                   carrier = {
@@ -3201,7 +3305,7 @@ in
         ];
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope.mkKind: kind 'host' declares a spawn for kind(s) [\"ep\"] whose builder cannot be applied";
+          msg = exactly "gen-scope.mkKind: kind 'host' declares spawn entr(ies) [\"ep\"] whose builder cannot be applied";
         };
       };
 
@@ -3232,7 +3336,8 @@ in
           (mkKind { } "member")
           (mkKind {
             below = [ "member" ];
-            spawns.member = builder;
+            spawns.member.produced = "member";
+            spawns.member.builder = builder;
           } "host")
         ];
       scopeOf =
@@ -3754,7 +3859,8 @@ in
       # G4: `mkKind` BUILDS this, and what it builds is a declaration the fold cannot mint.
       selfNaming = genScope.mkKind {
         below = [ "k" ];
-        spawns.k = spawnOf "i";
+        spawns.k.produced = "k";
+        spawns.k.builder = spawnOf "i";
       } "k";
       declarationRegistry = {
         kinds.k = selfNaming;
@@ -3765,14 +3871,16 @@ in
         (genScope.mkKind { } "item")
         (genScope.mkKind {
           below = [ "item" ];
-          spawns.item = spawnOf "i";
+          spawns.item.produced = "item";
+          spawns.item.builder = spawnOf "i";
         } "k")
       ];
       upKinds = genScope.mkKinds [
         (genScope.mkKind { } "k")
         (genScope.mkKind {
           below = [ "k" ];
-          spawns.k = spawnOf "i";
+          spawns.k.produced = "k";
+          spawns.k.builder = spawnOf "i";
         } "item")
       ];
       merged = okKinds // {
@@ -3788,7 +3896,10 @@ in
           k = okKinds.kinds.k // {
             below = okKinds.kinds.k.below ++ [ "extra" ];
             spawns = okKinds.kinds.k.spawns // {
-              extra = spawnOf "e";
+              extra = {
+                produced = "extra";
+                builder = spawnOf "e";
+              };
             };
           };
         };
@@ -3822,7 +3933,7 @@ in
         "gen-scope.${entry}: `scope.kinds` must be a kind registry, whose `kinds` maps each name to the kind `mkKinds` minted under it; ${detail}. Mint the kinds with `mkKinds` over their declarations and pass the result.";
 
       declarationDetail = ''holds entries that are not minted kinds: ["`k` is a kind declaration built by `mkKind`, not a kind `mkKinds` minted: pass the declarations through `mkKinds`"]'';
-      mergeDetail = "files under 'k' a kind that differs from the kind 'k' that entry 'item' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations";
+      mergeDetail = "files under 'k' a kind that differs from the kind 'k' that entry 'item' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns` labels and their produced kinds, the `nta` key set, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations";
     in
     {
       # G4 — the EVALUATOR, on a hand-built registry of declarations: a TYPE refusal naming it.
@@ -3900,7 +4011,10 @@ in
               kinds = okKinds.kinds // {
                 k = okKinds.kinds.k // {
                   spawns = okKinds.kinds.k.spawns // {
-                    type = throw "a spawn builder the door must not force";
+                    type = {
+                      produced = "outside";
+                      builder = throw "a spawn builder the door must not force";
+                    };
                   };
                 };
               };
@@ -4047,7 +4161,8 @@ in
                 (mkKind { } "svc")
                 (mkKind {
                   below = [ "svc" ];
-                  spawns.svc = _self: id: {
+                  spawns.svc.produced = "svc";
+                  spawns.svc.builder = _self: id: {
                     kid = {
                       id = "kid";
                       parent = id;
@@ -4132,7 +4247,7 @@ in
         expectedError = {
           type = "ThrownError";
           msg = exactly (
-            registryRefusal "files under 'host' a kind that differs from the kind 'host' that entry 'leaf' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
+            registryRefusal "files under 'host' a kind that differs from the kind 'host' that entry 'leaf' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns` labels and their produced kinds, the `nta` key set, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
           );
         };
       };
@@ -4538,7 +4653,8 @@ in
               (mkKind { } "leaf")
               (mkKind {
                 below = [ "leaf" ];
-                spawns.leaf = _: _: {
+                spawns.leaf.produced = "leaf";
+                spawns.leaf.builder = _: _: {
                   ${c} = {
                     id = c;
                     decls = { };

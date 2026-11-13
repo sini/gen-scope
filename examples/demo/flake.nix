@@ -744,7 +744,8 @@
               (genScope.mkKind { } "audit")
               (genScope.mkKind {
                 below = [ "audit" ];
-                spawns.audit =
+                spawns.audit.produced = "audit";
+                spawns.audit.builder =
                   self: id:
                   lib.optionalAttrs (((self.node id).decls.budget or 0) > 150000) {
                     "audit:${id}" = {

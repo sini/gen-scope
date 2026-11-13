@@ -32,7 +32,8 @@ let
     (genScope.mkKind { } "rollout")
     (genScope.mkKind {
       below = [ "rollout" ];
-      spawns.rollout =
+      spawns.rollout.produced = "rollout";
+      spawns.rollout.builder =
         self: id:
         if (self.node id).decls.beta-features or false then
           {

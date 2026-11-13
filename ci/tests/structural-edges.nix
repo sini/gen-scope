@@ -44,7 +44,8 @@ let
     (genScope.mkKind { } "d")
     (genScope.mkKind {
       below = [ "d" ];
-      spawns.d = spawnOne;
+      spawns.d.produced = "d";
+      spawns.d.builder = spawnOne;
     } "t")
   ];
 

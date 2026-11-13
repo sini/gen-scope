@@ -678,7 +678,7 @@ let
     if unregistered == [ ] then
       records
     else
-      throw "gen-scope: node '${id}' declares child(ren) ${builtins.toJSON unregistered} that the scope does not carry. `children` SELECTS among the nodes the scope already registered — it is not a growth channel, and a record under an unregistered key is a node minted while the attribute is read, whose kind nothing can have checked descends its host's. Growth is the spawn channel's: declare it on the host's kind as `mkKind { spawns = { <produced-kind> = builder; }; }` with the produced kind named in that kind's `below`. To keep a node here, register it in the scope and select it.";
+      throw "gen-scope: node '${id}' declares child(ren) ${builtins.toJSON unregistered} that the scope does not carry. `children` SELECTS among the nodes the scope already registered — it is not a growth channel, and a record under an unregistered key is a node minted while the attribute is read, whose kind nothing can have checked descends its host's. Growth is the spawn channel's: declare it on the host's kind as `mkKind { spawns.<label> = { produced = \"<kind>\"; builder = self: id: …; }; }` with the produced kind named in that kind's `below`. To keep a node here, register it in the scope and select it.";
 
   spawnFrom =
     kinds: nodes: ev: id:
@@ -691,55 +691,59 @@ let
       hostKind = (ev.node id).type or null;
       spawns = if host == null then { } else host.spawns;
       stamped =
-        produced:
+        label:
         let
+          inherit (spawns.${label}) produced builder;
           # The produced kind is the record the host's kind resolved under the key. A key with no
           # resolved record is a kind record updated with `//` after `mkKinds` minted it, and it is
           # refused here, where the host and the key can both be named, before anything is stamped.
           producedKind =
             host.belowKinds.${produced}
-              or (throw "gen-scope: node '${id}' of kind '${hostKind}' spawns '${produced}', and its kind resolves no kind '${produced}' in its `below`: the kind record was updated after `mkKinds` minted it. A spawned node's kind is the minted record its host's kind resolved, so a spawn with none has no kind to stamp. Declare the kinds through `mkKinds` rather than editing a minted kind.");
-          builder = spawns.${produced};
+              or (throw "gen-scope: node '${id}' of kind '${hostKind}' spawns '${label}', and its kind resolves no kind '${produced}' in its `below`: the kind record was updated after `mkKinds` minted it. A spawned node's kind is the minted record its host's kind resolved, so a spawn with none has no kind to stamp. Declare the kinds through `mkKinds` rather than editing a minted kind.");
           raw =
             if isCircularDecl builder then
-              throw "gen-scope: kind '${hostKind}' declares spawn '${produced}' whose builder is a circular declaration. A spawn builder computes the NODE SET, and wrapping it in `circular` makes that set a fixed point of its own iterate — the per-step growth the spawn-read restriction refuses. A spawned node's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function."
+              throw "gen-scope: kind '${hostKind}' declares spawn '${label}' whose builder is a circular declaration. A spawn builder computes the NODE SET, and wrapping it in `circular` makes that set a fixed point of its own iterate — the per-step growth the spawn-read restriction refuses. A spawned node's ATTRIBUTES may be circular; its EXISTENCE may not. Declare the builder as a plain function."
             else
-              childSetOf "kind '${hostKind}' spawn '${produced}'" (builder (spawnHandle ev) id);
+              childSetOf "kind '${hostKind}' spawn '${label}'" (builder (spawnHandle ev) id);
           # Checked against `raw`'s own KEYS — eager, and forced as WHNF the moment `stamped` is —
           # rather than inside the `mapAttrs` value below: a key colliding with an ALREADY-REGISTERED
           # node is a key `resolveNode` never re-derives past its roots-first short-circuit, so a
           # check living in that lazy per-record thunk would never be demanded and never fire for
           # exactly the case it exists to catch.
           collidingWithRegistered = builtins.filter (childId: nodes ? ${childId}) raw.nodeOrder;
-          # The fields the substrate stamps, built once per produced kind and shared by its children.
-          # The kind's value (`kindValue`, den-hoag-l0y) is stamped only when the kind declares one,
-          # decided here and never per child.
+          # The fields the substrate stamps, built once per entry and shared by its children. The
+          # entry's label is the containment edge's (`containedAs`), stamped with the `parent` it
+          # labels. The kind's value (`kindValue`, den-hoag-l0y) is stamped only when the kind
+          # declares one, decided here and never per child.
           stamp = {
             type = produced;
             parent = id;
+            containedAs = label;
             ${kindField} = producedKind;
           }
           // (if producedKind.kindValue == null then { } else { inherit (producedKind) kindValue; });
         in
         builtins.seq producedKind (
           if collidingWithRegistered != [ ] then
-            throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${builtins.head collidingWithRegistered}', which is already a registered node's id. A spawned key mints an identity nothing declared; colliding with a key the scope already carries discards whichever record materializes second, silently. Choose a key no registered node already carries."
+            throw "gen-scope: kind '${hostKind}' spawns '${label}' and its builder returned a child '${builtins.head collidingWithRegistered}', which is already a registered node's id. A spawned key mints an identity nothing declared; colliding with a key the scope already carries discards whichever record materializes second, silently. Choose a key no registered node already carries."
           else
             raw
             // {
               nodes = builtins.mapAttrs (
                 childId: record:
                 if record ? type then
-                  throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the key the builder was declared under, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
+                  throw "gen-scope: kind '${hostKind}' spawns '${label}' and its builder returned a child '${childId}' carrying its own `type`. A spawn does not choose its child's kind: the kind is the one its entry declares as `produced`, and the substrate stamps it from there — a kind chosen while the spawn fires is one nothing can have checked descends. Drop the field."
                 else if record ? kindValue then
-                  throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' carrying its own `kindValue`. A spawn does not choose its child's kind value any more than its kind: the value is the one the produced kind declares (`mkKind { kindValue = …; }`), stamped by the substrate with its `type` — a value chosen while the spawn fires is one no kind declared. Drop the field."
+                  throw "gen-scope: kind '${hostKind}' spawns '${label}' and its builder returned a child '${childId}' carrying its own `kindValue`. A spawn does not choose its child's kind value any more than its kind: the value is the one the produced kind declares (`mkKind { kindValue = …; }`), stamped by the substrate with its `type` — a value chosen while the spawn fires is one no kind declared. Drop the field."
+                else if record ? containedAs then
+                  throw "gen-scope: kind '${hostKind}' spawns '${label}' and its builder returned a child '${childId}' carrying its own `containedAs`. A spawn does not choose the label of its child's containment edge any more than its kind: the label is the key its entry is declared under, stamped by the substrate with `parent` — a label chosen while the spawn fires is one no declaration states. Drop the field."
                 else if (record.parent or id) != id then
-                  throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
+                  throw "gen-scope: kind '${hostKind}' spawns '${label}' and its builder returned a child '${childId}' whose `parent` is '${toString record.parent}' rather than its host '${id}'. A spawn descends one level of the registered kind order, so the host IS the parent: the substrate stamps the edge from the host id in the same act that stamps `type` from the declaration key, and a builder asserting a different containment is asserting an edge the registry never checked. Drop the field."
                 # The key IS the identity: collisions are settled on `raw`'s keys, and the evaluator
                 # reads `id` off the record, so a second copy that disagrees is an identity nothing
                 # checked. Stamped from the key like `parent` from the host.
                 else if (record.id or childId) != childId then
-                  throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${childId}' whose `id` is ${
+                  throw "gen-scope: kind '${hostKind}' spawns '${label}' and its builder returned a child '${childId}' whose `id` is ${
                     if builtins.isString record.id then "'${record.id}'" else "a ${builtins.typeOf record.id}"
                   } rather than its key '${childId}'. A spawned child's identity is the key its builder returned it under: the substrate settles collisions on that key and stamps `id` from it, so a builder asserting a different id is naming a node the key set never registered. Drop the field."
                 else
@@ -749,19 +753,32 @@ let
         );
     in
     prelude.foldl' (
-      acc: produced:
+      acc: label:
       let
-        next = stamped produced;
+        next = stamped label;
         collidingWithSibling = builtins.filter (childId: acc.nodes ? ${childId}) next.nodeOrder;
       in
       if collidingWithSibling != [ ] then
-        throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${builtins.head collidingWithSibling}', which an earlier spawn on this same host already produced. Two spawns sharing a key on one host silently overwrite one another. Choose a key none of this host's own spawns already produced."
+        throw "gen-scope: kind '${hostKind}' spawns '${label}' and its builder returned a child '${builtins.head collidingWithSibling}', which an earlier spawn on this same host already produced. Two spawns sharing a key on one host silently overwrite one another. Choose a key none of this host's own spawns already produced."
       else
         {
           nodes = acc.nodes // next.nodes;
           nodeOrder = acc.nodeOrder ++ next.nodeOrder;
         }
-    ) noChildren (if host == null then [ ] else builtins.filter (k: spawns ? ${k}) host.below);
+    ) noChildren (if host == null then [ ] else spawnOrder spawns host.below);
+
+  # The order a host's spawn entries compose in: by `below` position of their produced kind, then
+  # by label within one kind. `attrNames` is bytewise, and `groupBy` keeps its input's order, so
+  # within a kind the labels are bytewise — the only order an attribute set carries.
+  spawnOrder =
+    spawns: below:
+    if { } == spawns then
+      [ ]
+    else
+      let
+        byKind = builtins.groupBy (l: spawns.${l}.produced) (builtins.attrNames spawns);
+      in
+      prelude.concatMap (k: byKind.${k} or [ ]) below;
 
   # ── THE `nta` CHANNEL — Vogt, Swierstra & Kuiper 1989 Def. 3.14's recursive form, beside `spawns` ──
   #
@@ -783,7 +800,7 @@ let
   # evaluated attribute of the host whose value is a list of definitions) and a non-empty path `at`
   # of attribute names and list indices inside it. The substrate reads the addressed sub-value; a
   # builder can only point into its host's definitions, so a constant-seed builder is inexpressible.
-  # The child record is STAMPED: `{ id; parent = host; type = <host's kind>; decls.seed = [ {
+  # The child record is STAMPED: `{ id; parent = host; containedAs = <NTA name>; type = <host's kind>; decls.seed = [ {
   # address; value; } … ]; }` — `decls` stays an attribute set as every node's does, and each seed
   # element keeps its address beside its value, so the definition it came from stays reachable from
   # the host. The identifier is minted from (host, NTA name, group, key), never from the seed.
@@ -1011,6 +1028,9 @@ let
           throw "${at hostKind id name}: group '${group}' key '${builtins.head colliding}' mints the identifier '${
             mintNtaId id name group (builtins.head colliding)
           }', which is already a registered node's. A registered id is answered from the scope's roots, so this child would be discarded silently. Register the node under another id."
+        # The child's containment label (`containedAs`) is its NTA name, the `name` coordinate its
+        # identifier already carries, stamped so a reader takes one field on both channels and never
+        # decodes an identifier.
         # The host kind's value (`kindValue`, den-hoag-l0y) is stamped only when that kind declares
         # one, and the child constructor is chosen here, once per group, never tested per child: an
         # `nta` kind nests (gen-merge's module tree), so a per-child charge compounds per tree.
@@ -1021,6 +1041,7 @@ let
           builtins.mapAttrs (key: seed: {
             id = "${ntaIdPrefix}${toString (builtins.stringLength id)}:${id}${toString (builtins.stringLength name)}:${name}${toString (builtins.stringLength group)}:${group}${toString (builtins.stringLength key)}:${key}";
             parent = id;
+            containedAs = name;
             type = hostKind;
             ${kindField} = host;
             decls.seed = seedOf hostAttr hostKind id name group key seed;
@@ -1029,6 +1050,7 @@ let
           builtins.mapAttrs (key: seed: {
             id = "${ntaIdPrefix}${toString (builtins.stringLength id)}:${id}${toString (builtins.stringLength name)}:${name}${toString (builtins.stringLength group)}:${group}${toString (builtins.stringLength key)}:${key}";
             parent = id;
+            containedAs = name;
             type = hostKind;
             ${kindField} = host;
             inherit (host) kindValue;
@@ -1166,7 +1188,7 @@ let
     if attributes ? ${selectionChannel} && isCircularDecl attributes.${selectionChannel} then
       throw "gen-scope.${entry}: `${selectionChannel}` is declared circular, and a child-bearing attribute cannot be. The ground is bootstrap, not growth: a shared round's universe is derived from the materialized node set, the materialization walk reads the child-bearing attributes, and a circular one there would need a round whose bound needs the walk — measured as an uncatchable infinite recursion with this refusal removed. Every other structural attribute may be circular; this one selects the node set the universe is derived from."
     else if attributes ? ${spawnChannel} then
-      throw "gen-scope.${entry}: `attributes` declares `${spawnChannel}` directly. A node expansion is declared on the KIND it expands FROM — `mkKind { spawns = { <produced-kind> = builder; }; }` — so that the produced kind is a registered name below its host's own and the descent is settled before anything fires. Written as a bare attribute the produced kind is whatever the body returns, which is a choice made at firing time and one nothing can check. Move the builder onto its host kind's `spawns`."
+      throw "gen-scope.${entry}: `attributes` declares `${spawnChannel}` directly. A node expansion is declared on the KIND it expands FROM — `mkKind { spawns.<label> = { produced = \"<kind>\"; builder = self: id: …; }; }` — so that the produced kind is a registered name below its host's own and the descent is settled before anything fires. Written as a bare attribute the produced kind is whatever the body returns, which is a choice made at firing time and one nothing can check. Move the builder onto its host kind's `spawns`."
     else if attributes ? ${ntaChannel} then
       throw "gen-scope.${entry}: nta: `attributes` declares `${ntaChannel}` directly. An `nta` is declared on the KIND it grows from — `mkKind { nta = { <name> = builder; }; }` — so its children are stamped with the host's kind and minted from the host's coordinates. Move the builder onto its host kind's `nta`."
     else if kinds == null then

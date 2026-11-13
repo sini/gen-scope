@@ -445,15 +445,25 @@ let
       # kinds it can expand into, and the substrate stamps the produced kind from the KEY rather than
       # reading it off whatever the builder returned.
       #
-      # Every declared key must already be a `below` name, so descent is not a separate condition to
-      # check: `mkKinds` resolves each `below` name to a kind minted strictly earlier, whose `depth`
-      # is strictly smaller. A NON-DESCENDING SPAWN IS THEREFORE INEXPRESSIBLE — no kind carrying it
-      # can be minted — rather than admitted and refused when it fires. That is the
+      # Every declared produced kind must already be a `below` name, so descent is not a separate
+      # condition to check: `mkKinds` resolves each `below` name to a kind minted strictly earlier,
+      # whose `depth` is strictly smaller. A NON-DESCENDING SPAWN IS THEREFORE INEXPRESSIBLE — no kind
+      # carrying it can be minted — rather than admitted and refused when it fires. That is the
       # same shape the emission guard already enforces for CLAIMS, where a sub-claim outside its
       # emitter's `below` set is a topology error; nodes and claims now expand under one rule.
-      spawnKinds = if isAttrs spawns then attrNames spawns else [ ];
-      undeclaredSpawn = filter (k: !(elem k below)) spawnKinds;
-      unbuildableSpawn = filter (k: !(callable spawns.${k})) spawnKinds;
+      #
+      # ── THE ENTRY IS KEYED BY ITS LABEL ──
+      # An entry is `<label> = { produced = <kind>; builder = self: id: …; }`. The key is the LABEL
+      # of the containment edge the entry's children hang under (their stamped `containedAs`), and
+      # the entry names its produced kind, so two registries of one kind on one host are two labels
+      # and two edges rather than one shared builder under the kind's name.
+      spawnLabels = if isAttrs spawns then attrNames spawns else [ ];
+      # The retired kind-keyed form `<kind> = builder` is named apart from a merely malformed entry:
+      # it is the form every pre-label declaration wrote, and its fix is a rewrite, not a typo.
+      retiredSpawn = filter (l: callable spawns.${l}) spawnLabels;
+      malformedSpawn = filter (l: spawnEntryDefect spawns.${l}) spawnLabels;
+      undeclaredSpawn = unique (filter (k: !(elem k below)) (map (l: spawns.${l}.produced) spawnLabels));
+      unbuildableSpawn = filter (l: !(callable spawns.${l}.builder)) spawnLabels;
       # ── THE `nta` DECLARATION: the recursive NTA form, beside `spawns` and not inside it ──
       # `nta` is Vogt, Swierstra & Kuiper 1989 Def. 3.14's recursive `F → F̄` form, whose children
       # are of the HOST's own kind; `spawns` above is the non-recursive fragment Lemma 3.2 / Söderberg
@@ -495,11 +505,15 @@ let
     else if resolve != null && !(callable resolve) then
       throw "gen-scope.mkKind: kind '${name}' declares a `resolve` that cannot be applied (it is ${prelude.applicableKindOf resolve})"
     else if !isAttrs spawns then
-      throw "gen-scope.mkKind: kind '${name}' declares a `spawns` that is a ${typeOf spawns} rather than an attribute set keyed by the kind each builder produces"
+      throw "gen-scope.mkKind: kind '${name}' declares a `spawns` that is a ${typeOf spawns} rather than an attribute set of entries keyed by label, `<label> = { produced = \"<kind>\"; builder = self: id: …; }`"
+    else if retiredSpawn != [ ] then
+      throw "gen-scope.mkKind: kind '${name}' declares spawn(s) ${toJSON retiredSpawn} in the retired kind-keyed form `<kind> = builder`. A spawn entry is keyed by its LABEL, the name of the containment edge its children hang under, and names the kind it produces: write `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
+    else if malformedSpawn != [ ] then
+      throw "gen-scope.mkKind: kind '${name}' declares spawn entr(ies) ${toJSON malformedSpawn} that are not an attribute set of exactly `produced` (the produced kind's name, a string) and `builder`. A spawn entry is `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
     else if undeclaredSpawn != [ ] then
       throw "gen-scope.mkKind: kind '${name}' declares a spawn producing kind(s) ${toJSON undeclaredSpawn} that its `below` set ${toJSON below} does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there."
     else if unbuildableSpawn != [ ] then
-      throw "gen-scope.mkKind: kind '${name}' declares a spawn for kind(s) ${toJSON unbuildableSpawn} whose builder cannot be applied"
+      throw "gen-scope.mkKind: kind '${name}' declares spawn entr(ies) ${toJSON unbuildableSpawn} whose builder cannot be applied"
     else if !isAttrs nta then
       throw "gen-scope.mkKind: nta: kind '${name}' declares an `nta` that is a ${typeOf nta} rather than an attribute set of builders keyed by NTA name"
     else if circularNta != [ ] then
@@ -545,6 +559,20 @@ let
   # bound rather than written a second time: the circular carrier decides the same property of its
   # `leq`, and two copies of a discipline agree only for as long as someone keeps them in step.
   callable = prelude.isApplicable;
+
+  # True when a spawn entry is not `{ produced = <string>; builder; }`. It reads the entry's key set
+  # and `produced`, never `builder`, so a refusal fires before any builder is forced.
+  spawnEntryDefect =
+    e:
+    !(
+      isAttrs e
+      &&
+        attrNames e == [
+          "builder"
+          "produced"
+        ]
+      && isString e.produced
+    );
 
   # The circular-declaration classifier, the evaluator's own (`lib/eval.nix`), repeated as the one
   # line it is because `mkKind` refuses a circular `nta` builder before any evaluator exists. The
@@ -624,9 +652,11 @@ let
       "carries a `resolve` that cannot be applied"
     else if !isAttrs k.spawns then
       "carries a `spawns` that is not an attribute set"
-    else if { } != k.spawns && !(all (p: elem p k.below) (attrNames k.spawns)) then
+    else if { } != k.spawns && any (l: spawnEntryDefect k.spawns.${l}) (attrNames k.spawns) then
+      "carries a spawn entry that is not `{ produced; builder; }`"
+    else if { } != k.spawns && !(all (l: elem k.spawns.${l}.produced k.below) (attrNames k.spawns)) then
       "declares a spawn outside its own `below` set"
-    else if { } != k.spawns && !(all (p: callable k.spawns.${p}) (attrNames k.spawns)) then
+    else if { } != k.spawns && !(all (l: callable k.spawns.${l}.builder) (attrNames k.spawns)) then
       "carries a spawn builder that cannot be applied"
     else if !(k ? nta) then
       "nta: carries no `nta` field"
@@ -720,7 +750,7 @@ let
   # but a registry filing two different kinds under one name gives a reader looking a spawned
   # node's kind up by name a different kind from the one the evaluator follows, and the caller's
   # declared expansion silently does not happen. So it is refused by name. Two kinds are compared on
-  # `name`, `below`, `depth`, the key sets of `spawns` and `nta`, the SET of on-demand `nta` names (in any
+  # `name`, `below`, `depth`, the label sets of `spawns` with each entry's `produced`, the key set of `nta`, the SET of on-demand `nta` names (in any
   # order, as declared), and their kind values' MARKS;
   # builders are functions and are not compared, so two kinds differing only in a builder's body are
   # one kind to this door. The kind values are decided by `sameKindValue` (the mark, then the sealed
@@ -738,6 +768,9 @@ let
     && a.below == b.below
     && a.depth == b.depth
     && attrNames a.spawns == attrNames b.spawns
+    &&
+      map (l: a.spawns.${l}.produced) (attrNames a.spawns)
+      == map (l: b.spawns.${l}.produced) (attrNames b.spawns)
     && attrNames a.nta == attrNames b.nta
     && sameSet (a.ntaOnDemand or [ ]) (b.ntaOnDemand or [ ])
     &&
@@ -811,7 +844,7 @@ let
       else if absent != [ ] then
         "holds kind '${(head absent).host}', whose resolved `below` carries kind '${(head absent).name}', which the registry does not"
       else if split != [ ] then
-        "files under '${(head split).name}' a kind that differs from the kind '${(head split).name}' that entry '${(head split).host}' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns`/`nta` key sets, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
+        "files under '${(head split).name}' a kind that differs from the kind '${(head split).name}' that entry '${(head split).host}' resolved in its `below` (compared on `name`, `below`, `depth`, the `spawns` labels and their produced kinds, the `nta` key set, the on-demand `nta` names and the kind value). Two different kinds share one name — a merge of registries built from different declarations"
       else
         null;
 

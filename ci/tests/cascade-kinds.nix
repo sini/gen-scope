@@ -606,7 +606,8 @@ in
         builtins.attrNames
           (genScope.mkKind {
             below = [ "child" ];
-            spawns.child = _self: _id: { };
+            spawns.child.produced = "child";
+            spawns.child.builder = _self: _id: { };
           } "host").spawns;
       expected = [ "child" ];
     };
@@ -620,7 +621,8 @@ in
         !(builtins.tryEval (
           builtins.deepSeq (genScope.mkKind {
             below = [ "low" ];
-            spawns.sideways = _self: _id: { };
+            spawns.sideways.produced = "sideways";
+            spawns.sideways.builder = _self: _id: { };
           } "host") null
         )).success;
       expected = true;
@@ -629,7 +631,8 @@ in
       expr =
         !(builtins.tryEval (
           builtins.deepSeq (genScope.mkKind {
-            spawns.child = _self: _id: { };
+            spawns.child.produced = "child";
+            spawns.child.builder = _self: _id: { };
           } "host") null
         )).success;
       expected = true;

@@ -40,7 +40,15 @@ let
     mkKinds [
       (mkKind { } "member")
       (mkKind { } "agent")
-      (mkKind { inherit below spawns; } "host")
+      # Each entry is labelled with the kind it produces, so the labels keep that kind's place:
+      # `member`/`agent` sort bytewise against `below`, which is what the order cells pin.
+      (mkKind {
+        inherit below;
+        spawns = builtins.mapAttrs (kind: builder: {
+          produced = kind;
+          inherit builder;
+        }) spawns;
+      } "host")
     ];
   scopeOf =
     kinds:
@@ -169,7 +177,8 @@ let
     (mkKind { } "leaf")
     (mkKind {
       below = [ "leaf" ];
-      spawns.leaf =
+      spawns.leaf.produced = "leaf";
+      spawns.leaf.builder =
         _: id:
         if id == "r" then
           [ ]

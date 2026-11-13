@@ -122,16 +122,16 @@ Nix attrset VALUES are lazy but KEYS are eager. Function application is never me
 
 ## Terminology
 
-| Term             | Definition                                                                                                                |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Nodes            | Minimal descriptors: `{ id, type, parent, decls }`                                                                        |
-| Roots            | Entry-point nodes (from `buildRoots` or hand-written)                                                                     |
-| Children         | The nodes the `children` attribute SELECTS from the scope's own node set — a selection, never a mint                      |
-| Derived Children | Nodes GROWN by `derived-children`, declared as `spawns.<produced-kind>` on the host kind (builder reads `self.node` only) |
-| Attributes       | Computed values on nodes — demand-driven, memoized via `_eval`                                                            |
-| Combinators      | Attribute constructors: `inherit'`, `inheritAll`, `inheritSet`, `circular`, `collectionAttr`; resolution: `resolve`       |
-| Tier 1           | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth)                                                     |
-| Tier 2           | Materialization: `self.allNodes` — O(n), forces full tree                                                                 |
+| Term             | Definition                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Nodes            | Minimal descriptors: `{ id, type, parent, decls }`                                                                                         |
+| Roots            | Entry-point nodes (from `buildRoots` or hand-written)                                                                                      |
+| Children         | The nodes the `children` attribute SELECTS from the scope's own node set — a selection, never a mint                                       |
+| Derived Children | Nodes GROWN by `derived-children`, declared as `spawns.<label> = { produced; builder; }` on the host kind (builder reads `self.node` only) |
+| Attributes       | Computed values on nodes — demand-driven, memoized via `_eval`                                                                             |
+| Combinators      | Attribute constructors: `inherit'`, `inheritAll`, `inheritSet`, `circular`, `collectionAttr`; resolution: `resolve`                        |
+| Tier 1           | Navigation: `self.node id`, `self.get id attrName` — O(1) or O(depth)                                                                      |
+| Tier 2           | Materialization: `self.allNodes` — O(n), forces full tree                                                                                  |
 
 ## Example
 
@@ -178,7 +178,7 @@ in {
 
 ## HOAG: Dynamic Tree Expansion
 
-**There is ONE growth channel, and `children` is not it.** `children` SELECTS among the nodes the scope already carries; a record under a key the scope does not carry is refused by name. Everything that grows the node set is declared as `spawns.<produced-kind>` on the kind it expands from, which is what makes the descent guarantee below cover *all* growth by construction rather than one channel of two.
+**There is ONE growth channel, and `children` is not it.** `children` SELECTS among the nodes the scope already carries; a record under a key the scope does not carry is refused by name. Everything that grows the node set is declared as a `spawns` entry on the kind it expands from, which is what makes the descent guarantee below cover *all* growth by construction rather than one channel of two.
 
 ```nix
 children = _self: id: lib.filterAttrs (_: n: n.parent == id) scope.nodes;
@@ -203,11 +203,14 @@ kinds = mkKinds [
   (mkKind { } "admin-user")
   (mkKind {
     below = [ "admin-user" ];                # the ORDER is what licenses the expansion
-    spawns.admin-user = self: id:            # the KEY is the produced kind
-      let host = (self.node id).decls; in    # the spawn handle serves `node`, never `get`
-      if builtins.elem "alice" (host.sudoers or [ ])
-      then { "user:alice-admin@${id}" = { decls.user = "alice"; }; }   # `id`, `type`, `parent` are stamped
-      else { };
+    spawns.admins = {                        # the KEY is the edge's label, stamped as `containedAs`
+      produced = "admin-user";               # the produced kind, which must be in `below`
+      builder = self: id:
+        let host = (self.node id).decls; in  # the spawn handle serves `node`, never `get`
+        if builtins.elem "alice" (host.sudoers or [ ])
+        then { "user:alice-admin@${id}" = { decls.user = "alice"; }; }   # `id`, `type`, `parent`, `containedAs` are stamped
+        else { };
+    };
   } "host")
 ];
 roots = buildRoots {
@@ -223,8 +226,8 @@ roots = buildRoots {
 So:
 
 - **The produced kind must be `below` the host's**, refused at `mkKind` where the declaration is built. A non-descending expansion is **inexpressible**, not detected: `mkKinds` mints each kind against the kinds declared before it, so every resolved `below` edge strictly decreases `depth`, and nothing at evaluation time compares two ranks.
-- **The substrate stamps `type`** from the key the builder is declared under, `parent` from the host, and `id` from the key the builder returned the child under, and stamps the produced kind's **record** beside them: the record the host's kind resolved under that key when it was minted. The evaluator follows that record, never a lookup of `type` in the registry, so no registry value — a `//` merge of two registries included — can re-route a spawn chain.
-  A builder returning a record that carries its own `type` is refused by name — that field is the only way a firing-time kind choice could still be attempted. A `parent` other than the host, or an `id` other than the child's key, is refused by name too: the key is the identity, and a second copy that disagrees names a node nothing registered.
+- **The substrate stamps `type`** from the entry's `produced`, `containedAs` from the entry's label, `parent` from the host, and `id` from the key the builder returned the child under, and stamps the produced kind's **record** beside them: the record the host's kind resolved under that kind's name when it was minted. The evaluator follows that record, never a lookup of `type` in the registry, so no registry value — a `//` merge of two registries included — can re-route a spawn chain.
+  A builder returning a record that carries its own `type` is refused by name — that field is the only way a firing-time kind choice could still be attempted. A `parent` other than the host, a `containedAs` of its own, or an `id` other than the child's key, is refused by name too: the key is the identity, and a second copy that disagrees names a node nothing registered.
 - **A node of no kind spawns nothing**, and that is the honest reading rather than a hole: an expansion descends a rank, and a node outside the kind vocabulary has none.
 - **A builder states its children's order by returning a list.** A builder (or a `children` body) returns either a list of `{ name; value; }` — `builtins.listToAttrs`' own input shape — whose order is the list's, or an attribute set keyed by child id, whose order is its names'. The key is the child's identity either way, so a list naming one child twice is refused by name, as is an entry that is not a `{ name; value; }` pair and a value that is neither shape. `get id "derived-children"` still answers the identity-keyed map; the order is read through `childrenIds`, `siblings`, `descendants`, `collectionAttr` and `allNodeIds`.
 
@@ -409,6 +412,7 @@ buildRoots {
   types ? {};            # { nodeId → registered kind NAME }
   kinds ? null;          # the registry from `mkKinds` that `types` names into
   strict ? true;         # true: deepSeq validates parent uniqueness upfront
+  containedAs ? {};      # { nodeId → label }: the root's containing registry, stamped as `containedAs`
 }
 ```
 
@@ -417,6 +421,8 @@ Returns `{ nodes; nodeOrder; kinds; }` — the node descriptors `{ id, type, par
 **Node kinds register, and both directions of the absence are refused.** `type` used to be `types.${id} or null` and nothing else: a per-id free-form string with no registry behind it, so any spelling was a kind and the kind set grew as freely as the node set. A well-founded order over kinds cannot live on a set like that — an order needs a domain. So declaring `types` **with no `kinds` registry** is refused by name, and so is a spelling the registry does not carry. A caller declaring no types at all is unaffected and pays nothing: there is no kind to be unregistered, and the order over an empty vocabulary is trivially well founded. What such a caller cannot do is expand, because an expansion descends a rank and a node with no kind has none.
 
 The registry travels **on** the returned record rather than as a second formal at `eval`, so the vocabulary a node's kind was validated against and the vocabulary its expansions are declared in are one value.
+
+**Every containment edge carries its label, as the field `containedAs`.** A root's is the label `containedAs` gives it (the registry containing it), stamped on exactly the roots it names; a spawned child's is its entry's label; an `nta` child's is its NTA name. The field is stamped, never read off an identifier, and a spawn builder asserting it is refused by name as it is for `type`. A scope declaring no root label keeps its root records field for field and pays nothing per node; a `containedAs` key naming no vertex, or a label that is not a string, is refused by name.
 
 **`imports` and `parent` are reserved beside them**: they are the calculus's letters for the same two relations (`resolve` reads `imports` from the import relation and `parent` from the node record, never from an `edges-` attribute), so a lifted label spelled like either would be held under `__edges` and walked by nothing. **`P` and `I` are reserved labels, and `edgeGraphs` is refused by name if it carries either.** They are this constructor's own names for the containment and import relations, whose edges arrive as `parentGraph` and `importGraph`. The caller's labels merge *last*, so a caller offering `P` or `I` would replace the argument it passed in the same call — and `P` is not an ordinary label in any case: the partial-function guard is stated of it by name (Neron 2015 §2.2) and the label index is built from every label except it. The refusal names the offending label and the argument that owns it. Every other label is the caller's, and the reservation does not depend on whether the corresponding argument was supplied.
 
@@ -934,9 +940,12 @@ mkKind {
                      #   whose `resources` (a set), `wiring` (a set or a list) and `claims` (a list)
                      #   are each optional, and which is CLOSED to those three — any other key
                      #   is a named refusal, while `{ }` remains a legitimate empty answer
-  spawns ? { };      # produced-kind → builder. Every key must be in `below`; the substrate stamps
-                     #   `type` from the key, so a builder cannot choose its child's kind, and a
-                     #   child's `id` from the key it is returned under
+  spawns ? { };      # label → { produced = <kind>; builder = self: id: …; }. Every `produced` must
+                     #   be in `below`; the substrate stamps `type` from `produced` and
+                     #   `containedAs` from the label, so a builder chooses neither, and a child's
+                     #   `id` from the key it is returned under. Entries compose in `below` order
+                     #   of their `produced`, then by label (bytewise) within one kind; the retired
+                     #   kind-keyed form `<kind> = builder` is refused by name
   nta ? { };         # name → builder: the recursive NTA channel, children of the host's own kind
   dedupKey ? null;   # groups claimants; required together with `foldFragments`
   foldFragments ? null;  # merges a group's resource fragments, handed as contributor edges
@@ -957,7 +966,7 @@ mkKind {
 
 **`fold` is retired, by name.** A kind's fold is handed contributor edges `[ { site; value; } ]` (the cascade writes each `site` as `claim at path <json>`), where the retired field was handed bare values. A fold written to the old contract does not fail on edges — `_: vs: head vs` returns the first edge record as the resource, at rc 0 — so the field was renamed rather than re-typed, and `fold` stays in `mkKind`'s options and at the kind-record door only to refuse by name, before any claim runs.
 
-**A `spawns` key outside `below` is refused at construction.** That is what makes a non-descending node expansion inexpressible rather than detectable — see [`derived-children`](#derived-children--second-stage-synthesis-declared-on-the-kind-it-expands-from).
+**A `spawns` entry producing a kind outside `below` is refused at construction.** That is what makes a non-descending node expansion inexpressible rather than detectable — see [`derived-children`](#derived-children--second-stage-synthesis-declared-on-the-kind-it-expands-from).
 
 **Kinds are minted by a staged fold, and the depth is its witness.** Krishnan & Van Wyk (2012, Fig. 7 and Theorem 3) make termination follow from the EXISTENCE of a well-founded ordering on the nonterminals; Söderberg & Hedin (2013) §7 restate it as ordering node types so that each new NTA has a lower order than its host. The fold CONSTRUCTS that ordering's witness instead of deciding a relation for one. It is `mintStrata`'s frozen-set move: a declaration's `below` names resolve only against the kinds minted strictly EARLIER in the list, so a same-position or later name misses for the same reason a nonexistent one does, and the miss is one named, catchable refusal — *kind 'k' names 'x' in `below`, which no kind registered before it carries*. **A self-naming or cyclic `below` is therefore inexpressible, never detected:** no cycle check exists anywhere, and none is needed. A duplicate name is refused ahead of the fold, because a second declaration would otherwise resolve its `below` against the first.
 
@@ -965,7 +974,7 @@ A minted kind carries its resolved `below` RECORDS as `belowKinds` beside the de
 
 **Admissibility depends on list order; the minted registry does not.** Every admissible order of one declaration set mints the same `depth`, `maxDepth` and `below` for every kind, because `depth` is the longest descent through the declared relation and no position enters it. What is NOT invariant is admissibility: a list declaring a host before a kind its `below` names is refused by name, though another order of the same declarations is admitted. That is why the attribute-set form of `mkKinds` is retired and refused by name: an attribute set has no order to mint in, and ordering it by name would make admissibility a function of spelling.
 
-**A registry is a TYPE, not a provenance.** The evaluator's and `buildRoots`' doors admit any attribute set whose `kinds` maps each name to the kind `mkKinds` minted under it — a registry assembled by hand, or a `//` merge of two, included — because every minted kind is in the domain and so is any collection of them. They refuse a registry holding a declaration, as a type error naming it, and a registry whose name map disagrees with a kind some entry resolved: two different kinds filed under one name, compared on `name`, `below`, `depth` and the `spawns`/`nta` key sets and the on-demand `nta` names (builders are functions and are not compared). Termination does not rest on that refusal — the evaluator follows the records each kind resolved, so a merge cannot re-route a spawn chain — but a reader looking a spawned node's kind up by name would silently get the other kind. The check is one pass over the entries and their resolved `below`, paid per door crossing and never per node.
+**A registry is a TYPE, not a provenance.** The evaluator's and `buildRoots`' doors admit any attribute set whose `kinds` maps each name to the kind `mkKinds` minted under it — a registry assembled by hand, or a `//` merge of two, included — because every minted kind is in the domain and so is any collection of them. They refuse a registry holding a declaration, as a type error naming it, and a registry whose name map disagrees with a kind some entry resolved: two different kinds filed under one name, compared on `name`, `below`, `depth`, the `spawns` labels with each entry's `produced`, the `nta` key set and the on-demand `nta` names (builders are functions and are not compared). Termination does not rest on that refusal — the evaluator follows the records each kind resolved, so a merge cannot re-route a spawn chain — but a reader looking a spawned node's kind up by name would silently get the other kind. The check is one pass over the entries and their resolved `below`, paid per door crossing and never per node.
 
 **The registry validates its own intake and does not delegate that to the constructor.** `mkKind` refuses a non-string `name` and a `below` that is not a list of them, at the construction site where the author is. That is not enough on its own, because `mkKinds` receives whatever a caller hands it and a record that never passed through `mkKind` carries none of those guarantees. A precondition a function's OWN evaluation depends on cannot be delegated to a constructor its input may not have visited.
 
