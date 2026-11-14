@@ -1044,7 +1044,6 @@ let
           builtins.mapAttrs (key: seed: {
             id = "${ntaIdPrefix}${toString (builtins.stringLength id)}:${id}${toString (builtins.stringLength name)}:${name}${toString (builtins.stringLength group)}:${group}${toString (builtins.stringLength key)}:${key}";
             parent = id;
-            containedAs = name;
             type = hostKind;
             ${kindField} = host;
             decls.seed = seedOf hostAttr hostKind id name group key seed;
@@ -1053,7 +1052,6 @@ let
           builtins.mapAttrs (key: seed: {
             id = "${ntaIdPrefix}${toString (builtins.stringLength id)}:${id}${toString (builtins.stringLength name)}:${name}${toString (builtins.stringLength group)}:${group}${toString (builtins.stringLength key)}:${key}";
             parent = id;
-            containedAs = name;
             type = hostKind;
             ${kindField} = host;
             inherit (host) kindValue;
