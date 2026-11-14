@@ -462,25 +462,38 @@ let
       # nothing for the entry checks. The retired kind-keyed form `<kind> = builder` is named apart
       # from a merely malformed entry: it is the form every pre-label declaration wrote, and its fix
       # is a rewrite, not a typo.
-      spawnDefect =
+      defect =
         if !isAttrs spawns || { } == spawns then
           null
         else
           let
-            labels = attrNames spawns;
-            retired = filter (l: callable spawns.${l}) labels;
-            malformed = filter (l: spawnEntryDefect spawns.${l}) labels;
-            undeclared = unique (filter (k: !(elem k below)) (map (l: spawns.${l}.produced) labels));
-            unbuildable = filter (l: !(callable spawns.${l}.builder)) labels;
+            names = attrNames spawns;
+            retired = filter (l: callable spawns.${l}) names;
+            # An entry is not `{ produced = <string>; builder; }`: read off its key set and `produced`,
+            # never `builder`, so a refusal fires before any builder is forced.
+            malformed = filter (
+              l:
+              !(
+                isAttrs spawns.${l}
+                &&
+                  attrNames spawns.${l} == [
+                    "builder"
+                    "produced"
+                  ]
+                && isString spawns.${l}.produced
+              )
+            ) names;
+            undeclaredSpawn = unique (filter (k: !(elem k below)) (map (l: spawns.${l}.produced) names));
+            unbuildableSpawn = filter (l: !(callable spawns.${l}.builder)) names;
           in
           if retired != [ ] then
             "declares spawn(s) ${toJSON retired} in the retired kind-keyed form `<kind> = builder`. A spawn entry is keyed by its LABEL, the name of the containment edge its children hang under, and names the kind it produces: write `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
           else if malformed != [ ] then
             "declares spawn entr(ies) ${toJSON malformed} that are not an attribute set of exactly `produced` (the produced kind's name, a string) and `builder`. A spawn entry is `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
-          else if undeclared != [ ] then
-            "declares a spawn producing kind(s) ${toJSON undeclared} that its `below` set ${toJSON below} does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there."
-          else if unbuildable != [ ] then
-            "declares spawn entr(ies) ${toJSON unbuildable} whose builder cannot be applied"
+          else if undeclaredSpawn != [ ] then
+            "declares a spawn producing kind(s) ${toJSON undeclaredSpawn} that its `below` set ${toJSON below} does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there."
+          else if unbuildableSpawn != [ ] then
+            "declares spawn entr(ies) ${toJSON unbuildableSpawn} whose builder cannot be applied"
           else
             null;
       # ── THE `nta` DECLARATION: the recursive NTA form, beside `spawns` and not inside it ──
@@ -525,8 +538,8 @@ let
       throw "gen-scope.mkKind: kind '${name}' declares a `resolve` that cannot be applied (it is ${prelude.applicableKindOf resolve})"
     else if !isAttrs spawns then
       throw "gen-scope.mkKind: kind '${name}' declares a `spawns` that is a ${typeOf spawns} rather than an attribute set of entries keyed by label, `<label> = { produced = \"<kind>\"; builder = self: id: …; }`"
-    else if spawnDefect != null then
-      throw "gen-scope.mkKind: kind '${name}' ${spawnDefect}"
+    else if defect != null then
+      throw "gen-scope.mkKind: kind '${name}' ${defect}"
     else if !isAttrs nta then
       throw "gen-scope.mkKind: nta: kind '${name}' declares an `nta` that is a ${typeOf nta} rather than an attribute set of builders keyed by NTA name"
     else if circularNta != [ ] then
@@ -572,20 +585,6 @@ let
   # bound rather than written a second time: the circular carrier decides the same property of its
   # `leq`, and two copies of a discipline agree only for as long as someone keeps them in step.
   callable = prelude.isApplicable;
-
-  # True when a spawn entry is not `{ produced = <string>; builder; }`. It reads the entry's key set
-  # and `produced`, never `builder`, so a refusal fires before any builder is forced.
-  spawnEntryDefect =
-    e:
-    !(
-      isAttrs e
-      &&
-        attrNames e == [
-          "builder"
-          "produced"
-        ]
-      && isString e.produced
-    );
 
   # The circular-declaration classifier, the evaluator's own (`lib/eval.nix`), repeated as the one
   # line it is because `mkKind` refuses a circular `nta` builder before any evaluator exists. The
@@ -665,7 +664,21 @@ let
       "carries a `resolve` that cannot be applied"
     else if !isAttrs k.spawns then
       "carries a `spawns` that is not an attribute set"
-    else if { } != k.spawns && any (l: spawnEntryDefect k.spawns.${l}) (attrNames k.spawns) then
+    else if
+      { } != k.spawns
+      && any (
+        l:
+        !(
+          isAttrs k.spawns.${l}
+          &&
+            attrNames k.spawns.${l} == [
+              "builder"
+              "produced"
+            ]
+          && isString k.spawns.${l}.produced
+        )
+      ) (attrNames k.spawns)
+    then
       "carries a spawn entry that is not `{ produced; builder; }`"
     else if { } != k.spawns && !(all (l: elem k.spawns.${l}.produced k.below) (attrNames k.spawns)) then
       "declares a spawn outside its own `below` set"

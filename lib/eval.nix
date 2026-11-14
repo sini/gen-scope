@@ -690,18 +690,6 @@ let
       host = kindOf kinds nodes ev id;
       hostKind = (ev.node id).type or null;
       spawns = if host == null then { } else host.spawns;
-      # The order a host's entries compose in: by `below` position of their produced kind, then by
-      # label within one kind. `attrNames` is bytewise and `groupBy` keeps its input's order, so
-      # within a kind the labels are bytewise, the only order an attribute set carries. Bound here
-      # rather than called: it is read once per node, and a host declaring no spawn pays nothing.
-      order =
-        if { } == spawns then
-          [ ]
-        else
-          let
-            byKind = builtins.groupBy (l: spawns.${l}.produced) (builtins.attrNames spawns);
-          in
-          builtins.concatMap (k: byKind.${k} or [ ]) host.below;
       stamped =
         label:
         let
@@ -764,20 +752,36 @@ let
             }
         );
     in
-    prelude.foldl' (
-      acc: label:
-      let
-        next = stamped label;
-        collidingWithSibling = builtins.filter (childId: acc.nodes ? ${childId}) next.nodeOrder;
-      in
-      if collidingWithSibling != [ ] then
-        throw "gen-scope: kind '${hostKind}' spawns '${label}' and its builder returned a child '${builtins.head collidingWithSibling}', which an earlier spawn on this same host already produced. Two spawns sharing a key on one host silently overwrite one another. Choose a key none of this host's own spawns already produced."
-      else
-        {
-          nodes = acc.nodes // next.nodes;
-          nodeOrder = acc.nodeOrder ++ next.nodeOrder;
-        }
-    ) noChildren order;
+    prelude.foldl'
+      (
+        acc: label:
+        let
+          next = stamped label;
+          collidingWithSibling = builtins.filter (childId: acc.nodes ? ${childId}) next.nodeOrder;
+        in
+        if collidingWithSibling != [ ] then
+          throw "gen-scope: kind '${hostKind}' spawns '${label}' and its builder returned a child '${builtins.head collidingWithSibling}', which an earlier spawn on this same host already produced. Two spawns sharing a key on one host silently overwrite one another. Choose a key none of this host's own spawns already produced."
+        else
+          {
+            nodes = acc.nodes // next.nodes;
+            nodeOrder = acc.nodeOrder ++ next.nodeOrder;
+          }
+      )
+      noChildren
+      (
+        # The order a host's entries compose in: by `below` position of their produced kind, then by
+        # label within one kind. `attrNames` is bytewise and `groupBy` keeps its input's order, so
+        # within a kind the labels are bytewise, the only order an attribute set carries. Written as
+        # the fold's operand, its one reader, so a node binds no slot for it and a host declaring no
+        # spawn pays one comparison.
+        if { } == spawns then
+          [ ]
+        else
+          let
+            byKind = builtins.groupBy (l: spawns.${l}.produced) (builtins.attrNames spawns);
+          in
+          builtins.concatMap (k: byKind.${k} or [ ]) host.below
+      );
 
   # ── THE `nta` CHANNEL — Vogt, Swierstra & Kuiper 1989 Def. 3.14's recursive form, beside `spawns` ──
   #

@@ -293,55 +293,51 @@ let
     # the label of the root's incoming containment edge, as a spawn entry's key is its children's and
     # an NTA's name its children's. It is stamped on exactly the roots it names; a caller declaring
     # none pays one comparison per scope and no record of it carries the field.
-    if { } != containedAs && rootLabelDefect toKey nodeOrder containedAs != null then
-      throw "gen-scope.buildRoots: `containedAs` ${rootLabelDefect toKey nodeOrder containedAs}."
-    else
-      builtins.seq parentIndex {
-        inherit nodeOrder;
-        # The registry travels WITH the node set, because the evaluator needs the same vocabulary
-        # this constructor validated against and a second formal there would be a second declaration.
-        # `null` is the no-kinds case and reads as one: an evaluator handed it runs no spawn channel,
-        # which is exactly right for a scope whose nodes have no kinds to descend from.
-        inherit kinds;
-        nodes = builtins.listToAttrs (
-          map (
-            id:
-            let
-              k = toKey id;
-            in
-            {
-              name = k;
-              value =
-                if containedAs ? ${k} then nodeOf id k // { containedAs = containedAs.${k}; } else nodeOf id k;
-            }
-          ) nodeOrder
-        );
-      };
-
-  # The reason a `buildRoots` root-label map is refused, or null. Bound here rather than in
-  # `buildRoots`, so a caller declaring no label pays nothing for it.
-  rootLabelDefect =
-    toKey: nodeOrder: containedAs:
-    if !builtins.isAttrs containedAs then
-      "must be an attribute set mapping a root's id to its label, not a ${builtins.typeOf containedAs}"
-    else
-      let
-        names = builtins.attrNames containedAs;
-        vertices = builtins.listToAttrs (
-          map (id: {
-            name = toKey id;
-            value = null;
-          }) nodeOrder
-        );
-        nonString = prelude.filter (k: !builtins.isString containedAs.${k}) names;
-        unknown = prelude.filter (k: !(vertices ? ${k})) names;
-      in
-      if nonString != [ ] then
-        "gives ${builtins.toJSON nonString} a label that is not a string. A root's label is the name of the registry containing it"
-      else if unknown != [ ] then
-        "labels ${builtins.toJSON unknown}, which name no vertex of this scope. A label is stamped on the root it names, so it labels a vertex the contributions, `decls` or `types` declare"
-      else
-        null;
+    assert
+      { } == containedAs
+      || (
+        if !builtins.isAttrs containedAs then
+          throw "gen-scope.buildRoots: `containedAs` must be an attribute set mapping a root's id to its label, not a ${builtins.typeOf containedAs}."
+        else
+          let
+            names = builtins.attrNames containedAs;
+            vertices = builtins.listToAttrs (
+              map (id: {
+                name = toKey id;
+                value = null;
+              }) nodeOrder
+            );
+            malformed = prelude.filter (k: !builtins.isString containedAs.${k}) names;
+            unknown = prelude.filter (k: !(vertices ? ${k})) names;
+          in
+          if malformed != [ ] then
+            throw "gen-scope.buildRoots: `containedAs` gives ${builtins.toJSON malformed} a label that is not a string. A root's label is the name of the registry containing it."
+          else if unknown != [ ] then
+            throw "gen-scope.buildRoots: `containedAs` labels ${builtins.toJSON unknown}, which name no vertex of this scope. A label is stamped on the root it names, so it labels a vertex the contributions, `decls` or `types` declare."
+          else
+            true
+      );
+    builtins.seq parentIndex {
+      inherit nodeOrder;
+      # The registry travels WITH the node set, because the evaluator needs the same vocabulary
+      # this constructor validated against and a second formal there would be a second declaration.
+      # `null` is the no-kinds case and reads as one: an evaluator handed it runs no spawn channel,
+      # which is exactly right for a scope whose nodes have no kinds to descend from.
+      inherit kinds;
+      nodes = builtins.listToAttrs (
+        map (
+          id:
+          let
+            k = toKey id;
+          in
+          {
+            name = k;
+            value =
+              if containedAs ? ${k} then nodeOf id k // { containedAs = containedAs.${k}; } else nodeOf id k;
+          }
+        ) nodeOrder
+      );
+    };
 
   # ── THE RETIRED NAME ──
   # A tombstone rather than a silent redirect. `buildRoots` returns a record where this returned a
