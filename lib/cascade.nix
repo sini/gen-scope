@@ -468,7 +468,7 @@ let
         else
           let
             names = attrNames spawns;
-            retired = filter (l: callable spawns.${l}) names;
+            misfiled = filter (l: callable spawns.${l}) names;
             # An entry is not `{ produced = <string>; builder; }`: read off its key set and `produced`,
             # never `builder`, so a refusal fires before any builder is forced.
             malformed = filter (
@@ -490,8 +490,8 @@ let
             undeclaredSpawn = unique (filter (k: !(elem k below)) (map (l: spawns.${l}.produced) names));
             unbuildableSpawn = filter (l: !(callable spawns.${l}.builder)) names;
           in
-          if retired != [ ] then
-            "declares spawn(s) ${toJSON retired} in the retired kind-keyed form `<kind> = builder`. A spawn entry is keyed by its LABEL, the name of the containment edge its children hang under, and names the kind it produces: write `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
+          if misfiled != [ ] then
+            "declares spawn(s) ${toJSON misfiled} in the retired kind-keyed form `<kind> = builder`. A spawn entry is keyed by its LABEL, the name of the containment edge its children hang under, and names the kind it produces: write `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
           else if malformed != [ ] then
             "declares spawn entr(ies) ${toJSON malformed} that are not an attribute set of exactly `produced` (the produced kind's name, a string) and `builder`. A spawn entry is `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
           else if undeclaredSpawn != [ ] then
