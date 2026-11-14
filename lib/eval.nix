@@ -259,20 +259,20 @@ let
       target,
       declared,
       # The read seam's two demand forms name the attribute read and the entry it was read through;
-      # the record seam (`self.node`) names neither.
-      attribute ? null,
-      through ? "self.node",
+      # the record seam (`self.node`) names neither, and passes `null` and "self.node".
+      attrName,
+      through,
     }:
     if reader == target || builtins.elem target declared then
       null
     else
       "gen-scope: node '${reader}' ${
-        if attribute == null then
+        if attrName == null then
           "acquired the record of node '${target}'"
         else
-          "read attribute '${attribute}' of node '${target}'"
+          "read attribute '${attrName}' of node '${target}'"
       } through `${through}`, and '${target}' is not in the dependency relation '${reader}' declared: ${builtins.toJSON declared}. A body may not read across an edge its node did not declare — the relation a grammar gate runs over is contracted at every firing, so an undeclared ${
-        if attribute == null then "acquisition" else "read"
+        if attrName == null then "acquisition" else "read"
       } would make the declaration false while the evaluation still answered. Declare '${target}' among '${reader}'s dependencies; a traversal that ranges over the graph declares the range it ranges over.";
 
   # ── THE READER BINDING, AND THE SEAM GUARDS IT MAKES EXPRESSIBLE ──
@@ -320,6 +320,8 @@ let
             throw (seamAcquisitionDefect {
               reader = readerId;
               target = targetId;
+              attrName = null;
+              through = "self.node";
               declared = declared readerId;
             });
         get =
@@ -330,7 +332,7 @@ let
             throw (seamAcquisitionDefect {
               reader = readerId;
               target = targetId;
-              attribute = attrName;
+              inherit attrName;
               through = "self.get";
               declared = declared readerId;
             });
@@ -342,7 +344,7 @@ let
             throw (seamAcquisitionDefect {
               reader = readerId;
               target = targetId;
-              attribute = attrName;
+              inherit attrName;
               through = "self.getRepresentative";
               declared = declared readerId;
             });
@@ -2883,7 +2885,31 @@ in
   evalWarm = door.chained "evalWarm" evalWarm;
   # R7 (a)/(b): the reader and the target are two node identifiers of one sort, and the declared
   # relation beside them has no place in an order between them.
-  seamAcquisitionDefect = door.record "seamAcquisitionDefect" seamAcquisitionDefect;
+  # Built by hand, as `argumentBinding` is, because it publishes two optional fields: the record seam
+  # gives neither, the read seam both.
+  seamAcquisitionDefect =
+    prelude.door
+      {
+        name = "gen-scope.seamAcquisitionDefect";
+        required = [
+          "declared"
+          "reader"
+          "target"
+        ];
+        optional = [
+          "attrName"
+          "through"
+        ];
+        open = true;
+      }
+      (
+        r:
+        seamAcquisitionDefect {
+          inherit (r) reader target declared;
+          attrName = r.attrName or null;
+          through = r.through or "self.node";
+        }
+      );
   # `mintNtaId { host; name; group; key; }` — R7 (a): four strings with no order among them, named as
   # the record `decodeNta` answers, so `decodeNta (mintNtaId t) == t` holds of one record shape. The
   # evaluator mints through the positional core.

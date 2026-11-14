@@ -47,8 +47,7 @@ in
     in
     prelude.door {
       name = doorName name;
-      required = requiredOf f;
-      optional = optionalOf f;
+      required = attrNames f;
       open = true;
     } (r: impl (intersectAttrs f r));
 

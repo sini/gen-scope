@@ -163,7 +163,7 @@ in
       expr = seamAcquisitionDefect {
         reader = "a";
         target = "b";
-        attribute = "own-v";
+        attrName = "own-v";
         through = "self.get";
         declared = [ ];
       };
@@ -220,7 +220,7 @@ in
             get =
               seamAcquisitionDefect {
                 inherit (c) reader target declared;
-                attribute = "own-v";
+                attrName = "own-v";
                 through = "self.get";
               } == null;
             admitted =

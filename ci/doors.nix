@@ -319,7 +319,7 @@ in
         "target"
       ];
       optional = [
-        "attribute"
+        "attrName"
         "through"
       ];
       good = {
