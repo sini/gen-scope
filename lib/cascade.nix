@@ -473,15 +473,19 @@ let
             # never `builder`, so a refusal fires before any builder is forced.
             malformed = filter (
               l:
-              !(
-                isAttrs spawns.${l}
-                &&
-                  attrNames spawns.${l} == [
-                    "builder"
-                    "produced"
-                  ]
-                && isString spawns.${l}.produced
+              (
+                e:
+                !(
+                  isAttrs e
+                  &&
+                    attrNames e == [
+                      "builder"
+                      "produced"
+                    ]
+                  && isString e.produced
+                )
               )
+                spawns.${l}
             ) names;
             undeclaredSpawn = unique (filter (k: !(elem k below)) (map (l: spawns.${l}.produced) names));
             unbuildableSpawn = filter (l: !(callable spawns.${l}.builder)) names;
@@ -668,15 +672,19 @@ let
       { } != k.spawns
       && any (
         l:
-        !(
-          isAttrs k.spawns.${l}
-          &&
-            attrNames k.spawns.${l} == [
-              "builder"
-              "produced"
-            ]
-          && isString k.spawns.${l}.produced
+        (
+          e:
+          !(
+            isAttrs e
+            &&
+              attrNames e == [
+                "builder"
+                "produced"
+              ]
+            && isString e.produced
+          )
         )
+          k.spawns.${l}
       ) (attrNames k.spawns)
     then
       "carries a spawn entry that is not `{ produced; builder; }`"
