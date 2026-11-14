@@ -457,13 +457,32 @@ let
       # of the containment edge the entry's children hang under (their stamped `containedAs`), and
       # the entry names its produced kind, so two registries of one kind on one host are two labels
       # and two edges rather than one shared builder under the kind's name.
-      spawnLabels = if isAttrs spawns then attrNames spawns else [ ];
-      # The retired kind-keyed form `<kind> = builder` is named apart from a merely malformed entry:
-      # it is the form every pre-label declaration wrote, and its fix is a rewrite, not a typo.
-      retiredSpawn = filter (l: callable spawns.${l}) spawnLabels;
-      malformedSpawn = filter (l: spawnEntryDefect spawns.${l}) spawnLabels;
-      undeclaredSpawn = unique (filter (k: !(elem k below)) (map (l: spawns.${l}.produced) spawnLabels));
-      unbuildableSpawn = filter (l: !(callable spawns.${l}.builder)) spawnLabels;
+      #
+      # One binding, decided only for a kind that declares a spawn, so a kind declaring none pays
+      # nothing for the entry checks. The retired kind-keyed form `<kind> = builder` is named apart
+      # from a merely malformed entry: it is the form every pre-label declaration wrote, and its fix
+      # is a rewrite, not a typo.
+      spawnDefect =
+        if !isAttrs spawns || { } == spawns then
+          null
+        else
+          let
+            labels = attrNames spawns;
+            retired = filter (l: callable spawns.${l}) labels;
+            malformed = filter (l: spawnEntryDefect spawns.${l}) labels;
+            undeclared = unique (filter (k: !(elem k below)) (map (l: spawns.${l}.produced) labels));
+            unbuildable = filter (l: !(callable spawns.${l}.builder)) labels;
+          in
+          if retired != [ ] then
+            "declares spawn(s) ${toJSON retired} in the retired kind-keyed form `<kind> = builder`. A spawn entry is keyed by its LABEL, the name of the containment edge its children hang under, and names the kind it produces: write `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
+          else if malformed != [ ] then
+            "declares spawn entr(ies) ${toJSON malformed} that are not an attribute set of exactly `produced` (the produced kind's name, a string) and `builder`. A spawn entry is `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
+          else if undeclared != [ ] then
+            "declares a spawn producing kind(s) ${toJSON undeclared} that its `below` set ${toJSON below} does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there."
+          else if unbuildable != [ ] then
+            "declares spawn entr(ies) ${toJSON unbuildable} whose builder cannot be applied"
+          else
+            null;
       # ── THE `nta` DECLARATION: the recursive NTA form, beside `spawns` and not inside it ──
       # `nta` is Vogt, Swierstra & Kuiper 1989 Def. 3.14's recursive `F → F̄` form, whose children
       # are of the HOST's own kind; `spawns` above is the non-recursive fragment Lemma 3.2 / Söderberg
@@ -506,14 +525,8 @@ let
       throw "gen-scope.mkKind: kind '${name}' declares a `resolve` that cannot be applied (it is ${prelude.applicableKindOf resolve})"
     else if !isAttrs spawns then
       throw "gen-scope.mkKind: kind '${name}' declares a `spawns` that is a ${typeOf spawns} rather than an attribute set of entries keyed by label, `<label> = { produced = \"<kind>\"; builder = self: id: …; }`"
-    else if retiredSpawn != [ ] then
-      throw "gen-scope.mkKind: kind '${name}' declares spawn(s) ${toJSON retiredSpawn} in the retired kind-keyed form `<kind> = builder`. A spawn entry is keyed by its LABEL, the name of the containment edge its children hang under, and names the kind it produces: write `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
-    else if malformedSpawn != [ ] then
-      throw "gen-scope.mkKind: kind '${name}' declares spawn entr(ies) ${toJSON malformedSpawn} that are not an attribute set of exactly `produced` (the produced kind's name, a string) and `builder`. A spawn entry is `<label> = { produced = \"<kind>\"; builder = self: id: …; }`."
-    else if undeclaredSpawn != [ ] then
-      throw "gen-scope.mkKind: kind '${name}' declares a spawn producing kind(s) ${toJSON undeclaredSpawn} that its `below` set ${toJSON below} does not carry. A spawn's produced kind must be BELOW its host's, which is what makes the expansion descend a rank that strictly decreases — declare the kind in `below`, or spawn a kind that is already there."
-    else if unbuildableSpawn != [ ] then
-      throw "gen-scope.mkKind: kind '${name}' declares spawn entr(ies) ${toJSON unbuildableSpawn} whose builder cannot be applied"
+    else if spawnDefect != null then
+      throw "gen-scope.mkKind: kind '${name}' ${spawnDefect}"
     else if !isAttrs nta then
       throw "gen-scope.mkKind: nta: kind '${name}' declares an `nta` that is a ${typeOf nta} rather than an attribute set of builders keyed by NTA name"
     else if circularNta != [ ] then

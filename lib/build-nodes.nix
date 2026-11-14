@@ -265,7 +265,7 @@ let
       # constructor here rather than testing per node: a scope with no kinds, or kinds carrying no
       # value, keeps the record it always had and pays nothing per node. It takes the id as written,
       # which the record keeps, and that id's key, which every table above is indexed by.
-      unlabelledNodeOf =
+      nodeOf =
         if kinds == null || !(prelude.any (kd: kd.kindValue != null) (prelude.attrValues kinds.kinds)) then
           id: k: {
             inherit id;
@@ -288,49 +288,13 @@ let
             };
           };
 
-      # ── THE ROOT LABEL ──
-      # `containedAs` maps a root's id to the label of the registry containing it: the label of the
-      # root's incoming containment edge, as a spawn entry's key is its children's and an NTA's name
-      # its children's. It is stamped on exactly the roots it names. Like `kindValue`, it is decided
-      # once per scope: a caller declaring no label keeps the record it always had and pays nothing
-      # per node, and no record of such a caller carries the field.
-      labelDefect =
-        if { } == containedAs then
-          null
-        else if !builtins.isAttrs containedAs then
-          "must be an attribute set mapping a root's id to its label, not a ${builtins.typeOf containedAs}"
-        else
-          let
-            nonString = prelude.filter (k: !builtins.isString containedAs.${k}) (
-              builtins.attrNames containedAs
-            );
-            unknown = prelude.filter (k: !(firstVertex ? ${k})) (builtins.attrNames containedAs);
-          in
-          if nonString != [ ] then
-            "gives ${builtins.toJSON nonString} a label that is not a string. A root's label is the name of the registry containing it"
-          else if unknown != [ ] then
-            "labels ${builtins.toJSON unknown}, which name no vertex of this scope. A label is stamped on the root it names, so it labels a vertex the contributions, `decls` or `types` declare"
-          else
-            null;
-      firstVertex = builtins.listToAttrs (
-        map (id: {
-          name = toKey id;
-          value = null;
-        }) nodeOrder
-      );
-
-      nodeOf =
-        if { } == containedAs then
-          unlabelledNodeOf
-        else
-          id: k:
-          if containedAs ? ${k} then
-            unlabelledNodeOf id k // { containedAs = containedAs.${k}; }
-          else
-            unlabelledNodeOf id k;
     in
-    if labelDefect != null then
-      throw "gen-scope.buildRoots: `containedAs` ${labelDefect}."
+    # ── THE ROOT LABEL ── `containedAs` maps a root's id to the label of the registry containing it,
+    # the label of the root's incoming containment edge, as a spawn entry's key is its children's and
+    # an NTA's name its children's. It is stamped on exactly the roots it names; a caller declaring
+    # none pays one comparison per scope and no record of it carries the field.
+    if { } != containedAs && rootLabelDefect toKey nodeOrder containedAs != null then
+      throw "gen-scope.buildRoots: `containedAs` ${rootLabelDefect toKey nodeOrder containedAs}."
     else
       builtins.seq parentIndex {
         inherit nodeOrder;
@@ -347,11 +311,37 @@ let
             in
             {
               name = k;
-              value = nodeOf id k;
+              value =
+                if containedAs ? ${k} then nodeOf id k // { containedAs = containedAs.${k}; } else nodeOf id k;
             }
           ) nodeOrder
         );
       };
+
+  # The reason a `buildRoots` root-label map is refused, or null. Bound here rather than in
+  # `buildRoots`, so a caller declaring no label pays nothing for it.
+  rootLabelDefect =
+    toKey: nodeOrder: containedAs:
+    if !builtins.isAttrs containedAs then
+      "must be an attribute set mapping a root's id to its label, not a ${builtins.typeOf containedAs}"
+    else
+      let
+        names = builtins.attrNames containedAs;
+        vertices = builtins.listToAttrs (
+          map (id: {
+            name = toKey id;
+            value = null;
+          }) nodeOrder
+        );
+        nonString = prelude.filter (k: !builtins.isString containedAs.${k}) names;
+        unknown = prelude.filter (k: !(vertices ? ${k})) names;
+      in
+      if nonString != [ ] then
+        "gives ${builtins.toJSON nonString} a label that is not a string. A root's label is the name of the registry containing it"
+      else if unknown != [ ] then
+        "labels ${builtins.toJSON unknown}, which name no vertex of this scope. A label is stamped on the root it names, so it labels a vertex the contributions, `decls` or `types` declare"
+      else
+        null;
 
   # ── THE RETIRED NAME ──
   # A tombstone rather than a silent redirect. `buildRoots` returns a record where this returned a
