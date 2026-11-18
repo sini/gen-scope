@@ -336,7 +336,10 @@ let
               let
                 n = acc.node targetId;
               in
-              n._authored or n
+              # A wrapper is the record that carries the co-located cache; it must name its
+              # authored record, so a wrap site that does not aborts here rather than handing out
+              # the cache.
+              if n ? _eval then n._authored else n
             )
           else
             throw (seamAcquisitionDefect {
@@ -393,19 +396,34 @@ let
               acc.getNta name group key attrName
             );
         # An `nta` child's host is another node; a reader that is no `nta` child keeps the
-        # substrate's own refusal.
+        # substrate's own refusal. On a child-bearing attribute the substrate's answer is reached
+        # through the host's wrapped records (at `nta-children`, the reader's own wrapper), so the
+        # armed answer is the same selection made through the host's AUTHORED records. The
+        # substrate's answer is forced first, so every refusal it raises (unbound, round open,
+        # miss) fires unchanged; a path that resolves only through a wrapper field is refused.
         getHostAt =
           attrName:
-          if decodeNta readerId == null || builtins.elem (decodeNta readerId).host (declared readerId) then
+          if decodeNta readerId == null then
             acc.getHostAt attrName
-          else
+          else if !builtins.elem (decodeNta readerId).host (declared readerId) then
             throw (seamAcquisitionDefect {
               reader = readerId;
               target = (decodeNta readerId).host;
               inherit attrName;
               through = "self.getHostAt";
               declared = declared readerId;
-            });
+            })
+          else if structural.childDepth attrName == 0 then
+            acc.getHostAt attrName
+          else
+            let
+              t = decodeNta readerId;
+            in
+            builtins.seq (acc.getHostAt attrName) (
+              (mapAtDepth (structural.childDepth attrName) (r: r._authored) (acc.get t.host attrName))
+              .${t.name}.${t.group}.${t.key}
+                or (throw "gen-scope.nta: `getHostAt`: '${attrName}' on host '${t.host}' at NTA '${t.name}' group '${t.group}' key '${t.key}' resolves only through a record's wrapper, which an armed body's reader does not hand out; read the host's records through `self.get`, with the edge declared.")
+            );
         # A node's child ids: structure of the target, so the target is declared.
         _childOrder =
           targetId:

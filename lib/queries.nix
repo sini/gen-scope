@@ -1,4 +1,5 @@
-# Structural queries as thin wrappers over self.node and self._childRecords.
+# Structural queries as thin wrappers over self.node and self._childRecords (on an armed body's
+# reader, over self.node and self._childOrder).
 #
 # parent is structural (on the node). children, descendants, siblings and the
 # descendant tests read the child direction through the accessor's composed
@@ -19,7 +20,22 @@ let
 
   parent = self: id: (self.node id).parent;
 
-  children = self: id: self._childRecords id;
+  # An armed body's reader carries no `_childRecords` (a named refusal): a body reads a node's
+  # children through the guarded names, `_childOrder` and `node`, so each child is a declared read.
+  # The unarmed reader answers through `_childRecords`, unchanged.
+  armed = self: !(builtins.tryEval self._childRecords).success;
+
+  children =
+    self: id:
+    if armed self then
+      builtins.listToAttrs (
+        map (cid: {
+          name = toKey cid;
+          value = self.node cid;
+        }) (self._childOrder id)
+      )
+    else
+      self._childRecords id;
 
   childrenIds = self: id: self._childOrder id;
 
@@ -107,7 +123,28 @@ let
     );
 
   # Delegates to eval's nodesOfType (selective walk) instead of forcing allNodes.
-  nodesByType = self: type: self.nodesOfType (string "nodesByType" "a kind name" type);
+  # Armed, the walk is the enumeration `allNodeIds` read through `node`, so every node it ranges
+  # over is a declared read; unarmed, `nodesOfType`'s selective walk, unchanged.
+  nodesByType =
+    self: type:
+    if armed self then
+      let
+        ty = string "nodesByType" "a kind name" type;
+      in
+      builtins.listToAttrs (
+        prelude.concatMap (
+          nid:
+          let
+            n = self.node nid;
+          in
+          prelude.optional (n.type == ty) {
+            name = toKey nid;
+            value = n;
+          }
+        ) self.allNodeIds
+      )
+    else
+      self.nodesOfType (string "nodesByType" "a kind name" type);
 in
 {
   inherit
