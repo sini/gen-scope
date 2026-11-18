@@ -172,6 +172,20 @@ let
     kid-keys = self: id: if id == "root" then builtins.attrNames (genScope.children self "a") else [ ];
     by-type =
       self: id: if id == "root" then builtins.attrNames (genScope.nodesByType self "host") else [ ];
+    # the record a body receives through a child-bearing read: the authored record, never its wrapper
+    received =
+      self: id:
+      if id == "root" then
+        let
+          r = (self.get "a" "children").kid;
+        in
+        {
+          keys = builtins.attrNames r;
+          wrapperField = r ? raw;
+          cache = r ? _eval;
+        }
+      else
+        { };
   };
   armedEval = relation: plantedEval { declaredDependencies = rel relation; } attrs scope;
   unarmedEval = plantedEval { } attrs scope;
@@ -280,6 +294,27 @@ in
     test-K1-undeclared-host-is-refused = {
       expr = refused ((ntaRun { }).get childA "host-own-id");
       expected = true;
+    };
+    # The wrap seam keeps the record it wrapped under `raw` (armed only), and an armed body is handed
+    # that record: the authored `{ id = "kid"; }`, carrying neither the wrapper's field nor its cache.
+    test-the-armed-body-receives-the-authored-record = {
+      expr = (armedEval allDeclared).get "root" "received";
+      expected = {
+        keys = [ "id" ];
+        wrapperField = false;
+        cache = false;
+      };
+    };
+    test-control-the-unarmed-body-receives-the-wrapper = {
+      expr = unarmedEval.get "root" "received";
+      expected = {
+        keys = [
+          "_eval"
+          "id"
+        ];
+        wrapperField = false;
+        cache = true;
+      };
     };
     # K3: a fully declared read through the published helpers is preserved on the armed reader
     test-K3-declared-children-answers-armed = {
