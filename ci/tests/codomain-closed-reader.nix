@@ -109,7 +109,7 @@ let
     planted-seen = self: id: if id == "a" then self ? _zzPlanted else false;
     planted-read = self: id: if id == "a" && self ? _zzPlanted then self._zzPlanted "b" "own-v" else "ABSENT";
     # K3: the published helpers, read from `root`
-    kids = self: id: if id == "root" then builtins.mapAttrs (_: r: r.decls.v) (genScope.children self "a") else { };
+    kids = self: id: if id == "root" then builtins.mapAttrs (_: r: r.decls.v or "NO_DECLS") (genScope.children self "a") else { };
     kid-keys = self: id: if id == "root" then builtins.attrNames (genScope.children self "a") else [ ];
     by-type = self: id: if id == "root" then builtins.attrNames (genScope.nodesByType self "host") else [ ];
   };
