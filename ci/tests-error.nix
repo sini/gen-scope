@@ -5441,4 +5441,45 @@ in
         };
       };
     };
+
+  # ── PRODUCER-BOUNDED DELEGATION'S REFUSALS, BY MESSAGE (den-hoag-9pt45) ──
+  # `reader-delegation` asserts THAT a handed reader's undeclared target and the consumer's own
+  # undeclared read refuse; these pin WHOSE relation each refusal consulted. A reader handed out as a
+  # value names its producer and the producer's declaration, never the node whose body holds it.
+  config.flake.testsError.reader-delegation-refusals =
+    let
+      d = import ./tests/_fixtures/reader-delegation.nix { inherit genScope genGraph; };
+    in
+    {
+      test-a-handed-readers-refusal-names-its-producers-relation = {
+        expr = d.beyondGet;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (
+            genScope.seamAcquisitionDefect {
+              reader = "producer";
+              target = "gk";
+              attrName = "val";
+              through = "self.get";
+              declared = [ "kid" ];
+            }
+          );
+        };
+      };
+      test-the-consumers-own-refusal-names-its-own-relation = {
+        expr = d.ownGet;
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly (
+            genScope.seamAcquisitionDefect {
+              reader = "cOwn";
+              target = "kid";
+              attrName = "val";
+              through = "self.get";
+              declared = [ "producer" ];
+            }
+          );
+        };
+      };
+    };
 }
