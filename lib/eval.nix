@@ -266,37 +266,31 @@ let
     # `target == null` asks about a CAPABILITY, not an edge: `through` names a field, and the answer
     # is the refusal an armed body's reader raises for it, or null where the reader raises none.
     # The table of removed fields and their repairs is local to this branch, so it exists only when
-    # a capability is asked about, never at library load; the armed relation's `tombs` (`eval`) names
+    # a capability is asked about, never at library load; the armed relation's `reader` (`eval`) names
     # the same fifteen, and `codomain-closed-reader` (C1, C3) and its refusal texts pin the two in step.
     if target == null then
       let
         # Each removed field, and the supported way to do what a body used it for.
-        removedReaderFields =
-          let
-            byNode = "Acquire the node through `self.node <id>`, or read its attribute through `self.get <id> <attr>`, with <id> declared among the node's dependencies; a walk declares the nodes it walks.";
-            byEnum = "Enumerate `self.allNodeIds` and acquire each node through `self.node <id>`, declaring the range the traversal ranges over.";
-            byRecord = "It is a field of the evaluation record, read by the caller of the evaluation (`(eval …).<field>`), never by a body; a body reads another node only through `self.get` or `self.node`, with the edge declared.";
-          in
-          {
-            _childSet = "Read the attribute through `self.get <id> <attr>`, with <id> declared among the node's dependencies.";
-            _childRecords = "Read the child ids through `self._childOrder <id>` and acquire each child through `self.node`, with each child declared.";
-            _walkFrom = byNode;
-            subtreeOf = byNode;
-            allNodes = byEnum;
-            allNodesWhere = byEnum;
-            nodesOfType = byEnum;
-            facade = "The facade is the evaluation record's published surface for a caller of the evaluation; a body reads through `self.get <id> <attr>`, with <id> declared.";
-            structuralAttributes = byRecord;
-            structuralEdges = byRecord;
-            projectionFindings = byRecord;
-            decisionFindings = byRecord;
-            resolutional = byRecord;
-            served = byRecord;
-            provenance = byRecord;
-          };
+        record = {
+          _childSet = "Read the attribute through `self.get <id> <attr>`, with <id> declared among the node's dependencies.";
+          _childRecords = "Read the child ids through `self._childOrder <id>` and acquire each child through `self.node`, with each child declared.";
+          _walkFrom = "Acquire the node through `self.node <id>`, or read its attribute through `self.get <id> <attr>`, with <id> declared among the node's dependencies; a walk declares the nodes it walks.";
+          subtreeOf = "Acquire the node through `self.node <id>`, or read its attribute through `self.get <id> <attr>`, with <id> declared among the node's dependencies; a walk declares the nodes it walks.";
+          allNodes = "Enumerate `self.allNodeIds` and acquire each node through `self.node <id>`, declaring the range the traversal ranges over.";
+          allNodesWhere = "Enumerate `self.allNodeIds` and acquire each node through `self.node <id>`, declaring the range the traversal ranges over.";
+          nodesOfType = "Enumerate `self.allNodeIds` and acquire each node through `self.node <id>`, declaring the range the traversal ranges over.";
+          facade = "The facade is the evaluation record's published surface for a caller of the evaluation; a body reads through `self.get <id> <attr>`, with <id> declared.";
+          structuralAttributes = "It is a field of the evaluation record, read by the caller of the evaluation (`(eval …).<field>`), never by a body; a body reads another node only through `self.get` or `self.node`, with the edge declared.";
+          structuralEdges = "It is a field of the evaluation record, read by the caller of the evaluation (`(eval …).<field>`), never by a body; a body reads another node only through `self.get` or `self.node`, with the edge declared.";
+          projectionFindings = "It is a field of the evaluation record, read by the caller of the evaluation (`(eval …).<field>`), never by a body; a body reads another node only through `self.get` or `self.node`, with the edge declared.";
+          decisionFindings = "It is a field of the evaluation record, read by the caller of the evaluation (`(eval …).<field>`), never by a body; a body reads another node only through `self.get` or `self.node`, with the edge declared.";
+          resolutional = "It is a field of the evaluation record, read by the caller of the evaluation (`(eval …).<field>`), never by a body; a body reads another node only through `self.get` or `self.node`, with the edge declared.";
+          served = "It is a field of the evaluation record, read by the caller of the evaluation (`(eval …).<field>`), never by a body; a body reads another node only through `self.get` or `self.node`, with the edge declared.";
+          provenance = "It is a field of the evaluation record, read by the caller of the evaluation (`(eval …).<field>`), never by a body; a body reads another node only through `self.get` or `self.node`, with the edge declared.";
+        };
       in
-      if removedReaderFields ? ${through} then
-        "gen-scope: an armed body's reader does not carry `self.${through}`. The reader a body is handed is closed to its guarded demand forms (`node`, `get`, `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`) and the enumeration `allNodeIds`, so that a body cannot read across an edge its node did not declare. ${removedReaderFields.${through}}"
+      if record ? ${through} then
+        "gen-scope: an armed body's reader does not carry `self.${through}`. The reader a body is handed is closed to its guarded demand forms (`node`, `get`, `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`) and the enumeration `allNodeIds`, so that a body cannot read across an edge its node did not declare. ${record.${through}}"
       else
         null
     else if reader == target || builtins.elem target declared then
@@ -315,7 +309,7 @@ let
   # The accessor a BODY is handed, as against the one the substrate walks with. Armed, it is a
   # CLOSED record: the reader carries the guarded demand forms below, one enumeration-only name
   # (`allNodeIds`), and a named refusal at each field the substrate accessor carried before the
-  # reader closed (the armed relation's `tombs`). A field the substrate gains later is ABSENT from it until it
+  # reader closed (the armed relation's `reader`). A field the substrate gains later is ABSENT from it until it
   # is guarded and listed here, so a new route to another node is refused by construction rather
   # than by a guard someone remembered to add. Every name takes a target and no source, so a seam
   # cannot name the node whose body is demanding unless the reader carries it; every site that
@@ -329,7 +323,7 @@ let
   # THE RECORDS A BODY RECEIVES ARE THE RECORDS AS AUTHORED. A child record's wrapper carries the
   # co-located cache (`_eval`), which answers the child's values with no edge consulted, so `node`,
   # and `get` and `getNta` on a child-bearing attribute, hand a body the record the wrapper was built
-  # from (`_authored`, set only in an armed evaluation), at the attribute's depth: a field a wrap
+  # from (`raw`, set only in an armed evaluation), at the attribute's depth: a field a wrap
   # site adds is absent from a body's view without being named here.
   #
   # WHAT THE CLOSURE DOES NOT REACH, stated: `allNodeIds` answers the evaluated node set's ids with
@@ -358,11 +352,11 @@ let
     if declared == null then
       acc
     else
-      declared.tombs
+      declared.reader
       // {
         node =
           targetId:
-          if readerId == targetId || builtins.elem targetId (declared.deps readerId) then
+          if readerId == targetId || builtins.elem targetId (declared.dependencies readerId) then
             (
               let
                 n = acc.node targetId;
@@ -370,7 +364,7 @@ let
               # A wrapper is the record that carries the co-located cache; it must name its
               # authored record, so a wrap site that does not aborts here rather than handing out
               # the cache.
-              if n ? _eval then n._authored else n
+              if n ? _eval then n.raw else n
             )
           else
             throw (seamAcquisitionDefect {
@@ -378,25 +372,25 @@ let
               target = targetId;
               attrName = null;
               through = "self.node";
-              declared = declared.deps readerId;
+              declared = declared.dependencies readerId;
             });
         get =
           targetId: attrName:
-          if !(readerId == targetId || builtins.elem targetId (declared.deps readerId)) then
+          if !(readerId == targetId || builtins.elem targetId (declared.dependencies readerId)) then
             throw (seamAcquisitionDefect {
               reader = readerId;
               target = targetId;
               inherit attrName;
               through = "self.get";
-              declared = declared.deps readerId;
+              declared = declared.dependencies readerId;
             })
           else if structural.childDepth attrName == 0 then
             acc.get targetId attrName
           else
-            mapAtDepth (structural.childDepth attrName) (r: r._authored) (acc.get targetId attrName);
+            mapAtDepth (structural.childDepth attrName) (r: r.raw) (acc.get targetId attrName);
         getRepresentative =
           targetId: attrName:
-          if readerId == targetId || builtins.elem targetId (declared.deps readerId) then
+          if readerId == targetId || builtins.elem targetId (declared.dependencies readerId) then
             acc.getRepresentative targetId attrName
           else
             throw (seamAcquisitionDefect {
@@ -404,24 +398,24 @@ let
               target = targetId;
               inherit attrName;
               through = "self.getRepresentative";
-              declared = declared.deps readerId;
+              declared = declared.dependencies readerId;
             });
         # The reading node's own `nta` child is another node: its id is minted from the
         # coordinates, and the edge to it is declared like any other.
         getNta =
           name: group: key: attrName:
-          if !builtins.elem (mintNtaId readerId name group key) (declared.deps readerId) then
+          if !builtins.elem (mintNtaId readerId name group key) (declared.dependencies readerId) then
             throw (seamAcquisitionDefect {
               reader = readerId;
               target = mintNtaId readerId name group key;
               inherit attrName;
               through = "self.getNta";
-              declared = declared.deps readerId;
+              declared = declared.dependencies readerId;
             })
           else if structural.childDepth attrName == 0 then
             acc.getNta name group key attrName
           else
-            mapAtDepth (structural.childDepth attrName) (r: r._authored) (acc.getNta name group key attrName);
+            mapAtDepth (structural.childDepth attrName) (r: r.raw) (acc.getNta name group key attrName);
         # An `nta` child's host is another node; a reader that is no `nta` child keeps the
         # substrate's own refusal. On a child-bearing attribute the substrate's answer is reached
         # through the host's wrapped records (at `nta-children`, the reader's own wrapper), so the
@@ -432,13 +426,13 @@ let
           attrName:
           if decodeNta readerId == null then
             acc.getHostAt attrName
-          else if !builtins.elem (decodeNta readerId).host (declared.deps readerId) then
+          else if !builtins.elem (decodeNta readerId).host (declared.dependencies readerId) then
             throw (seamAcquisitionDefect {
               reader = readerId;
               target = (decodeNta readerId).host;
               inherit attrName;
               through = "self.getHostAt";
-              declared = declared.deps readerId;
+              declared = declared.dependencies readerId;
             })
           else if structural.childDepth attrName == 0 then
             acc.getHostAt attrName
@@ -447,14 +441,14 @@ let
               t = decodeNta readerId;
             in
             builtins.seq (acc.getHostAt attrName) (
-              (mapAtDepth (structural.childDepth attrName) (r: r._authored) (acc.get t.host attrName))
+              (mapAtDepth (structural.childDepth attrName) (r: r.raw) (acc.get t.host attrName))
               .${t.name}.${t.group}.${t.key}
                 or (throw "gen-scope.nta: `getHostAt`: '${attrName}' on host '${t.host}' at NTA '${t.name}' group '${t.group}' key '${t.key}' resolves only through a record's wrapper, which an armed body's reader does not hand out; read the host's records through `self.get`, with the edge declared.")
             );
         # A node's child ids: structure of the target, so the target is declared.
         _childOrder =
           targetId:
-          if readerId == targetId || builtins.elem targetId (declared.deps readerId) then
+          if readerId == targetId || builtins.elem targetId (declared.dependencies readerId) then
             acc._childOrder targetId
           else
             throw (seamAcquisitionDefect {
@@ -462,7 +456,7 @@ let
               target = targetId;
               attrName = "children";
               through = "self._childOrder";
-              declared = declared.deps readerId;
+              declared = declared.dependencies readerId;
             });
         # Enumeration only: the evaluated node set's ids, no node's value (stated above).
         inherit (acc) allNodeIds;
@@ -1333,8 +1327,8 @@ let
       # body application — the entry a caller named is the entry the message names, and an
       # evaluator reached directly says `eval` rather than borrowing the fold's name.
       #
-      # ARMED, IT IS A RECORD, and unarmed `null`: `deps` is the relation as a function of a node,
-      # and `tombs` the named refusals an armed reader carries at each removed field, built once per
+      # ARMED, IT IS A RECORD, and unarmed `null`: `dependencies` is the relation as a function of a
+      # node, and `reader` the named refusals an armed reader carries at each removed field, built once per
       # armed evaluation and shared by every reader in it. Everything the closed reader adds lives
       # on this armed value, so an unarmed evaluation binds and allocates nothing for it.
       declaredRelation =
@@ -1342,11 +1336,11 @@ let
           null
         else
           let
-            checkedRelation = requireDeclaredDependencies "eval" declaredDependencies;
+            relation = requireDeclaredDependencies "eval" declaredDependencies;
           in
-          builtins.seq checkedRelation {
-            deps = checkedRelation.dependencies;
-            tombs =
+          builtins.seq relation {
+            dependencies = relation.dependencies;
+            reader =
               builtins.mapAttrs
                 (
                   n: _:
@@ -1579,7 +1573,7 @@ let
                             // {
                               _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
                             }
-                            // (if declaredRelation == null then { } else { _authored = childNode; });
+                            // (if declaredRelation == null then { } else { raw = childNode; });
                         in
                         wrapped
                       )
@@ -1677,8 +1671,8 @@ let
                 fn (
                   if acc != null then
                     bindReader declaredRelation acc nodeId
-                  else if declaredRelation != null && rootEval.readers ? ${nodeId} then
-                    rootEval.readers.${nodeId}
+                  else if declaredRelation != null && rootEval.reader ? ${nodeId} then
+                    rootEval.reader.${nodeId}
                   else if runAttributes ? ${ntaChannel} then
                     bindReader declaredRelation (self // { getNta = getNtaAt self nodeId; }) nodeId
                   else
@@ -2303,7 +2297,7 @@ let
               }
               # An armed body is handed the record as authored, never this wrapper (`bindReader`), so a
               # field added here is absent from a body's view by construction. Unarmed, nothing is added.
-              // (if declaredRelation == null then { } else { _authored = childNode; });
+              // (if declaredRelation == null then { } else { raw = childNode; });
             # Armed, beside the per-root evaluators, one armed reader per root, shared by every
             # attribute body of that root, so a root's bodies do not each build the closed record (a
             # child's reader is built per application). It is a field of the armed value rather than
@@ -2313,8 +2307,8 @@ let
                 prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots
               else
                 {
-                  attrs = prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots;
-                  readers = builtins.mapAttrs (
+                  own = prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots;
+                  reader = builtins.mapAttrs (
                     id: _:
                     if runAttributes ? ${ntaChannel} then
                       bindReader declaredRelation (self // { getNta = getNtaAt self id; }) id
@@ -2425,8 +2419,8 @@ let
                 builtins.addErrorContext "evaluating '${attrName}' on '${id}'" (
                   if !(runAttributes ? ${attrName}) then
                     throw (unknownAttribute id attrName)
-                  else if (if declaredRelation == null then rootEval else rootEval.attrs) ? ${id} then
-                    (if declaredRelation == null then rootEval else rootEval.attrs).${id}.${attrName}
+                  else if (if declaredRelation == null then rootEval else rootEval.own) ? ${id} then
+                    (if declaredRelation == null then rootEval else rootEval.own).${id}.${attrName}
                   else
                     let
                       n = self.node id;

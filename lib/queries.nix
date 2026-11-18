@@ -129,7 +129,7 @@ let
     self: type:
     if !(builtins.tryEval self._childRecords).success then
       let
-        ty = string "nodesByType" "a kind name" type;
+        t = string "nodesByType" "a kind name" type;
       in
       builtins.listToAttrs (
         prelude.concatMap (
@@ -137,7 +137,7 @@ let
           let
             n = self.node nid;
           in
-          prelude.optional (n.type == ty) {
+          prelude.optional (n.type == t) {
             name = toKey nid;
             value = n;
           }
