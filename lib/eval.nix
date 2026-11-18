@@ -1346,36 +1346,35 @@ let
           in
           builtins.seq checkedRelation {
             deps = checkedRelation.dependencies;
-            tombs = builtins.listToAttrs (
-              map
-                (n: {
-                  name = n;
-                  value = throw (seamAcquisitionDefect {
+            tombs =
+              builtins.mapAttrs
+                (
+                  n: _:
+                  throw (seamAcquisitionDefect {
                     reader = null;
                     target = null;
                     declared = [ ];
                     attrName = null;
                     through = n;
-                  });
-                })
-                [
-                  "_childSet"
-                  "_childRecords"
-                  "_walkFrom"
-                  "subtreeOf"
-                  "allNodes"
-                  "allNodesWhere"
-                  "nodesOfType"
-                  "facade"
-                  "structuralAttributes"
-                  "structuralEdges"
-                  "projectionFindings"
-                  "decisionFindings"
-                  "resolutional"
-                  "served"
-                  "provenance"
-                ]
-            );
+                  })
+                )
+                {
+                  _childSet = null;
+                  _childRecords = null;
+                  _walkFrom = null;
+                  subtreeOf = null;
+                  allNodes = null;
+                  allNodesWhere = null;
+                  nodesOfType = null;
+                  facade = null;
+                  structuralAttributes = null;
+                  structuralEdges = null;
+                  projectionFindings = null;
+                  decisionFindings = null;
+                  resolutional = null;
+                  served = null;
+                  provenance = null;
+                };
           };
 
       # WHAT THE CALLER DECLARED versus WHAT RUNS, and the two are different sets because the spawn
