@@ -317,7 +317,8 @@ let
   # there is no reader whose declaration could be consulted, and a guard treating that absence as
   # the empty declaration would refuse every entry point.
   #
-  # COST, by class: one record of the reader's names per body application when armed; per
+  # COST, by class: one record of the reader's names per root, and per body application on any
+  # other node, when armed; per
   # cross-node demand, a constant guard application and a membership walk over the reader's
   # declared list; per reader, a term linear in its out-degree d at the first consultation, which
   # forces that list; per self-read, the guard's application alone; per record handed back, one
@@ -1648,6 +1649,8 @@ let
                 fn (
                   if acc != null then
                     bindReader declaredRelation acc nodeId
+                  else if declaredRelation != null && rootReaders ? ${nodeId} then
+                    rootReaders.${nodeId}
                   else if runAttributes ? ${ntaChannel} then
                     bindReader declaredRelation (self // { getNta = getNtaAt self nodeId; }) nodeId
                   else
@@ -2273,6 +2276,15 @@ let
               # An armed body is handed the record as authored, never this wrapper (`bindReader`), so a
               # field added here is absent from a body's view by construction. Unarmed, nothing is added.
               // (if declaredRelation == null then { } else { _authored = childNode; });
+            # One armed reader per root, shared by every attribute body of that root, so a root's bodies
+            # do not each build the closed record. A child's reader is built per application.
+            rootReaders = builtins.mapAttrs (
+              id: _:
+              if runAttributes ? ${ntaChannel} then
+                bindReader declaredRelation (self // { getNta = getNtaAt self id; }) id
+              else
+                bindReader declaredRelation self id
+            ) roots;
             rootEval = prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots;
 
             # ── THE PARENT CHAIN, GROUNDED BEFORE IT IS DESCENDED ──
