@@ -263,7 +263,14 @@ let
       attrName,
       through,
     }:
-    if reader == target || builtins.elem target declared then
+    # `target == null` asks about a CAPABILITY, not an edge: `through` names a field, and the answer
+    # is the refusal an armed body's reader raises for it, or null where the reader raises none.
+    if target == null then
+      if removedReaderFields ? ${through} then
+        "gen-scope: an armed body's reader does not carry `self.${through}`. The reader a body is handed is closed to its guarded demand forms (`node`, `get`, `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`) and the enumeration `allNodeIds`, so that a body cannot read across an edge its node did not declare. ${removedReaderFields.${through}}"
+      else
+        null
+    else if reader == target || builtins.elem target declared then
       null
     else
       "gen-scope: node '${reader}' ${
@@ -275,21 +282,29 @@ let
         if attrName == null then "acquisition" else "read"
       } would make the declaration false while the evaluation still answered. Declare '${target}' among '${reader}'s dependencies; a traversal that ranges over the graph declares the range it ranges over.";
 
-  # ── THE READER BINDING, AND THE SEAM GUARDS IT MAKES EXPRESSIBLE ──
-  # The accessor a BODY is handed, as against the one the substrate walks with. They differ in
-  # exactly three names — `node`, `get` and `getRepresentative` — and the difference is the READER:
-  # each takes a target and no source, so a seam cannot name the node whose body is demanding unless
-  # the accessor itself carries it. `node` is the record seam; `get` and `getRepresentative` are the
-  # read seam's two demand forms over one demand, so a guard on one alone would leave the other
-  # open. Every site that APPLIES a body has that identity in hand, and binding it there is what
-  # makes this a firing check at an existing seam rather than a new seam.
+  # ── THE READER BINDING: A CLOSED RECORD OF GUARDED DEMAND FORMS ──
+  # The accessor a BODY is handed, as against the one the substrate walks with. Armed, it is a
+  # CLOSED record: the reader carries the guarded demand forms below, one enumeration-only name
+  # (`allNodeIds`), and a named refusal at each field the substrate accessor carried before the
+  # reader closed (`readerTombstones`). A field the substrate gains later is ABSENT from it until it
+  # is guarded and listed here, so a new route to another node is refused by construction rather
+  # than by a guard someone remembered to add. Every name takes a target and no source, so a seam
+  # cannot name the node whose body is demanding unless the reader carries it; every site that
+  # APPLIES a body has that identity in hand, and binding it there is a firing check at an existing
+  # seam rather than a new seam.
   #
   # Each guard spells the coverage condition inline on its admitted path and calls
   # `seamAcquisitionDefect` only to raise its refusal: the guard and the validator are two
   # spellings of one condition.
   #
-  # WHAT THE GUARDS DO NOT REACH: only these three names are rebound. The record's other fields
-  # that take a target (`_childSet`, `facade.get` among them) consult no declaration.
+  # THE RECORDS A BODY RECEIVES CARRY NO `_eval`. A child record's co-located cache answers the
+  # child's values with no edge consulted, so `node`, and `get` and `getNta` on a child-bearing
+  # attribute, hand a body the record without it, at the attribute's depth.
+  #
+  # WHAT THE CLOSURE DOES NOT REACH, stated: `allNodeIds` answers the evaluated node set's ids with
+  # no edge consulted, so a body can observe a change of MEMBERSHIP undeclared; it exposes no
+  # node's value. And the guard sees the acquisition, never a field read off a record a body
+  # obtained legitimately, nor a node map a body closes over lexically.
   #
   # `declared == null` is the unarmed case and returns the accessor unchanged, so an evaluation
   # outside the codomain contract pays nothing and refuses nothing.
@@ -300,22 +315,22 @@ let
   # there is no reader whose declaration could be consulted, and a guard treating that absence as
   # the empty declaration would refuse every entry point.
   #
-  # COST, by class: one attrset extension per body application when armed; per cross-node demand
-  # through any of the three names, a constant guard application and a membership walk over the
-  # reader's declared list; per reader, a term linear in its out-degree d at the first
-  # consultation, which forces that list; per self-read, the guard's application alone. Unarmed, it
-  # costs nothing. Always on, per the cost ruling: there is no setting that disables it.
+  # COST, by class: one record of the reader's names per body application when armed; per
+  # cross-node demand, a constant guard application and a membership walk over the reader's
+  # declared list; per reader, a term linear in its out-degree d at the first consultation, which
+  # forces that list; per self-read, the guard's application alone; per record handed back, the
+  # copy without `_eval`. Unarmed, it costs nothing. Always on, per the cost ruling.
   bindReader =
     declared: acc: readerId:
     if declared == null then
       acc
     else
-      acc
+      readerTombstones
       // {
         node =
           targetId:
           if readerId == targetId || builtins.elem targetId (declared readerId) then
-            acc.node targetId
+            builtins.removeAttrs (acc.node targetId) [ "_eval" ]
           else
             throw (seamAcquisitionDefect {
               reader = readerId;
@@ -326,16 +341,20 @@ let
             });
         get =
           targetId: attrName:
-          if readerId == targetId || builtins.elem targetId (declared readerId) then
-            acc.get targetId attrName
-          else
+          if !(readerId == targetId || builtins.elem targetId (declared readerId)) then
             throw (seamAcquisitionDefect {
               reader = readerId;
               target = targetId;
               inherit attrName;
               through = "self.get";
               declared = declared readerId;
-            });
+            })
+          else if structural.childDepth attrName == 0 then
+            acc.get targetId attrName
+          else
+            mapAtDepth (structural.childDepth attrName) (r: builtins.removeAttrs r [ "_eval" ]) (
+              acc.get targetId attrName
+            );
         getRepresentative =
           targetId: attrName:
           if readerId == targetId || builtins.elem targetId (declared readerId) then
@@ -348,7 +367,93 @@ let
               through = "self.getRepresentative";
               declared = declared readerId;
             });
+        # The reading node's own `nta` child is another node: its id is minted from the
+        # coordinates, and the edge to it is declared like any other.
+        getNta =
+          name: group: key: attrName:
+          if !builtins.elem (mintNtaId readerId name group key) (declared readerId) then
+            throw (seamAcquisitionDefect {
+              reader = readerId;
+              target = mintNtaId readerId name group key;
+              inherit attrName;
+              through = "self.getNta";
+              declared = declared readerId;
+            })
+          else if structural.childDepth attrName == 0 then
+            acc.getNta name group key attrName
+          else
+            mapAtDepth (structural.childDepth attrName) (r: builtins.removeAttrs r [ "_eval" ]) (
+              acc.getNta name group key attrName
+            );
+        # An `nta` child's host is another node; a reader that is no `nta` child keeps the
+        # substrate's own refusal.
+        getHostAt =
+          attrName:
+          if decodeNta readerId == null || builtins.elem (decodeNta readerId).host (declared readerId) then
+            acc.getHostAt attrName
+          else
+            throw (seamAcquisitionDefect {
+              reader = readerId;
+              target = (decodeNta readerId).host;
+              inherit attrName;
+              through = "self.getHostAt";
+              declared = declared readerId;
+            });
+        # A node's child ids: structure of the target, so the target is declared.
+        _childOrder =
+          targetId:
+          if readerId == targetId || builtins.elem targetId (declared readerId) then
+            acc._childOrder targetId
+          else
+            throw (seamAcquisitionDefect {
+              reader = readerId;
+              target = targetId;
+              attrName = "children";
+              through = "self._childOrder";
+              declared = declared readerId;
+            });
+        # Enumeration only: the evaluated node set's ids, no node's value (stated above).
+        inherit (acc) allNodeIds;
       };
+
+  # The fields the substrate accessor carried before an armed reader closed, each a named refusal
+  # carrying its repair. Built once per library load and shared by every armed reader. The text is
+  # `seamAcquisitionDefect`'s, so a cell asserts it through the validator.
+  readerTombstones = builtins.mapAttrs (
+    n: _:
+    throw (seamAcquisitionDefect {
+      reader = null;
+      target = null;
+      declared = [ ];
+      attrName = null;
+      through = n;
+    })
+  ) removedReaderFields;
+
+  # Each removed field, and the supported way to do what a body used it for.
+  removedReaderFields =
+    let
+      byNode = "Acquire the node through `self.node <id>`, or read its attribute through `self.get <id> <attr>`, with <id> declared among the node's dependencies; a walk declares the nodes it walks.";
+      byEnum = "Enumerate `self.allNodeIds` and acquire each node through `self.node <id>`, declaring the range the traversal ranges over.";
+      byRecord = "It is a field of the evaluation record, read by the caller of the evaluation (`(eval …).<field>`), never by a body; a body reads another node only through `self.get` or `self.node`, with the edge declared.";
+    in
+    {
+      _childSet = "Read the attribute through `self.get <id> <attr>`, with <id> declared among the node's dependencies.";
+      _childRecords = "Read the child ids through `self._childOrder <id>` and acquire each child through `self.node`, with each child declared.";
+      _walkFrom = byNode;
+      subtreeOf = byNode;
+      allNodes = byEnum;
+      allNodesWhere = byEnum;
+      nodesOfType = byEnum;
+      facade = "The facade is the evaluation record's published surface for a caller of the evaluation; a body reads through `self.get <id> <attr>`, with <id> declared.";
+      structuralAttributes = byRecord;
+      structuralEdges = byRecord;
+      projectionFindings = byRecord;
+      decisionFindings = byRecord;
+      resolutional = byRecord;
+      served = byRecord;
+      provenance = byRecord;
+    };
 
   # A CIRCULAR attribute's step is a body too, and it does not reach the substrate through the
   # ordinary application site: the ascent applies it against the round-indexed accessor it built for
