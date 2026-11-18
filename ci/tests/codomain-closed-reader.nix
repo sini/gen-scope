@@ -12,6 +12,12 @@
 # it (the live control that the plant wrote and reaches the substrate). A reader that only removes the
 # names it knows (a deny-list) hands the plant to every armed body, so this cell is what tells the
 # closed reader from one. The copy is made in this file; nothing is planted in `lib/`.
+#
+# THE ROUTE CELLS (C1–C13) read the tables of `_fixtures/closed-reader.nix`: every route a body can
+# take to another node through the reader, kept or tombstoned, nested or not, in six modes (cold,
+# warm after the target's edit, a fresh cold fold of the edited scope; under the empty and the
+# declared relation). A refusal is a `tryEval` fact here; the text each raises is pinned in
+# `../tests-error.nix` (`codomain-closed-reader-refusals`).
 {
   genScope,
   genGraph,
@@ -21,6 +27,49 @@
 }:
 let
   prelude = genPreludeLib;
+  cr = import ./_fixtures/closed-reader.nix { inherit genScope genGraph; };
+  r3 = v: {
+    cold = v;
+    warm = v;
+    freshcold = v;
+  };
+  # warm parity: the warm read equals a fresh cold fold of the edited scope, not the prior cold read
+  parity = cold: fresh: {
+    inherit cold;
+    warm = fresh;
+    freshcold = fresh;
+  };
+  REF = r3 "REFUSED";
+  both = v: {
+    undeclared = v;
+    declared = v;
+  };
+  pick = names: t: prelude.genAttrs names (n: t.${n});
+  readable = t: builtins.mapAttrs (_: v: v.readable) t;
+  # the reader's names as the closed record carries them: the seven kept readable, the fifteen
+  # tombstoned present and refusing at WHNF
+  closedNames =
+    prelude.genAttrs cr.kept (_: {
+      present = true;
+      readable = true;
+    })
+    // prelude.genAttrs cr.tombs (_: {
+      present = true;
+      readable = false;
+    });
+  openNames = prelude.genAttrs (cr.kept ++ cr.tombs) (_: {
+    present = true;
+    readable = true;
+  });
+  validator =
+    through:
+    genScope.seamAcquisitionDefect {
+      reader = null;
+      target = null;
+      declared = [ ];
+      inherit through;
+    };
+  mentions = n: msg: builtins.length (builtins.split "`self\\.${n}`" msg) > 1;
   refused = v: !(builtins.tryEval (builtins.deepSeq v v)).success;
 
   # ── the planted evaluator ──
@@ -28,10 +77,14 @@ let
   source = builtins.readFile ../../lib/eval.nix;
   planted =
     let
-      text = builtins.replaceStrings [ anchor "import ./" ] [
-        (anchor + "            _zzPlanted = id: attrName: demand \"self.get\" id attrName;\n")
-        "import ${../../lib}/"
-      ] source;
+      text =
+        builtins.replaceStrings
+          [ anchor "import ./" ]
+          [
+            (anchor + "            _zzPlanted = id: attrName: demand \"self.get\" id attrName;\n")
+            "import ${../../lib}/"
+          ]
+          source;
     in
     assert text != source;
     # one plant: `split` answers the text either side of the one match, and the match
@@ -107,11 +160,18 @@ let
     imports = _: _: [ ];
     own-v = self: id: (self.node id).decls.v or 0;
     planted-seen = self: id: if id == "a" then self ? _zzPlanted else false;
-    planted-read = self: id: if id == "a" && self ? _zzPlanted then self._zzPlanted "b" "own-v" else "ABSENT";
+    planted-read =
+      self: id: if id == "a" && self ? _zzPlanted then self._zzPlanted "b" "own-v" else "ABSENT";
     # K3: the published helpers, read from `root`
-    kids = self: id: if id == "root" then builtins.mapAttrs (_: r: r.decls.v or "NO_DECLS") (genScope.children self "a") else { };
+    kids =
+      self: id:
+      if id == "root" then
+        builtins.mapAttrs (_: r: r.decls.v or "NO_DECLS") (genScope.children self "a")
+      else
+        { };
     kid-keys = self: id: if id == "root" then builtins.attrNames (genScope.children self "a") else [ ];
-    by-type = self: id: if id == "root" then builtins.attrNames (genScope.nodesByType self "host") else [ ];
+    by-type =
+      self: id: if id == "root" then builtins.attrNames (genScope.nodesByType self "host") else [ ];
   };
   armedEval = relation: plantedEval { declaredDependencies = rel relation; } attrs scope;
   unarmedEval = plantedEval { } attrs scope;
@@ -270,6 +330,334 @@ in
           "root"
         ]
       ];
+    };
+    # ── THE ROUTE CELLS ──
+    # C1: the seven kept names are present and readable, beside the fifteen tombstones, at every
+    # entry a body is handed a reader by: the ordinary application, an `nta` child's reader, and
+    # both circular ascents' step readers (22 present, 7 readable, as `1000 × present + readable`)
+    test-C1-the-closed-key-set-at-every-entry = {
+      expr = [
+        cr.names.armed
+        cr.nta.declared.childNames
+        cr.nta.undeclared.childNames
+        cr.q.declared.step-shared
+        cr.q.declared.step-nested
+        cr.q.undeclared.step-shared
+        cr.q.undeclared.step-nested
+      ];
+      expected = [
+        closedNames
+        closedNames
+        closedNames
+        22007
+        22007
+        22007
+        22007
+      ];
+    };
+    # C2: each tombstone refuses CATCHABLY, and the evaluation continues
+    test-C2-each-tombstone-is-a-catchable-refusal = {
+      expr = map (n: cr.nakedOf (self: (builtins.tryEval self.${n}).success)) cr.tombs;
+      expected = map (_: false) cr.tombs;
+    };
+    # C3: the validator's capability mode: a message naming `self.<n>` for the fifteen, null for the
+    # seven kept names and for a name the reader never carried
+    test-C3-the-validator-names-each-tombstoned-capability = {
+      expr = map (n: mentions n (validator n)) cr.tombs;
+      expected = map (_: true) cr.tombs;
+    };
+    test-C3-the-validator-is-null-for-a-kept-or-unknown-name = {
+      expr = map validator (
+        cr.kept
+        ++ [
+          "_zzPlanted"
+          "zzFuture"
+        ]
+      );
+      expected = map (_: null) (
+        cr.kept
+        ++ [
+          0
+          0
+        ]
+      );
+    };
+    # C4: a name the substrate never published is ABSENT, not tombstoned (its abort is in tests-error)
+    test-C4-a-future-name-is-absent = {
+      expr = cr.nakedOf (self: self ? zzFuture);
+      expected = false;
+    };
+    # C5 / C5′: `getNta` (host → child) and `getHostAt` (child → host), the host edited
+    test-C5-undeclared-getNta-and-getHostAt-refuse-cold-warm-and-fresh = {
+      expr = pick [ "getHostAt-child-reads-host" "getNta-host-reads-child" ] cr.ntawarm.undeclared;
+      expected = {
+        getHostAt-child-reads-host = REF;
+        getNta-host-reads-child = REF;
+      };
+    };
+    test-C5prime-declared-getNta-and-getHostAt-hold-warm-parity = {
+      expr = pick [ "getHostAt-child-reads-host" "getNta-host-reads-child" ] cr.ntawarm.declared;
+      expected = {
+        getHostAt-child-reads-host = parity 1 9;
+        getNta-host-reads-child = parity 1 9;
+      };
+    };
+    test-control-C5-the-undeclared-host-read-is-refused-and-the-declared-answers = {
+      expr = [
+        cr.nta.undeclared.getHostAt-child-reads-host
+        cr.nta.undeclared.getNta-host-reads-child
+        cr.nta.declared.getHostAt-child-reads-host
+        cr.nta.declared.getNta-host-reads-child
+      ];
+      expected = [
+        "REFUSED"
+        "REFUSED"
+        "r/a"
+        1
+      ];
+    };
+    # C6: depth 3 — the host's own `nta-children` product, and `getNta` to a grandchild — carries
+    # no child's cache
+    test-C6-no-cache-at-depth-three = {
+      expr = pick [ "own-nta-eval" "getNta-nta-eval" ] cr.nta.declared;
+      expected = {
+        own-nta-eval = "NO_EVAL";
+        getNta-nta-eval = "NO_EVAL";
+      };
+    };
+    # C7: no cache through a kept name: a reader's own children, a declared node's children to an
+    # undeclared grandchild, a node's record, an `nta` child's record
+    test-C7-no-cache-through-a-kept-name = {
+      expr = [
+        (pick [
+          "own-children-eval"
+          "self-node-eval-gk"
+          "get-children-eval-gk"
+          "node-kid-eval-gk"
+        ] cr.cells)
+        cr.nta.declared.node-child-eval
+      ];
+      expected = [
+        {
+          own-children-eval = both (r3 "NO_EVAL");
+          self-node-eval-gk = both (r3 "NO_EVAL");
+          get-children-eval-gk = {
+            undeclared = REF;
+            declared = r3 "NO_EVAL";
+          };
+          node-kid-eval-gk = {
+            undeclared = REF;
+            declared = r3 "NO_EVAL";
+          };
+        }
+        "NO_EVAL"
+      ];
+    };
+    # C8: `_childOrder` is guarded; declared and self reads hold warm parity over a membership edit
+    test-C8-childOrder-is-guarded = {
+      expr = pick [ "childOrder" "childOrder-self" ] cr.cells;
+      expected = {
+        childOrder = {
+          undeclared = REF;
+          declared = parity [ "kid" ] [ "kid" "kid2" ];
+        };
+        childOrder-self = both (parity [ "kid" ] [ "kid" "kid2" ]);
+      };
+    };
+    # C8′: `allNodeIds` is the one unguarded name: it answers undeclared, in every mode (F2)
+    test-C8prime-allNodeIds-answers-undeclared = {
+      expr = builtins.mapAttrs (
+        _: builtins.mapAttrs (_: builtins.sort builtins.lessThan)
+      ) cr.cells.allNodeIds;
+      expected = both (r3 [
+        "consumer"
+        "gk"
+        "kid"
+        "kid2"
+        "parent"
+        "producer"
+      ]);
+    };
+    # C9: `getRepresentative` refuses undeclared, and holds warm parity declared
+    test-C9-getRepresentative-guarded-with-warm-parity = {
+      expr = [
+        (pick [ "peer-rep-cold" "peer-rep-warm" "peer-rep-freshcold" ] cr.q.undeclared)
+        (pick [ "peer-rep-cold" "peer-rep-warm" "peer-rep-freshcold" ] cr.q.declared)
+      ];
+      expected = [
+        {
+          peer-rep-cold = "REFUSED";
+          peer-rep-warm = "REFUSED";
+          peer-rep-freshcold = "REFUSED";
+        }
+        {
+          peer-rep-cold = 2;
+          peer-rep-warm = 7;
+          peer-rep-freshcold = 7;
+        }
+      ];
+    };
+    # C10: the published helpers refuse undeclared and answer declared; `nodesByType` over a range
+    # not fully declared refuses
+    test-C10-armed-helpers = {
+      expr = pick [
+        "q-children"
+        "q-children-v"
+        "q-childrenIds"
+        "q-siblings"
+        "q-parent"
+        "q-descendants"
+        "q-nodesByType"
+        "collection-children"
+      ] cr.cells;
+      expected = {
+        q-children = {
+          undeclared = REF;
+          declared = r3 [ "kid" ];
+        };
+        q-children-v = {
+          undeclared = REF;
+          declared = parity { kid = 1; } { kid = 9; };
+        };
+        q-childrenIds = {
+          undeclared = REF;
+          declared = r3 [ "kid" ];
+        };
+        q-siblings = {
+          undeclared = REF;
+          declared = r3 [ ];
+        };
+        q-parent = {
+          undeclared = REF;
+          declared = r3 "parent";
+        };
+        q-descendants = both REF;
+        q-nodesByType = both REF;
+        collection-children = {
+          undeclared = REF;
+          declared = parity [ 1 ] [ 9 ];
+        };
+      };
+    };
+    # K3 cold/warm: a fully declared range through the helpers holds warm parity
+    test-K3-declared-helpers-hold-warm-parity = {
+      expr = [
+        cr.k3.kids
+        cr.k3.bytype
+      ];
+      expected = [
+        {
+          cold.kid = 1;
+          warm.kid = 9;
+          freshcold.kid = 9;
+          undeclared = "REFUSED";
+        }
+        (
+          let
+            at = p: {
+              consumer = "NO_DECLS";
+              gk = 1;
+              kid = 1;
+              kid2 = 2;
+              parent = "NO_DECLS";
+              producer = p;
+            };
+          in
+          {
+            cold = at 1;
+            warm = at 9;
+            freshcold = at 9;
+            undeclared = "REFUSED";
+          }
+        )
+      ];
+    };
+    # C11: the fifteen removed routes refuse in all six modes
+    test-C11-the-fifteen-removed-routes-refuse = {
+      expr = pick [
+        "childSet"
+        "childRecords"
+        "walkFrom"
+        "subtreeOf"
+        "allNodes"
+        "allNodesWhere"
+        "nodesOfType"
+        "facade"
+        "structuralAttributes"
+        "structuralEdges"
+        "projectionFindings"
+        "decisionFindings"
+        "resolutional"
+        "served"
+        "provenance"
+      ] cr.cells;
+      expected = prelude.genAttrs [
+        "childSet"
+        "childRecords"
+        "walkFrom"
+        "subtreeOf"
+        "allNodes"
+        "allNodesWhere"
+        "nodesOfType"
+        "facade"
+        "structuralAttributes"
+        "structuralEdges"
+        "projectionFindings"
+        "decisionFindings"
+        "resolutional"
+        "served"
+        "provenance"
+      ] (_: both REF);
+    };
+    # C12: unarmed, the reader is the substrate accessor, and every `nta` route answers as before
+    test-C12-unarmed-is-unchanged = {
+      expr = [
+        cr.names.unarmed
+        cr.nta.unarmed.childNames
+        (removeAttrs cr.nta.unarmed [ "childNames" ])
+        cr.k3.unarmed-shape
+        cr.k3.unarmed-kids
+      ];
+      expected = [
+        openNames
+        openNames
+        {
+          getHostAt-child-reads-host = "r/a";
+          getNta-host-reads-child = 1;
+          getNta-nta-eval = 3;
+          node-child-eval = 1;
+          own-nta-eval = 1;
+        }
+        {
+          children.kid = [
+            "_eval"
+            "id"
+          ];
+          bytype = prelude.genAttrs [ "consumer" "gk" "kid" "kid2" "parent" "producer" ] (_: [
+            "decls"
+            "id"
+            "parent"
+            "type"
+          ]);
+        }
+        { kid = "NO_DECLS"; }
+      ];
+    };
+    # C13: the read seam's own guard, as a control: `get` / `node` refuse undeclared and hold warm
+    # parity declared; a self-read answers under either relation
+    test-C13-get-and-node-guarded-with-warm-parity = {
+      expr = pick [ "get" "node-decls" "self-get" ] cr.cells;
+      expected = {
+        get = {
+          undeclared = REF;
+          declared = parity 1 9;
+        };
+        node-decls = {
+          undeclared = REF;
+          declared = parity 1 9;
+        };
+        self-get = both (parity 0 9);
+      };
     };
   };
 }

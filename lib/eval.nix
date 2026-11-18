@@ -363,9 +363,7 @@ let
           else if structural.childDepth attrName == 0 then
             acc.get targetId attrName
           else
-            mapAtDepth (structural.childDepth attrName) (r: r._authored) (
-              acc.get targetId attrName
-            );
+            mapAtDepth (structural.childDepth attrName) (r: r._authored) (acc.get targetId attrName);
         getRepresentative =
           targetId: attrName:
           if readerId == targetId || builtins.elem targetId (declared readerId) then
@@ -393,9 +391,7 @@ let
           else if structural.childDepth attrName == 0 then
             acc.getNta name group key attrName
           else
-            mapAtDepth (structural.childDepth attrName) (r: r._authored) (
-              acc.getNta name group key attrName
-            );
+            mapAtDepth (structural.childDepth attrName) (r: r._authored) (acc.getNta name group key attrName);
         # An `nta` child's host is another node; a reader that is no `nta` child keeps the
         # substrate's own refusal. On a child-bearing attribute the substrate's answer is reached
         # through the host's wrapped records (at `nta-children`, the reader's own wrapper), so the
@@ -1575,9 +1571,11 @@ let
 
             # ── THE `self.node` SEAM GUARD, AT THE ORDINARY APPLICATION SITE ──
             # A body may not ACQUIRE a node record across an edge its node did not declare. This is
-            # the record seam's half of the coverage condition; `bindReader` binds three guarded
-            # names — `node`, and the read seam's `get` and `getRepresentative` beside it, under the
-            # same condition. `node` is a separate entry point from `get`, and the traversal helpers —
+            # the record seam's half of the coverage condition. Armed, `bindReader` hands a body a
+            # closed record: `node` beside the guarded demand forms `get`, `getRepresentative`,
+            # `getNta`, `getHostAt` and `_childOrder`, all under the same condition, the enumeration
+            # `allNodeIds`, and a named refusal at each other field the substrate carries.
+            # `node` is a separate entry point from `get`, and the traversal helpers —
             # `siblings`, `ancestors`, the Neron collection walks, the reverse query — reach their
             # targets through this one, so a guard here makes their dependence DECLARED rather than
             # approximated by publishing the structural relation's inverse, which is ⊤ over a

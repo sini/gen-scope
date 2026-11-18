@@ -5371,4 +5371,74 @@ in
         refused (genScope.followEdge "$" (F.hop { extra."edges-$" = _: _: [ "a" ]; }) "s")
           "gen-scope.wellFormed: alphabet carries the reserved letter '$' — `_` is the any-label wildcard of the path-expression grammar and `$` the extended label marking the end of a path (van Antwerpen 2018 Fig. 1); neither can also name an edge";
     };
+
+  # ── THE CLOSED BODY READER'S REFUSALS, BY MESSAGE ──
+  # `codomain-closed-reader` asserts THAT each tombstone and each newly guarded name refuses, and
+  # that the validator names each capability; these pin the text the reader RAISES. Each tombstone
+  # raises its validator's capability text (one cell per name, so a tombstone raising another's text
+  # reds), the facade's text is pinned literally, and the three names guarded at this seam raise the
+  # edge text naming their entry. The last cell is the evaluator's, not this library's: a name the
+  # reader never carried aborts as a missing attribute, which `tryEval` does not catch, so it is
+  # matched on the evaluator's own sentence and not anchored.
+  config.flake.testsError.codomain-closed-reader-refusals =
+    let
+      cr = import ./tests/_fixtures/closed-reader.nix { inherit genScope genGraph; };
+      capability =
+        through:
+        genScope.seamAcquisitionDefect {
+          reader = null;
+          target = null;
+          declared = [ ];
+          inherit through;
+        };
+    in
+    builtins.listToAttrs (
+      map (n: {
+        name = "test-tombstone-${n}-raises-its-capability-text";
+        value = {
+          expr = cr.nakedOf (self: self.${n});
+          expectedError = {
+            type = "ThrownError";
+            msg = exactly (capability n);
+          };
+        };
+      }) cr.tombs
+    )
+    // {
+      test-the-facade-tombstone-names-the-capability-and-its-repair = {
+        expr = cr.nakedOf (self: self.facade.get "producer" "val");
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: an armed body's reader does not carry `self.facade`. The reader a body is handed is closed to its guarded demand forms (`node`, `get`, `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`) and the enumeration `allNodeIds`, so that a body cannot read across an edge its node did not declare. The facade is the evaluation record's published surface for a caller of the evaluation; a body reads through `self.get <id> <attr>`, with <id> declared.";
+        };
+      };
+      test-getNta-raises-the-edge-text = {
+        expr = cr.ntaUndeclared.get "r" "readA";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: node 'r' read attribute 'v' of node '${cr.childA}' through `self.getNta`, and '${cr.childA}' is not in the dependency relation 'r' declared: []. A body may not read across an edge its node did not declare — the relation a grammar gate runs over is contracted at every firing, so an undeclared read would make the declaration false while the evaluation still answered. Declare '${cr.childA}' among 'r's dependencies; a traversal that ranges over the graph declares the range it ranges over.";
+        };
+      };
+      test-getHostAt-raises-the-edge-text = {
+        expr = cr.ntaUndeclared.get cr.childA "hp";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: node '${cr.childA}' read attribute 'pos' of node 'r' through `self.getHostAt`, and 'r' is not in the dependency relation '${cr.childA}' declared: []. A body may not read across an edge its node did not declare — the relation a grammar gate runs over is contracted at every firing, so an undeclared read would make the declaration false while the evaluation still answered. Declare 'r' among '${cr.childA}'s dependencies; a traversal that ranges over the graph declares the range it ranges over.";
+        };
+      };
+      test-childOrder-raises-the-edge-text = {
+        expr = cr.rawCold "childOrder";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: node 'consumer' read attribute 'children' of node 'parent' through `self._childOrder`, and 'parent' is not in the dependency relation 'consumer' declared: []. A body may not read across an edge its node did not declare — the relation a grammar gate runs over is contracted at every firing, so an undeclared read would make the declaration false while the evaluation still answered. Declare 'parent' among 'consumer's dependencies; a traversal that ranges over the graph declares the range it ranges over.";
+        };
+      };
+      test-a-future-name-aborts-as-a-missing-attribute = {
+        expr = cr.nakedOf (self: (builtins.tryEval self.zzFuture).success);
+        expectedError = {
+          type = "EvalError";
+          msg = "attribute 'zzFuture' missing";
+        };
+      };
+    };
 }
