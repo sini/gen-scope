@@ -1,8 +1,8 @@
 # THE CLOSED BODY READER — R§2.4 under the arm-(b) construction.
 #
 # An armed body's reader is a closed record: the guarded demand forms (`node`, `get`,
-# `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`), the one enumeration `allNodeIds`, and a
-# named refusal at each field the substrate accessor carried before it closed. A field the substrate
+# `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`), the one enumeration `allNodeIds`, the
+# armed-reader marker `reader` (the constant `true`; never on an unarmed reader), and a named refusal at each field the substrate accessor carried before it closed. A field the substrate
 # gains later is ABSENT from it. The records a body receives are the records as authored: no wrapper
 # field (the co-located `_eval` cache, or any other a wrap site adds) reaches a body through a kept name.
 #
@@ -12,6 +12,10 @@
 # it (the live control that the plant wrote and reaches the substrate). A reader that only removes the
 # names it knows (a deny-list) hands the plant to every armed body, so this cell is what tells the
 # closed reader from one. The copy is made in this file; nothing is planted in `lib/`.
+#
+# THE MARKER CELLS (M1–M8) read `marker`'s fixture below: the marker at every entry a body is handed a
+# reader by, armed and unarmed, and on the record a caller holds; authored content carrying the name
+# `reader`; and the helpers' branch under every steer a body can make by passing a record it built.
 #
 # THE ROUTE CELLS (C1–C13) read the tables of `_fixtures/closed-reader.nix`: every route a body can
 # take to another node through the reader, kept or tombstoned, nested or not, in six modes (cold,
@@ -46,10 +50,10 @@ let
   };
   pick = names: t: prelude.genAttrs names (n: t.${n});
   readable = t: builtins.mapAttrs (_: v: v.readable) t;
-  # the reader's names as the closed record carries them: the seven kept readable, the fifteen
-  # tombstoned present and refusing at WHNF
+  # the reader's names as the closed record carries them: the seven kept and the marker readable, the
+  # fifteen tombstoned present and refusing at WHNF
   closedNames =
-    prelude.genAttrs cr.kept (_: {
+    prelude.genAttrs (cr.kept ++ cr.marker) (_: {
       present = true;
       readable = true;
     })
@@ -57,10 +61,17 @@ let
       present = true;
       readable = false;
     });
-  openNames = prelude.genAttrs (cr.kept ++ cr.tombs) (_: {
-    present = true;
-    readable = true;
-  });
+  openNames =
+    prelude.genAttrs (cr.kept ++ cr.tombs) (_: {
+      present = true;
+      readable = true;
+    })
+    // {
+      reader = {
+        present = false;
+        readable = "ABSENT";
+      };
+    };
   validator =
     through:
     genScope.seamAcquisitionDefect {
@@ -234,6 +245,316 @@ let
     ${childA} = [ "r" ];
   };
   unarmedNta = fx.nestWith genScope.eval extra;
+  # ── fixture: the armed-reader marker. Roots `producer`, `consumer`, `parent`; `kid` and `kid2` are
+  # `parent`'s children, `gk` is `kid`'s. AUTHORED content carries the marker's name: the consumer's
+  # decls, and every selected child's stub, at its top level. ──
+  marker =
+    let
+      try =
+        v:
+        let
+          r = builtins.tryEval (builtins.deepSeq v v);
+        in
+        if r.success then r.value else "REFUSED";
+      mark =
+        s:
+        if s ? reader then
+          (
+            let
+              r = builtins.tryEval s.reader;
+            in
+            if r.success then r.value else "REFUSES"
+          )
+        else
+          "ABSENT";
+      res = name: compute: {
+        inherit name compute;
+        kind = "synthesized";
+        readsAttrs = [ ];
+        stratum = "resolution";
+      };
+      relOf = r: genGraph.mkDeclaredEdges (builtins.mapAttrs (_: map (genGraph.mkNodeRef (_: true))) r);
+      dv = m: builtins.mapAttrs (_: r: r.decls.v or "NO_DECLS") m;
+      ids = [
+        "producer"
+        "consumer"
+        "parent"
+        "kid"
+        "gk"
+        "kid2"
+      ];
+      scopeOf =
+        edits:
+        genScope.buildRoots {
+          kinds = genScope.mkKinds [ (genScope.mkKind { } "host") ];
+          parentGraph = genScope.overlays (
+            map genScope.edge [
+              {
+                from = "kid";
+                to = "parent";
+              }
+              {
+                from = "kid2";
+                to = "parent";
+              }
+              {
+                from = "gk";
+                to = "kid";
+              }
+            ]
+          );
+          decls = {
+            producer.v = 1;
+            consumer = {
+              reader = true;
+            };
+            parent = { };
+            kid.v = 1;
+            kid2.v = 2;
+            gk.v = 1;
+          }
+          // edits;
+          types = prelude.genAttrs ids (_: "host");
+        };
+      parseParent =
+        id:
+        if id == "kid" || id == "kid2" then
+          "parent"
+        else if id == "gk" then
+          "kid"
+        else
+          null;
+      atConsumer =
+        f: self: id:
+        if id == "consumer" then try (f self) else null;
+      equations = {
+        children = {
+          name = "children";
+          kind = "nta";
+          readsAttrs = [ ];
+          stratum = "structural";
+          compute =
+            _: id:
+            builtins.listToAttrs (
+              map
+                (k: {
+                  name = k;
+                  value = {
+                    id = k;
+                    reader = true;
+                  };
+                })
+                (
+                  if id == "parent" then
+                    [
+                      "kid"
+                      "kid2"
+                    ]
+                  else if id == "kid" then
+                    [ "gk" ]
+                  else
+                    [ ]
+                )
+            );
+        };
+        imports = {
+          name = "imports";
+          kind = "synthesized";
+          readsAttrs = [ ];
+          stratum = "structural";
+          compute = _: _: [ ];
+        };
+        mark = res "mark" (self: _: mark self);
+        kids = res "kids" (atConsumer (self: dv (genScope.children self "parent")));
+        bytype = res "bytype" (atConsumer (self: dv (genScope.nodesByType self "host")));
+        # the body adds the marker to its reader, or removes it, or overrides the field the
+        # tombstone test once read
+        steerOn = res "steerOn" (
+          atConsumer (self: dv (genScope.children (self // { reader = true; }) "parent"))
+        );
+        steerOnT = res "steerOnT" (
+          atConsumer (self: dv (genScope.nodesByType (self // { reader = true; }) "host"))
+        );
+        steerOff = res "steerOff" (
+          atConsumer (self: dv (genScope.children (builtins.removeAttrs self [ "reader" ]) "parent"))
+        );
+        steerOffT = res "steerOffT" (
+          atConsumer (self: dv (genScope.nodesByType (builtins.removeAttrs self [ "reader" ]) "host"))
+        );
+        steerBase = res "steerBase" (
+          atConsumer (self: dv (genScope.children (self // { _childRecords = throw "steer"; }) "parent"))
+        );
+        bytypeShape = res "bytypeShape" (
+          atConsumer (self: builtins.attrNames (genScope.nodesByType self "host").kid)
+        );
+        stub = res "stub" (
+          atConsumer (self: {
+            r = (self.get "parent" "children").kid.reader or "NONE";
+            e = (self.get "parent" "children").kid ? _eval;
+          })
+        );
+        decl = res "decl" (atConsumer (self: (self.node "consumer").decls.reader));
+      };
+      fold =
+        relation: edits:
+        genScope.foldEquations { } {
+          scope = scopeOf edits;
+          schedule.equations = equations;
+          declaredDependencies = relation;
+          inherit parseParent;
+        };
+      declAll = relOf { consumer = ids; };
+      armed = (fold declAll { }).eval;
+      armedU = (fold (relOf { }) { }).eval;
+      un = genScope.eval { inherit parseParent; } (builtins.mapAttrs (_: e: e.compute) equations) (
+        scopeOf { }
+      );
+      warmOf =
+        ctx: edits:
+        genScope.evalWarm { inherit (ctx) parseParent declaredDependencies; } {
+          scope = ctx.scope // {
+            nodes = builtins.mapAttrs (
+              id: n: if edits ? ${id} then n // { decls = (n.decls or { }) // edits.${id}; } else n
+            ) ctx.scope.nodes;
+          };
+          inherit (ctx) attributes;
+          prior = ctx.eval.facade;
+          decision = genScope.mkDecision {
+            isClean = id: !(edits ? ${id}) && id != "consumer";
+            reusable = ctx.eval.facade.resolutional;
+          };
+        };
+      entries = ev: {
+        root = try (ev.get "consumer" "mark");
+        sibling = try (ev.get "producer" "mark");
+        child = try (ev.get "kid" "mark");
+        grandchild = try (ev.get "gk" "mark");
+        callerRecord = mark ev;
+      };
+      helpers =
+        ev:
+        prelude.genAttrs [
+          "kids"
+          "bytype"
+          "steerOn"
+          "steerOnT"
+          "steerOff"
+          "steerOffT"
+          "steerBase"
+          "bytypeShape"
+          "stub"
+          "decl"
+        ] (a: try (ev.get "consumer" a));
+      ntaExtra = {
+        inherit (fx) pos;
+        mark = self: _: mark self;
+      };
+      ntaArmed =
+        r:
+        fx.nestWith (
+          _: a: sc:
+          genScope.eval { declaredDependencies = relOf r; } a sc
+        ) ntaExtra;
+      ntaRows = ev: {
+        host = try (ev.get "r" "mark");
+        child = try (ev.get childA "mark");
+        callerRecord = mark ev;
+      };
+      carrierWith = quotient: {
+        bottom = 0;
+        leq = x: y: x <= y;
+        height = 100;
+        inherit quotient;
+      };
+      stepMark = s: if s ? reader then 1 else 0;
+      qAttrs = {
+        children = _: _: { };
+        imports = _: _: [ ];
+        step-shared = genScope.circular { carrier = carrierWith false; } (
+          self: _: _prev:
+          stepMark self
+        );
+        step-shared2 = genScope.circular { carrier = carrierWith false; } (
+          self: _: _prev:
+          stepMark self
+        );
+        step-nested = genScope.circular { carrier = carrierWith true; } (
+          self: _: _prev:
+          stepMark self
+        );
+      };
+      qKind =
+        n:
+        if n == "children" then
+          "nta"
+        else if
+          builtins.elem n [
+            "step-shared"
+            "step-shared2"
+            "step-nested"
+          ]
+        then
+          "circular"
+        else
+          "synthesized";
+      qScope = genScope.buildRoots {
+        decls = {
+          a.v = 1;
+          b.v = 2;
+        };
+        types = { };
+      };
+      qArmed =
+        (genScope.foldEquations { } {
+          scope = qScope;
+          declaredDependencies = relOf { };
+          schedule.equations = builtins.mapAttrs (name: compute: {
+            inherit name compute;
+            kind = qKind name;
+            readsAttrs = [ ];
+            stratum = if name == "children" then "structural" else "resolution";
+          }) qAttrs;
+          parseParent = _: null;
+        }).eval;
+      qUn = genScope.eval { parseParent = _: null; } qAttrs qScope;
+      qRows = ev: {
+        shared = try (ev.get "a" "step-shared");
+        nested = try (ev.getRepresentative "a" "step-nested").representative;
+      };
+    in
+    {
+      armed = {
+        entries = entries armed;
+        helpers = helpers armed;
+        warmRoot = try ((warmOf (fold declAll { }) { producer.v = 9; }).get "consumer" "mark");
+      };
+      armedUndeclared = {
+        entries = entries armedU;
+        helpers = helpers armedU;
+      };
+      unarmed = {
+        entries = entries un;
+        helpers = helpers un;
+      };
+      nta = {
+        armedDeclared = ntaRows (ntaArmed {
+          r = [ childA ];
+          ${childA} = [ "r" ];
+        });
+        armedUndeclared = ntaRows (ntaArmed { });
+        unarmed = ntaRows (fx.nestWith genScope.eval ntaExtra);
+      };
+      step = {
+        armed = qRows qArmed;
+        unarmed = qRows qUn;
+      };
+      # a CALLER (no body) runs the helpers on the evaluation record it holds: the substrate's walk
+      caller = {
+        armed = try (dv (genScope.children armed "parent"));
+        armedT = try (dv (genScope.nodesByType armed "host"));
+        unarmed = try (dv (genScope.children un "parent"));
+      };
+    };
 in
 {
   flake.tests."codomain-closed-reader" = {
@@ -366,10 +687,210 @@ in
         ]
       ];
     };
+    # ── THE MARKER CELLS ──
+    # M1: every armed entry carries the marker, `true`: a root, a sibling root, a selected child's
+    # body, a grandchild's, an `nta` host and its child (declared and empty relation), both circular
+    # ascents' step readers, and the warm pass's root
+    test-M1-the-marker-at-every-armed-entry = {
+      expr = [
+        marker.armed.entries
+        marker.armedUndeclared.entries
+        marker.nta.armedDeclared
+        marker.nta.armedUndeclared
+        marker.step.armed
+        marker.armed.warmRoot
+      ];
+      expected =
+        let
+          on = {
+            root = true;
+            sibling = true;
+            child = true;
+            grandchild = true;
+            callerRecord = "ABSENT";
+          };
+          ntaOn = {
+            host = true;
+            child = true;
+            callerRecord = "ABSENT";
+          };
+        in
+        [
+          on
+          on
+          ntaOn
+          ntaOn
+          {
+            shared = 1;
+            nested = 1;
+          }
+          true
+        ];
+    };
+    # M2: no unarmed entry carries it, and neither does the evaluation record a caller holds, armed or
+    # unarmed (the `callerRecord` rows of M1 are the armed half)
+    test-M2-no-marker-at-any-unarmed-entry = {
+      expr = [
+        marker.unarmed.entries
+        marker.nta.unarmed
+        marker.step.unarmed
+      ];
+      expected = [
+        {
+          root = "ABSENT";
+          sibling = "ABSENT";
+          child = "ABSENT";
+          grandchild = "ABSENT";
+          callerRecord = "ABSENT";
+        }
+        {
+          host = "ABSENT";
+          child = "ABSENT";
+          callerRecord = "ABSENT";
+        }
+        {
+          shared = 0;
+          nested = 0;
+        }
+      ];
+    };
+    # M3: authored content carrying `reader` marks nothing and steers nothing: the unarmed `children`
+    # answers the selecting body's stubs, and the content itself is intact on both readers
+    test-M3-authored-content-named-reader-marks-nothing = {
+      expr = [
+        marker.unarmed.helpers.kids
+        marker.unarmed.helpers.decl
+        marker.armed.helpers.decl
+        marker.unarmed.helpers.stub
+        marker.armed.helpers.stub
+      ];
+      expected = [
+        {
+          kid = "NO_DECLS";
+          kid2 = "NO_DECLS";
+        }
+        true
+        true
+        {
+          r = true;
+          e = true;
+        }
+        {
+          r = true;
+          e = false;
+        }
+      ];
+    };
+    # M4: the armed helpers take the armed branch through the marker: the registered records, declared;
+    # refused under the empty relation
+    test-M4-armed-helpers-take-the-armed-branch = {
+      expr = [
+        marker.armed.helpers.kids
+        marker.armed.helpers.bytype
+        marker.armed.helpers.bytypeShape
+        marker.armedUndeclared.helpers.kids
+        marker.armedUndeclared.helpers.bytype
+      ];
+      expected = [
+        {
+          kid = 1;
+          kid2 = 2;
+        }
+        {
+          consumer = "NO_DECLS";
+          gk = 1;
+          kid = 1;
+          kid2 = 2;
+          parent = "NO_DECLS";
+          producer = 1;
+        }
+        [
+          "decls"
+          "id"
+          "parent"
+          "type"
+        ]
+        "REFUSED"
+        "REFUSED"
+      ];
+    };
+    # M5: an armed reader the body strips of the marker takes the unarmed branch and meets a tombstone
+    test-M5-steer-off-meets-a-tombstone = {
+      expr = [
+        marker.armed.helpers.steerOff
+        marker.armed.helpers.steerOffT
+      ];
+      expected = [
+        "REFUSED"
+        "REFUSED"
+      ];
+    };
+    # M6: under the empty relation no steer reaches an undeclared record
+    test-M6-no-steer-reaches-an-undeclared-record = {
+      expr = prelude.genAttrs [
+        "kids"
+        "bytype"
+        "steerOn"
+        "steerOnT"
+        "steerOff"
+        "steerOffT"
+        "steerBase"
+      ] (a: marker.armedUndeclared.helpers.${a});
+      expected = prelude.genAttrs [
+        "kids"
+        "bytype"
+        "steerOn"
+        "steerOnT"
+        "steerOff"
+        "steerOffT"
+        "steerBase"
+      ] (_: "REFUSED");
+    };
+    # M7, stated behaviour: an unarmed reader the body marks takes the armed branch over its own
+    # unguarded fields (the registered records); overriding `_childRecords` no longer selects a branch
+    test-M7-steer-on-is-stated = {
+      expr = [
+        marker.unarmed.helpers.steerOn
+        marker.unarmed.helpers.steerBase
+      ];
+      expected = [
+        {
+          kid = 1;
+          kid2 = 2;
+        }
+        "REFUSED"
+      ];
+    };
+    # M8: a caller's helper call on the evaluation record walks the substrate, armed or not
+    test-M8-a-caller-s-helpers-walk-the-substrate = {
+      expr = [
+        marker.caller.armed
+        marker.caller.armedT
+        marker.caller.unarmed
+      ];
+      expected = [
+        {
+          kid = "NO_DECLS";
+          kid2 = "NO_DECLS";
+        }
+        {
+          consumer = "NO_DECLS";
+          gk = 1;
+          kid = 1;
+          kid2 = 2;
+          parent = "NO_DECLS";
+          producer = 1;
+        }
+        {
+          kid = "NO_DECLS";
+          kid2 = "NO_DECLS";
+        }
+      ];
+    };
     # ── THE ROUTE CELLS ──
-    # C1: the seven kept names are present and readable, beside the fifteen tombstones, at every
-    # entry a body is handed a reader by: the ordinary application, an `nta` child's reader, and
-    # both circular ascents' step readers (22 present, 7 readable, as `1000 × present + readable`)
+    # C1: the seven kept names and the marker are present and readable, beside the fifteen tombstones,
+    # at every entry a body is handed a reader by: the ordinary application, an `nta` child's reader,
+    # and both circular ascents' step readers (23 present, 8 readable, as `1000 × present + readable`)
     test-C1-the-closed-key-set-at-every-entry = {
       expr = [
         cr.names.armed
@@ -384,10 +905,10 @@ in
         closedNames
         closedNames
         closedNames
-        22007
-        22007
-        22007
-        22007
+        23008
+        23008
+        23008
+        23008
       ];
     };
     # C2: each tombstone refuses CATCHABLY, and the evaluation continues
@@ -404,6 +925,7 @@ in
     test-C3-the-validator-is-null-for-a-kept-or-unknown-name = {
       expr = map validator (
         cr.kept
+        ++ cr.marker
         ++ [
           "_zzPlanted"
           "zzFuture"
@@ -411,6 +933,7 @@ in
       );
       expected = map (_: null) (
         cr.kept
+        ++ cr.marker
         ++ [
           0
           0

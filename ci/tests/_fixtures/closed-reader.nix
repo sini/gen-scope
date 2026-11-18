@@ -35,6 +35,7 @@ let
     "getRepresentative"
     "node"
   ];
+  marker = [ "reader" ];
   tombs = [
     "_childRecords"
     "_childSet"
@@ -62,7 +63,7 @@ let
           present = has self n;
           readable = if has self n then (builtins.tryEval (builtins.typeOf self.${n})).success else "ABSENT";
         };
-      }) (kept ++ tombs)
+      }) (kept ++ marker ++ tombs)
     );
   rel = r: genGraph.mkDeclaredEdges (builtins.mapAttrs (_: map (genGraph.mkNodeRef (_: true))) r);
   emptyRel = rel { };
@@ -571,10 +572,10 @@ let
   # tombstoned names.
   stepProbe =
     self:
-    builtins.length (builtins.filter (has self) (kept ++ tombs)) * 1000
+    builtins.length (builtins.filter (has self) (kept ++ marker ++ tombs)) * 1000
     + builtins.length (
       builtins.filter (n: has self n && (builtins.tryEval (builtins.typeOf self.${n})).success) (
-        kept ++ tombs
+        kept ++ marker ++ tombs
       )
     );
   qAttrs = {
@@ -691,6 +692,7 @@ in
 {
   inherit
     kept
+    marker
     tombs
     childA
     nakedOf

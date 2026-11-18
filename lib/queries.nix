@@ -20,14 +20,14 @@ let
 
   parent = self: id: (self.node id).parent;
 
-  # An armed body's reader carries no `_childRecords` (a named refusal, so `tryEval` reads it as a
-  # failure): a body reads a node's children through the guarded names, `_childOrder` and `node`,
+  # An armed body's reader carries the marker `reader` (an unarmed one never does) and no
+  # `_childRecords` (a named refusal): a body reads a node's children through the guarded names, `_childOrder` and `node`,
   # so each child is a declared read. The unarmed reader answers through `_childRecords`,
   # unchanged. The test is spelled at each use rather than bound, so the library binds nothing for it.
 
   children =
     self: id:
-    if !(builtins.tryEval self._childRecords).success then
+    if self ? reader then
       builtins.listToAttrs (
         map (cid: {
           name = toKey cid;
@@ -123,11 +123,11 @@ let
     );
 
   # Delegates to eval's nodesOfType (selective walk) instead of forcing allNodes.
-  # Armed, the walk is the enumeration `allNodeIds` read through `node`, so every node it ranges
+  # Armed (`self ? reader`), the walk is the enumeration `allNodeIds` read through `node`, so every node it ranges
   # over is a declared read; unarmed, `nodesOfType`'s selective walk, unchanged.
   nodesByType =
     self: type:
-    if !(builtins.tryEval self._childRecords).success then
+    if self ? reader then
       let
         t = string "nodesByType" "a kind name" type;
       in

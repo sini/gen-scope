@@ -5409,7 +5409,7 @@ in
         expr = cr.nakedOf (self: self.facade.get "producer" "val");
         expectedError = {
           type = "ThrownError";
-          msg = exactly "gen-scope: an armed body's reader does not carry `self.facade`. The reader a body is handed is closed to its guarded demand forms (`node`, `get`, `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`) and the enumeration `allNodeIds`, so that a body cannot read across an edge its node did not declare. The facade is the evaluation record's published surface for a caller of the evaluation; a body reads through `self.get <id> <attr>`, with <id> declared.";
+          msg = exactly "gen-scope: an armed body's reader does not carry `self.facade`. The reader a body is handed is closed to its guarded demand forms (`node`, `get`, `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`), the enumeration `allNodeIds` and the armed-reader marker `reader`, so that a body cannot read across an edge its node did not declare. The facade is the evaluation record's published surface for a caller of the evaluation; a body reads through `self.get <id> <attr>`, with <id> declared.";
         };
       };
       test-getNta-raises-the-edge-text = {

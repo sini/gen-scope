@@ -290,7 +290,7 @@ let
         };
       in
       if record ? ${through} then
-        "gen-scope: an armed body's reader does not carry `self.${through}`. The reader a body is handed is closed to its guarded demand forms (`node`, `get`, `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`) and the enumeration `allNodeIds`, so that a body cannot read across an edge its node did not declare. ${record.${through}}"
+        "gen-scope: an armed body's reader does not carry `self.${through}`. The reader a body is handed is closed to its guarded demand forms (`node`, `get`, `getRepresentative`, `getNta`, `getHostAt`, `_childOrder`), the enumeration `allNodeIds` and the armed-reader marker `reader`, so that a body cannot read across an edge its node did not declare. ${record.${through}}"
       else
         null
     else if reader == target || builtins.elem target declared then
@@ -308,7 +308,8 @@ let
   # ── THE READER BINDING: A CLOSED RECORD OF GUARDED DEMAND FORMS ──
   # The accessor a BODY is handed, as against the one the substrate walks with. Armed, it is a
   # CLOSED record: the reader carries the guarded demand forms below, one enumeration-only name
-  # (`allNodeIds`), and a named refusal at each field the substrate accessor carried before the
+  # (`allNodeIds`), the armed-reader marker `reader` (the constant `true`: no target, no guard, so
+  # `self ? reader` tells an armed reader from an unarmed one, which never carries it), and a named refusal at each field the substrate accessor carried before the
   # reader closed (the armed relation's `reader`). A field the substrate gains later is ABSENT from it until it
   # is guarded and listed here, so a new route to another node is refused by construction rather
   # than by a guard someone remembered to add. Every name takes a target and no source, so a seam
@@ -354,6 +355,7 @@ let
     else
       declared.reader
       // {
+        reader = true;
         node =
           targetId:
           if readerId == targetId || builtins.elem targetId (declared.dependencies readerId) then
