@@ -318,11 +318,11 @@ let
   # the empty declaration would refuse every entry point.
   #
   # COST, by class: one record of the reader's names per root, and per body application on any
-  # other node, when armed; per
-  # cross-node demand, a constant guard application and a membership walk over the reader's
-  # declared list; per reader, a term linear in its out-degree d at the first consultation, which
-  # forces that list; per self-read, the guard's application alone; per record handed back, one
-  # select. Unarmed, it costs nothing. Always on, per the cost ruling.
+  # other node, when armed; per cross-node demand, a constant guard application and a membership
+  # walk over the reader's declared list; per reader, a term linear in its out-degree d at the first
+  # consultation, which forces that list; per self-read, the guard's application alone; per record
+  # handed back, one select. Unarmed, a constant per evaluation and nothing per node. Always on, per
+  # the cost ruling.
   bindReader =
     declared: acc: readerId:
     if declared == null then
