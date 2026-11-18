@@ -1529,10 +1529,12 @@ let
                               else
                                 self.get tid a;
                           };
-                          wrapped = childNode // {
-                            ${authoredField} = childNode;
-                            _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
-                          };
+                          wrapped =
+                            childNode
+                            // {
+                              _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
+                            }
+                            // (if declaredRelation == null then { } else { _authored = childNode; });
                         in
                         wrapped
                       )
@@ -2236,9 +2238,6 @@ let
               childNode:
               childNode
               // {
-                # An armed body is handed the record as authored, never the wrapper (`bindReader`), so a
-                # field added here is absent from a body's view by construction. Unarmed, it is omitted.
-                ${authoredField} = childNode;
                 # THE LIFETIME RULE: a round's memo is reachable only through the round's own
                 # accessor. While a round is open the co-located cache refuses by name rather than
                 # serving — the alternative measured is a silent wrong answer from a snapshot the
@@ -2252,9 +2251,10 @@ let
                     ) runAttributes
                   else
                     builtins.mapAttrs (evalAttr null childNode.id) runAttributes;
-              };
-            # `null` omits the field: an unarmed evaluation's records are unchanged.
-            authoredField = if declaredRelation == null then null else "_authored";
+              }
+              # An armed body is handed the record as authored, never this wrapper (`bindReader`), so a
+              # field added here is absent from a body's view by construction. Unarmed, nothing is added.
+              // (if declaredRelation == null then { } else { _authored = childNode; });
             rootEval = prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots;
 
             # ── THE PARENT CHAIN, GROUNDED BEFORE IT IS DESCENDED ──
