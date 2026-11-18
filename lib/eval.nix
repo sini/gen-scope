@@ -297,9 +297,11 @@ let
   # `seamAcquisitionDefect` only to raise its refusal: the guard and the validator are two
   # spellings of one condition.
   #
-  # THE RECORDS A BODY RECEIVES CARRY NO `_eval`. A child record's co-located cache answers the
-  # child's values with no edge consulted, so `node`, and `get` and `getNta` on a child-bearing
-  # attribute, hand a body the record without it, at the attribute's depth.
+  # THE RECORDS A BODY RECEIVES ARE THE RECORDS AS AUTHORED. A child record's wrapper carries the
+  # co-located cache (`_eval`), which answers the child's values with no edge consulted, so `node`,
+  # and `get` and `getNta` on a child-bearing attribute, hand a body the record the wrapper was built
+  # from (`_authored`, set only in an armed evaluation), at the attribute's depth: a field a wrap
+  # site adds is absent from a body's view without being named here.
   #
   # WHAT THE CLOSURE DOES NOT REACH, stated: `allNodeIds` answers the evaluated node set's ids with
   # no edge consulted, so a body can observe a change of MEMBERSHIP undeclared; it exposes no
@@ -318,8 +320,8 @@ let
   # COST, by class: one record of the reader's names per body application when armed; per
   # cross-node demand, a constant guard application and a membership walk over the reader's
   # declared list; per reader, a term linear in its out-degree d at the first consultation, which
-  # forces that list; per self-read, the guard's application alone; per record handed back, the
-  # copy without `_eval`. Unarmed, it costs nothing. Always on, per the cost ruling.
+  # forces that list; per self-read, the guard's application alone; per record handed back, one
+  # select. Unarmed, it costs nothing. Always on, per the cost ruling.
   bindReader =
     declared: acc: readerId:
     if declared == null then
@@ -330,7 +332,12 @@ let
         node =
           targetId:
           if readerId == targetId || builtins.elem targetId (declared readerId) then
-            builtins.removeAttrs (acc.node targetId) [ "_eval" ]
+            (
+              let
+                n = acc.node targetId;
+              in
+              n._authored or n
+            )
           else
             throw (seamAcquisitionDefect {
               reader = readerId;
@@ -352,7 +359,7 @@ let
           else if structural.childDepth attrName == 0 then
             acc.get targetId attrName
           else
-            mapAtDepth (structural.childDepth attrName) (r: builtins.removeAttrs r [ "_eval" ]) (
+            mapAtDepth (structural.childDepth attrName) (r: r._authored) (
               acc.get targetId attrName
             );
         getRepresentative =
@@ -382,7 +389,7 @@ let
           else if structural.childDepth attrName == 0 then
             acc.getNta name group key attrName
           else
-            mapAtDepth (structural.childDepth attrName) (r: builtins.removeAttrs r [ "_eval" ]) (
+            mapAtDepth (structural.childDepth attrName) (r: r._authored) (
               acc.getNta name group key attrName
             );
         # An `nta` child's host is another node; a reader that is no `nta` child keeps the
@@ -1523,6 +1530,7 @@ let
                                 self.get tid a;
                           };
                           wrapped = childNode // {
+                            ${authoredField} = childNode;
                             _eval = builtins.mapAttrs (evalAttr own childNode.id) runAttributes;
                           };
                         in
@@ -2228,6 +2236,9 @@ let
               childNode:
               childNode
               // {
+                # An armed body is handed the record as authored, never the wrapper (`bindReader`), so a
+                # field added here is absent from a body's view by construction. Unarmed, it is omitted.
+                ${authoredField} = childNode;
                 # THE LIFETIME RULE: a round's memo is reachable only through the round's own
                 # accessor. While a round is open the co-located cache refuses by name rather than
                 # serving — the alternative measured is a silent wrong answer from a snapshot the
@@ -2242,6 +2253,8 @@ let
                   else
                     builtins.mapAttrs (evalAttr null childNode.id) runAttributes;
               };
+            # `null` omits the field: an unarmed evaluation's records are unchanged.
+            authoredField = if declaredRelation == null then null else "_authored";
             rootEval = prelude.mapAttrs (id: _: builtins.mapAttrs (evalAttr null id) runAttributes) roots;
 
             # ── THE PARENT CHAIN, GROUNDED BEFORE IT IS DESCENDED ──
