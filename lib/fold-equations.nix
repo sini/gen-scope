@@ -109,40 +109,40 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
       # A grown node's host is its identifier's outer coordinate for an `nta` child (no record is
       # resolved, so a depth-d chain resolves no ancestor) and its stamped `parent` for a spawned one;
       # `spawnFrom` refuses a spawned key that decodes, so the two never meet.
-      growthKey = key.attrKey "foldEquations";
-      hostOf =
+      keyOf = key.attrKey "foldEquations";
+      parentOf =
         id:
         let
           t = evalModule.decodeNta id;
         in
         if t != null then t.host else (ev.node id).parent;
-      unitOf = prelude.listToAttrs (
+      rooted = prelude.listToAttrs (
         map (id: {
-          name = growthKey id;
-          value = if roots ? ${id} then id else unitOf.${growthKey (hostOf id)};
+          name = keyOf id;
+          value = if roots ? ${id} then id else rooted.${keyOf (parentOf id)};
         }) nodeIds
       );
-      sameUnit = a: b: (unitOf.${growthKey b} or b) == unitOf.${growthKey a};
-      grown = id: !(roots ? ${id});
+      same = a: b: (rooted.${keyOf b} or b) == rooted.${keyOf a};
       # What a member's value can read inside its unit: the members it declares, and the host whose
       # evaluation stamped its record. The host's undeclared structural edge to a grown child is not
       # one of them: an armed reader hands the host the record its own evaluation built.
-      inward =
+      inbound =
         id:
-        builtins.filter (sameUnit id) (declaredRelation id) ++ (if grown id then [ (hostOf id) ] else [ ]);
+        builtins.filter (same id) (declaredRelation id)
+        ++ (if !(roots ? ${id}) then [ (parentOf id) ] else [ ]);
       # The members a node reaches by declaring one inside its unit, closed under those members' own
-      # inward edges. A node's own host chain is not followed from the node itself: the host edge
+      # inbound edges. A node's own host chain is not followed from the node itself: the host edge
       # already carries it.
-      reachOf =
+      reached =
         id:
         map (e: e.key) (
           builtins.genericClosure {
-            startSet = map (t: { key = t; }) (builtins.filter (sameUnit id) (declaredRelation id));
-            operator = e: map (t: { key = t; }) (inward e.key);
+            startSet = map (t: { key = t; }) (builtins.filter (same id) (declaredRelation id));
+            operator = e: map (t: { key = t; }) (inbound e.key);
           }
         );
       # The edges a member's reach takes out of its unit.
-      outward = id: builtins.filter (t: !(sameUnit id t)) (ev.structuralEdges id ++ declaredRelation id);
+      outer = id: builtins.filter (t: !(same id t)) (ev.structuralEdges id ++ declaredRelation id);
       accessor = {
         nodes = nodeIds;
         # ── THE UNION THE STALENESS CONE IS TAKEN OVER, AND THE ONE PLACE IT IS NORMALIZED ──
@@ -201,7 +201,7 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
             # A structural edge names a registered node (selection) or a node grown from this one,
             # which is in this unit; only the first leaves it.
             registered = builtins.filter (c: roots ? ${c}) (ev.structuralEdges id);
-            up = if grown id then [ (hostOf id) ] else [ ];
+            up = if !(roots ? ${id}) then [ (parentOf id) ] else [ ];
           in
           if declared == [ ] then
             up ++ registered
@@ -209,8 +209,8 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
             prelude.unique (
               up
               ++ registered
-              ++ builtins.filter (t: !(sameUnit id t)) declared
-              ++ prelude.concatMap outward (reachOf id)
+              ++ builtins.filter (t: !(same id t)) declared
+              ++ prelude.concatMap outer (reached id)
             );
         parent = id: parseParent id;
         nodeData = id: (ev.node id).decls or { };

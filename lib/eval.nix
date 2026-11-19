@@ -827,7 +827,7 @@ let
           collidingWithRegistered = builtins.filter (childId: nodes ? ${childId}) raw.nodeOrder;
           # A spawned key in the `nta` identifier space would be read as minted by the host it decodes to.
           # The prefix test first: it allocates nothing, and only a key carrying the prefix is decoded.
-          decodingKeys = builtins.filter (
+          colliding = builtins.filter (
             childId: builtins.substring 0 4 childId == ntaIdPrefix && decodeNta childId != null
           ) raw.nodeOrder;
           # The fields the substrate stamps, built once per produced kind and shared by its children.
@@ -841,9 +841,9 @@ let
           // (if producedKind.kindValue == null then { } else { inherit (producedKind) kindValue; });
         in
         builtins.seq producedKind (
-          if decodingKeys != [ ] then
+          if colliding != [ ] then
             let
-              k = builtins.head decodingKeys;
+              k = builtins.head colliding;
               h = (decodeNta k).host;
             in
             throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${k}', a key in the `nta` identifier space: ${
@@ -2649,9 +2649,11 @@ let
               resolutional = resolutionalAt;
             };
 
-            # The reuse vocabulary, per node, and the subset of a decision's request that is
-            # actually served. Both are the same projection the facade carries, exposed so the
-            # intersection is inspectable rather than only inferable from behaviour.
+            # The reuse vocabulary, per node, and the subset of a decision's request that the
+            # vocabulary admits. A name in that subset is served from the prior only where the
+            # decision also calls the node clean; a dirty node recomputes whatever it lists. Both are
+            # the same projection the facade carries, exposed so the intersection is inspectable
+            # rather than only inferable from behaviour.
             resolutional = resolutionalAt;
             served = servedAt;
 
