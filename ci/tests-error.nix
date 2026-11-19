@@ -2612,7 +2612,12 @@ in
   # controls are `tests/quotient-accessor.nix`.
   config.flake.testsError.quotient-accessor-refusals =
     let
-      inherit (import ./tests/_fixtures/quotient-accessor.nix { inherit genScope; }) r debug warm;
+      inherit (import ./tests/_fixtures/quotient-accessor.nix { inherit genScope; })
+        r
+        debug
+        warm
+        warmFacade
+        ;
       rawOnQuotient = id: attrName: {
         type = "ThrownError";
         msg = exactly "gen-scope: self.get '${attrName}' on '${id}' demands a raw value of a quotient-converged instance — its carrier declares `quotient = true`, so what converged is a class representative under the declared order and not a fixed point of the step. Read it with `getRepresentative`, which returns it tagged.";
@@ -2640,6 +2645,16 @@ in
       test-the-warm-paths-raw-get-is-refused-by-name-not-recomputed = {
         expr = warm.get "node" "enriched";
         expectedError = rawOnQuotient "node" "enriched";
+      };
+
+      # A prior without the representative demand (a plane facade) is refused by name at the serve,
+      # not left to abort on a missing attribute (den-hoag-fja3w).
+      test-a-warm-prior-without-getRepresentative-is-refused-by-name = {
+        expr = warmFacade.getRepresentative "node" "enriched";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope: the decision reuses 'enriched' on 'node', a quotient carrier, but the prior evaluation supplied carries no `getRepresentative` (its names: get, nodeIds, resolutional). A clean quotient attribute is served through `getRepresentative`; hand `evalWarm` the prior evaluation record, not its plane facade.";
+        };
       };
 
       test-evalDebug-raw-get-on-a-quotient-instance-is-refused-by-name = {

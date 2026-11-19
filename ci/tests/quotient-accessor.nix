@@ -9,6 +9,7 @@ let
     r
     debug
     warm
+    warmFacade
     tree
     tagged
     converged
@@ -59,6 +60,16 @@ in
     test-the-warm-path-serves-the-tagged-representative-from-the-prior = {
       expr = warm.getRepresentative "node" "enriched";
       expected = tagged converged;
+    };
+
+    # A prior without the representative demand is refused CATCHABLY at the serve; its text is
+    # pinned next door (den-hoag-fja3w).
+    test-a-warm-prior-without-getRepresentative-is-refused-catchably = {
+      expr = builtins.tryEval (warmFacade.getRepresentative "node" "enriched");
+      expected = {
+        success = false;
+        value = false;
+      };
     };
 
     test-evalDebug-getRepresentative-answers-the-tagged-representative = {

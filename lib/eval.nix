@@ -1502,7 +1502,10 @@ let
               if prior == null then
                 throw "gen-scope: the decision reuses '${attrName}' on '${nodeId}' but no prior evaluation was supplied"
               else if isQuotientDecl runAttributes.${attrName} then
-                prior.getRepresentative nodeId attrName
+                if prior ? getRepresentative then
+                  prior.getRepresentative nodeId attrName
+                else
+                  throw "gen-scope: the decision reuses '${attrName}' on '${nodeId}', a quotient carrier, but the prior evaluation supplied carries no `getRepresentative` (its names: ${builtins.concatStringsSep ", " (builtins.attrNames prior)}). A clean quotient attribute is served through `getRepresentative`; hand `evalWarm` the prior evaluation record, not its plane facade."
               else
                 prior.get nodeId attrName;
 
@@ -2631,10 +2634,11 @@ let
 
             # --- The plane interface ---
 
-            # What an incremental plane reads this evaluation through. It is handed the FACADE,
-            # never `self`: the materialization surfaces, the node accessor and the combinators are
-            # absent from the RECORD, so a read outside those three names cannot be written against
-            # this value at all.
+            # What an incremental plane reads this evaluation through. The plane's decision is
+            # handed the FACADE, never `self`: the materialization surfaces, the node accessor and
+            # the combinators are absent from the RECORD, so a read outside those three names cannot
+            # be written against this value at all. The evaluator's prior is `self`, not the facade:
+            # serving a clean attribute is the evaluator's read, through either demand form.
             #
             # ★ That closes the KEY SET, not reachability. `get id "children"` answers node records
             # carrying `decls` / `parent` and the co-located `_eval` cache, so a caller holding one
@@ -3005,12 +3009,14 @@ let
   # wrapper over `eval` — one code path, whose cold case is the same path under a decision
   # saying nothing is clean.
   #
-  # THE PRIOR IS AN ACCESSOR, NOT A RESULT MAP. The plane is handed the prior evaluation to
-  # read, never a snapshot to hold: a projection is something the EVALUATOR performs on demand
-  # from the accessor, not an artefact the plane constructs and carries. The accessor is live
-  # inside the same evaluation — this reuse is INTRA-EVALUATION, over the override cone and
-  # across targets composed within one evaluation. Nothing here persists from one invocation of
-  # the evaluator to the next, and nothing here may claim to.
+  # THE PRIOR IS AN ACCESSOR, NOT A RESULT MAP. It is the prior evaluation record, which carries
+  # both demand forms, `get` and, for a quotient carrier, `getRepresentative`. A plane facade
+  # carries only `get`, and serving a quotient attribute from one is refused by name. The plane
+  # is handed the prior evaluation to read, never a snapshot to hold: a projection is something
+  # the EVALUATOR performs on demand from the accessor, not an artefact the plane constructs and
+  # carries. The accessor is live inside the same evaluation — this reuse is INTRA-EVALUATION,
+  # over the override cone and across targets composed within one evaluation. Nothing here
+  # persists from one invocation of the evaluator to the next, and nothing here may claim to.
   # (Informed by Acar, Blelloch & Harper 2002, *Adaptive functional programming*: reusing clean
   # prior results is that paper's change propagation. The 2002 edition is the one this project
   # holds, and it does not use the later "self-adjusting computation" name.)

@@ -98,7 +98,7 @@ let
       {
         scope = scope';
         inherit (ctx) attributes;
-        prior = ctx.eval.facade;
+        prior = ctx.eval;
         decision = genScope.mkDecision {
           isClean = id: !(builtins.elem id dirty);
           reusable = ctx.eval.facade.resolutional;

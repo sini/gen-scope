@@ -106,6 +106,30 @@ in
       )
       roots;
 
+  # The same reuse path handed the PLANE's facade as its prior (den-hoag-fja3w). The facade carries
+  # `get`, `nodeIds` and `resolutional`, no representative demand, so serving the clean quotient
+  # attribute is refused by name rather than aborting on a missing attribute.
+  warmFacade =
+    genScope.eval
+      {
+        prior = r.facade;
+        decision = {
+          isClean = _: true;
+          reusable = _: [ "enriched" ];
+        };
+      }
+      (
+        base
+        // decls
+        // {
+          enriched = circular { carrier = keySet 3; } (
+            _: _: _:
+            throw "quotient-accessor fixture: recomputed, not served"
+          );
+        }
+      )
+      roots;
+
   # Two nodes, so the child's record carries the co-located `_eval` cache.
   tree =
     genScope.eval { }

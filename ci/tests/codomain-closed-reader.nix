@@ -418,7 +418,7 @@ let
             ) ctx.scope.nodes;
           };
           inherit (ctx) attributes;
-          prior = ctx.eval.facade;
+          prior = ctx.eval;
           decision = genScope.mkDecision {
             isClean = id: !(edits ? ${id}) && id != "consumer";
             reusable = ctx.eval.facade.resolutional;
