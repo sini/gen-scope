@@ -150,7 +150,7 @@ let
   # one it calls is this library's own.
   foldEquations = import ./fold-equations.nix {
     inherit prelude;
-    inherit (evalModule.cores) eval;
+    inherit evalModule;
     inherit requireScope requireDeclaredDependencies;
     key = scopeKey;
   };

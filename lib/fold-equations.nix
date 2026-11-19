@@ -22,7 +22,7 @@
 # second argument for the first to disagree with.
 {
   prelude,
-  eval,
+  evalModule,
   requireScope,
   requireDeclaredDependencies,
   key,
@@ -82,7 +82,7 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
       # retires. This entry's formal is required and total, so every fold reached through it arms
       # the `self.node` seam guard; an evaluator reached directly is not under this contract and
       # says so by receiving no relation at all.
-      ev = eval {
+      ev = evalModule.cores.eval {
         scope = checked;
         inherit attributes parseParent;
         # The VALIDATED value, not the formal — `inherit declaredDependencies` would hand the
@@ -92,6 +92,57 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
       }; # demand fixpoint (delegate)
 
       nodeIds = prelude.attrNames ev.allNodes; # includes NTA-spawned children
+
+      # ── THE GROWTH QUOTIENT ──
+      # A grown node (one the roots do not carry: an `nta` or `spawns` child) is part of its host's
+      # value — Vogt, Swierstra & Kuiper 1989 §3: the tree an NTA expands is the value of an attribute
+      # of the host — so the reuse relation takes the host together with everything grown below it as
+      # ONE unit, keyed by the registered node at its top. Inside a unit, reads cross in both directions
+      # (a child's seed reads its host; a host reads its child through `getNta`), so the node
+      # coarsening of those reads is cyclic though the attribute instances are not. Inside a unit the
+      # relation points only up, toward the top, so it is acyclic wherever the quotient over units is.
+      # The quotient itself can be cyclic where the attribute instances are not: a host that reads a
+      # node which reads the host's own grown child. No node-level relation is both sound and acyclic
+      # there, because an edit at either registered end moves the other, so the relation carries the
+      # cycle and an acyclic consumer refuses it by name instead of serving a stale value.
+      #
+      # A grown node's host is its identifier's outer coordinate for an `nta` child (no record is
+      # resolved, so a depth-d chain resolves no ancestor) and its stamped `parent` for a spawned one;
+      # `spawnFrom` refuses a spawned key that decodes, so the two never meet.
+      growthKey = key.attrKey "foldEquations";
+      hostOf =
+        id:
+        let
+          t = evalModule.decodeNta id;
+        in
+        if t != null then t.host else (ev.node id).parent;
+      unitOf = prelude.listToAttrs (
+        map (id: {
+          name = growthKey id;
+          value = if roots ? ${id} then id else unitOf.${growthKey (hostOf id)};
+        }) nodeIds
+      );
+      sameUnit = a: b: (unitOf.${growthKey b} or b) == unitOf.${growthKey a};
+      grown = id: !(roots ? ${id});
+      # What a member's value can read inside its unit: the members it declares, and the host whose
+      # evaluation stamped its record. The host's undeclared structural edge to a grown child is not
+      # one of them: an armed reader hands the host the record its own evaluation built.
+      inward =
+        id:
+        builtins.filter (sameUnit id) (declaredRelation id) ++ (if grown id then [ (hostOf id) ] else [ ]);
+      # The members a node reaches by declaring one inside its unit, closed under those members' own
+      # inward edges. A node's own host chain is not followed from the node itself: the host edge
+      # already carries it.
+      reachOf =
+        id:
+        map (e: e.key) (
+          builtins.genericClosure {
+            startSet = map (t: { key = t; }) (builtins.filter (sameUnit id) (declaredRelation id));
+            operator = e: map (t: { key = t; }) (inward e.key);
+          }
+        );
+      # The edges a member's reach takes out of its unit.
+      outward = id: builtins.filter (t: !(sameUnit id t)) (ev.structuralEdges id ++ declaredRelation id);
       accessor = {
         nodes = nodeIds;
         # ── THE UNION THE STALENESS CONE IS TAKEN OVER, AND THE ONE PLACE IT IS NORMALIZED ──
@@ -111,7 +162,12 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
         # silently. The declared half is consumer->producer (it must over-declare, soundness (c));
         # the structural projection is parent->child. By the self-read above the parent IS the
         # consumer and the child IS the producer, so the two agree and `++` unions like-directed
-        # relations rather than mixing a relation with its converse.
+        # relations rather than mixing a relation with its converse. That holds for a REGISTERED
+        # child. A GROWN child runs the other way: its record is a function of its host's evaluation
+        # (an `nta` seed is a sub-value of a host attribute; a spawn builder reads through the host's
+        # handle), so the producer is the host and the edge is child->host. The host's structural
+        # edge to a grown child is dropped, since an armed reader hands the host the record its own
+        # evaluation built, and reads inside a growth unit are carried as reach (below).
         #
         # THE NORMALIZATION IS PART OF THE RELATION'S IDENTITY, NOT AN IMPLEMENTATION DETAIL. A
         # reuse layer compares the deps it recorded against the deps it is handed, as LISTS — same
@@ -133,7 +189,29 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
         # structural partition and, through the projection's membership authority, the evaluated
         # node set. Both are already forced by `nodeIds` above for any caller that reads the trace.
         # The projection forces no resolutional attribute.
-        dependencies = id: prelude.unique (ev.structuralEdges id ++ declaredRelation id);
+        # Per member, not per unit: a grown member depends on its host, and every member depends on
+        # the edges out of its unit that it, or a member it reaches by a declared in-unit read, names.
+        # So an edit outside the unit dirties only the members whose reads reach it, and an edit at
+        # the top dirties the members grown below it. A node that declares nothing answers its host
+        # edge and its registered children, with no unit lookup.
+        dependencies =
+          id:
+          let
+            declared = declaredRelation id;
+            # A structural edge names a registered node (selection) or a node grown from this one,
+            # which is in this unit; only the first leaves it.
+            registered = builtins.filter (c: roots ? ${c}) (ev.structuralEdges id);
+            up = if grown id then [ (hostOf id) ] else [ ];
+          in
+          if declared == [ ] then
+            up ++ registered
+          else
+            prelude.unique (
+              up
+              ++ registered
+              ++ builtins.filter (t: !(sameUnit id t)) declared
+              ++ prelude.concatMap outward (reachOf id)
+            );
         parent = id: parseParent id;
         nodeData = id: (ev.node id).decls or { };
         # ── THE GUARDED TRACE LOOKUP ──

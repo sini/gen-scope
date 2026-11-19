@@ -825,6 +825,11 @@ let
           # check living in that lazy per-record thunk would never be demanded and never fire for
           # exactly the case it exists to catch.
           collidingWithRegistered = builtins.filter (childId: nodes ? ${childId}) raw.nodeOrder;
+          # A spawned key in the `nta` identifier space would be read as minted by the host it decodes to.
+          # The prefix test first: it allocates nothing, and only a key carrying the prefix is decoded.
+          decodingKeys = builtins.filter (
+            childId: builtins.substring 0 4 childId == ntaIdPrefix && decodeNta childId != null
+          ) raw.nodeOrder;
           # The fields the substrate stamps, built once per produced kind and shared by its children.
           # The kind's value (`kindValue`, den-hoag-l0y) is stamped only when the kind declares one,
           # decided here and never per child.
@@ -836,7 +841,18 @@ let
           // (if producedKind.kindValue == null then { } else { inherit (producedKind) kindValue; });
         in
         builtins.seq producedKind (
-          if collidingWithRegistered != [ ] then
+          if decodingKeys != [ ] then
+            let
+              k = builtins.head decodingKeys;
+              h = (decodeNta k).host;
+            in
+            throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${k}', a key in the `nta` identifier space: ${
+              if h == id then
+                "it spells an identifier the `nta` channel of '${id}' itself mints"
+              else
+                "it decodes to host '${h}', not '${id}'"
+            }. An `nta` identifier is minted by the substrate from its host's coordinates, so a spawned key may not spell one, whichever host it names. Choose a key that is not an `nta` identifier."
+          else if collidingWithRegistered != [ ] then
             throw "gen-scope: kind '${hostKind}' spawns '${produced}' and its builder returned a child '${builtins.head collidingWithRegistered}', which is already a registered node's id. A spawned key mints an identity nothing declared; colliding with a key the scope already carries discards whichever record materializes second, silently. Choose a key no registered node already carries."
           else
             raw
@@ -1468,10 +1484,13 @@ let
             # The reuse vocabulary: this attribute set minus the structural partition. A structural
             # name is absent from it, so it contributes nothing to what may be served — there is
             # nothing for it to intersect with. The attribute set is one set for every node, so the
-            # projection is node-independent here; the per-node signature is the interface's,
+            # names do not vary by node; membership does. The per-node signature is the interface's,
             # because a substrate whose attribute set varies by node must still answer per node.
             resolutionalNamesAll = structural.resolutionalNames (builtins.attrNames runAttributes);
-            resolutionalAt = _nodeId: resolutionalNamesAll;
+            # A node outside the enumerated set (an on-demand `nta` child) is in no relation this
+            # evaluation publishes, so a decision has no facts about it and nothing of it is reusable.
+            resolutionalAt =
+              nodeId: if self.allNodes ? ${identifier "resolutional" nodeId} then resolutionalNamesAll else [ ];
 
             # served nodeId = reusable nodeId ∩ resolutional nodeId. A total function, not a check
             # that can fail.

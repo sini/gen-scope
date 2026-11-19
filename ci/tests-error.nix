@@ -4548,7 +4548,46 @@ in
               } "raw")
             ]) (fx.root "raw" { defs = [ { s = { }; } ]; })
           )).allNodeIds;
-        expectedError = err "gen-scope.nta: node 'r' carries an `nta` child '${c}' under a key its `children` or `derived-children` also carries. The three halves compose into one child map, and a shared key would discard one record silently. An `nta` identifier is minted by the substrate, so the other half chose it: choose a key that is not an `nta` identifier.";
+        # The spawned half's key is refused before the halves compose: a spawned key may not spell
+        # an `nta` identifier, even one the spawning node's own channel mints.
+        expectedError = err "gen-scope: kind 'raw' spawns 'leaf' and its builder returned a child '${c}', a key in the `nta` identifier space: it spells an identifier the `nta` channel of 'r' itself mints. An `nta` identifier is minted by the substrate from its host's coordinates, so a spawned key may not spell one, whichever host it names. Choose a key that is not an `nta` identifier.";
+      };
+      # A spawned key that decodes to another host would give the child that host's edge and not its
+      # real parent's, so the child would not move when its parent is edited.
+      test-a-spawned-key-decoding-to-another-host-is-refused = {
+        expr =
+          (genScope.eval { } fx.attributes (
+            genScope.buildRoots {
+              kinds = mkKinds [
+                (mkKind { } "leaf")
+                (mkKind {
+                  below = [ "leaf" ];
+                  spawns.leaf = _: _: {
+                    ${
+                      mintNtaId {
+                        host = "u";
+                        name = "x";
+                        group = "g";
+                        key = "k";
+                      }
+                    }.decls =
+                      { };
+                  };
+                } "spn")
+              ];
+              types.sn = "spn";
+              decls.sn = { };
+              parentGraph = genScope.vertex "sn";
+            }
+          )).allNodeIds;
+        expectedError = err "gen-scope: kind 'spn' spawns 'leaf' and its builder returned a child '${
+          mintNtaId {
+            host = "u";
+            name = "x";
+            group = "g";
+            key = "k";
+          }
+        }', a key in the `nta` identifier space: it decodes to host 'u', not 'sn'. An `nta` identifier is minted by the substrate from its host's coordinates, so a spawned key may not spell one, whichever host it names. Choose a key that is not an `nta` identifier.";
       };
       test-a-hand-written-nta-children-is-refused = {
         expr =

@@ -110,7 +110,10 @@ let
   foldNames = builtins.attrNames (
     import ../../lib/fold-equations.nix {
       prelude = genPreludeLib;
-      inherit (genScope) eval;
+      evalModule = {
+        cores = { inherit (genScope) eval; };
+        inherit (genScope) decodeNta;
+      };
       inherit
         (import ../../lib/require-scope.nix {
           prelude = genPreludeLib;
