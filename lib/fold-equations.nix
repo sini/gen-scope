@@ -15,6 +15,12 @@
 # belong to the scheduler that constructs the schedule, and this entry's whole obligation to that
 # gate is to force it where a caller can see the throw.
 #
+# ONE SEAL FOR A COLD FOLD AND A REUSING ONE. Handed a prior evaluation and the decision over it,
+# the entry passes both to the evaluator, as `eval` takes them, and seals the evaluation that ran
+# with the same expressions it seals a cold one with. So the accessor, the relation and the trace a
+# reusing caller is handed have this one construction site, and a caller re-deriving any of them
+# would be a second.
+#
 # AND THE EQUATIONS COME OFF THE SCHEDULE RATHER THAN ARRIVING BESIDE IT. A second `equations`
 # formal would admit a caller pairing a schedule with equations it was NOT built from: the seal would
 # carry a schedule nobody folded, and the gate would have validated a grammar the fold never ran.
@@ -27,7 +33,7 @@
   requireDeclaredDependencies,
   key,
 }:
-# `foldEquations { settings?; } { scope; parseParent; schedule; declaredDependencies; }`
+# `foldEquations { settings?; prior?; decision?; } { scope; parseParent; schedule; declaredDependencies; }`
 # (den-hoag-7gp66 P2, R7): the one option leaves to a closed set first, and the four operands stay ONE
 # open record — R7 (a): the scope is the subject, and the schedule, the parent reading and the
 # declared relation are three configuration operands with no order among them a caller could read
@@ -51,6 +57,11 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
       # is a TYPE, minted where the relation is constructed and admitted here by name.
       declaredDependencies,
       settings ? { },
+      # A reusing fold: the prior evaluation and the decision over it, given together or not at
+      # all, as `evalWarm` requires them — an evaluation that means to reuse says which prior it
+      # reuses from and which decision authorises it. The seal below is the same either way.
+      prior ? null,
+      decision ? null,
     }:
     let
       equations = schedule.equations;
@@ -82,14 +93,24 @@ builtins.mapAttrs (import ./door.nix { inherit prelude; }).chained {
       # retires. This entry's formal is required and total, so every fold reached through it arms
       # the `self.node` seam guard; an evaluator reached directly is not under this contract and
       # says so by receiving no relation at all.
-      ev = evalModule.cores.eval {
+      args = {
         scope = checked;
         inherit attributes parseParent;
         # The VALIDATED value, not the formal — `inherit declaredDependencies` would hand the
         # delegate the very thing this entry's guard exists to reject, the guard having run and
         # passed its input on anyway. `scope = checked` two lines up is the same move.
         declaredDependencies = checkedDeclared;
-      }; # demand fixpoint (delegate)
+      };
+      ev = evalModule.cores.eval (
+        if prior == null && decision == null then
+          args
+        else if prior == null || decision == null then
+          throw "gen-scope.foldEquations: `prior` and `decision` are given together or not at all; received only `${
+            if prior == null then "decision" else "prior"
+          }`"
+        else
+          args // { inherit prior decision; }
+      ); # demand fixpoint (delegate)
 
       nodeIds = prelude.attrNames ev.allNodes; # includes NTA-spawned children
 

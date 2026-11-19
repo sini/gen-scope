@@ -104,6 +104,61 @@ let
     declaredDependencies = contracted { child = [ "parent" ]; };
   };
 
+  # ── A REUSING FOLD ──
+  # The prior program tags every node "prior" and the current one "program", so a value served
+  # from the prior answers "prior" and a recomputed one "program": the witness reads which of the
+  # two programs produced it. `child` is edited and called dirty; `orphan` is clean.
+  tagged =
+    tag:
+    schedule
+    // {
+      equations = equations // {
+        tag = {
+          name = "tag";
+          kind = "synthesized";
+          readsAttrs = [ ];
+          stratum = "resolution";
+          compute = _: _: tag;
+        };
+      };
+    };
+  priorCtx = foldEquations { } {
+    scope = roots;
+    schedule = tagged "prior";
+    parseParent = id: roots.nodes.${id}.parent or null;
+    declaredDependencies = contracted { };
+  };
+  edited = roots // {
+    nodes = roots.nodes // {
+      child = roots.nodes.child // {
+        decls = roots.nodes.child.decls // {
+          v = 2;
+        };
+      };
+    };
+  };
+  reusing =
+    foldEquations
+      {
+        prior = priorCtx.eval;
+        decision = genScope.mkDecision {
+          isClean = id: id != "child";
+          reusable = priorCtx.eval.resolutional;
+        };
+      }
+      {
+        scope = edited;
+        schedule = tagged "program";
+        parseParent = id: roots.nodes.${id}.parent or null;
+        declaredDependencies = contracted { };
+      };
+  try =
+    v:
+    let
+      r = builtins.tryEval (builtins.deepSeq v v);
+    in
+    if r.success then r.value else "refused";
+
   # ── (g) THE COLLISION SET ──
   # The comparand is the library's exports MINUS this module's own, so the check is about what was
   # already there and not about the name this module just added.
@@ -168,6 +223,24 @@ in
         "settings"
         "trace"
       ];
+    };
+
+    # A reusing fold serves a clean node from the prior it is handed: the evaluator receives the
+    # prior and the decision, and the seal is the one a cold fold returns. Without the pair passed
+    # down, `orphan` is recomputed and answers "program".
+    test-a-reusing-fold-serves-a-clean-node-from-its-prior = {
+      expr = try (reusing.eval.get "orphan" "tag");
+      expected = "prior";
+    };
+    # Control: the edited node, called dirty, is recomputed by the current program.
+    test-control-a-reusing-fold-recomputes-the-edited-node = {
+      expr = try (reusing.eval.get "child" "tag");
+      expected = "program";
+    };
+    # The reusing fold's seal is built over the evaluation that ran: the edited value is read.
+    test-a-reusing-fold-seals-the-evaluation-that-ran = {
+      expr = try (reusing.eval.get "child" "self-v");
+      expected = 2;
     };
 
     # ── THE SEALED RECORD, AND WHY IT IS SEALED WHOLE ──

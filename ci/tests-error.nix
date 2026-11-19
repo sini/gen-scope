@@ -3620,6 +3620,32 @@ in
         };
       };
 
+      # A reusing fold is handed its prior and its decision as a pair. One without the other is
+      # refused at the entry by name, never read as a cold fold that silently dropped the prior.
+      test-foldEquations-prior-without-decision-is-refused-by-name = {
+        expr =
+          (genScope.foldEquations { prior = genScope.eval { } attributes contractScope; } {
+            scope = contractScope;
+            parseParent = _: null;
+            schedule.equations = builtins.mapAttrs (name: compute: {
+              inherit name compute;
+              kind = if name == "children" then "nta" else "synthesized";
+              readsAttrs = [ ];
+              stratum = if name == "children" then "structural" else "resolution";
+            }) attributes;
+            declaredDependencies = import ./tests/_fixtures/declared.nix {
+              inherit genGraph;
+              scope = contractScope;
+            } { };
+          }).eval.get
+            "solo"
+            "self-v";
+        expectedError = {
+          type = "ThrownError";
+          msg = exactly "gen-scope.foldEquations: `prior` and `decision` are given together or not at all; received only `prior`";
+        };
+      };
+
       # `eval`, on the FORGED attrset. The delegate names ITSELF rather than borrowing the fold's
       # name: an evaluator reached directly is a different door, and a message naming the wrong one
       # sends a reader to a call site they did not make.

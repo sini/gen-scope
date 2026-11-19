@@ -122,7 +122,11 @@ in
       "parseParent"
       "provenance"
     ];
-    foldEquations.optional = [ "settings" ];
+    foldEquations.optional = [
+      "decision"
+      "prior"
+      "settings"
+    ];
     "inherit'".optional = [ ];
     inheritAll.optional = [ "combine" ];
     inheritSet.optional = [ "eq" ];
